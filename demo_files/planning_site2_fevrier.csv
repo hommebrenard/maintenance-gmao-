@@ -1,0 +1,5 @@
+Équipement;Description de l'Équipement;Intervention;Description de l'Intervention;Date Échéancier;N° d'OT;Entité;Planificateur;Priorité
+ROBOT-01;Bras Robotisé de Palettisation;CONT_ELEC;CONTROLE ARMOIRE ET SERVO-MOTEURS;05/02/2026;OT-2602-01;Atelier Lyon - Zone Nord;Lucas Bernard;Élevée
+TRANS-10;Convoyeur à Bande 50M;TENSION_COURROIE;REGLE TENSION ET ALIGNEMENT ROULEAUX;12/02/2026;OT-2602-02;Atelier Lyon - Zone Nord;Sophie Martin;Normale
+AC-100;Compresseur secondaire;PREV_MENS;PREVENTIF SYSTEMATIQUE MENSUEL COMPRESSEUR;18/02/2026;OT-2602-03;Atelier Lyon - Zone Nord;Jean Dupont;Normale
+CHAUFF-01;Chaudière Industrielle Gaz;PURGE_CHAUD;PURGE ET CONTROLE PRESSION ANNUEL;24/02/2026;OT-2602-04;Atelier Lyon - Zone Nord;Marc Antoine;Urgente

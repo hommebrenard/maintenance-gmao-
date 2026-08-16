@@ -1,0 +1,5 @@
+Équipement;Description de l'Équipement;Intervention;Description de l'Intervention;Date Échéancier;N° d'OT;Entité;Planificateur;Priorité
+AC-100;Compresseur rotatif vis;PREV_MENS;PREVENTIF SYSTEMATIQUE MENSUEL COMPRESSEUR;15/01/2026;OT-2601-01;Site Principal Paris;Jean Dupont;Normale
+AC-100;Compresseur rotatif vis;FILT_TRIM;REMPLACEMENT FILTRES AIR HUILE;25/01/2026;OT-2601-02;Site Principal Paris;Marc Antoine;Élevée
+CNC-200;Fraiseuse CNC 5 Axes;GRAIS_HEBDO;GRAISSAGE ET CONTROL ETANCHEITE;10/01/2026;OT-2601-03;Site Principal Paris;Sophie Martin;Basse
+POMP-05;Pompe Refroidissement;NETTOYAGE;NETTOYAGE CREPINE ET CONTRÔLE DEBIT;20/01/2026;OT-2601-04;Site Principal Paris;Jean Dupont;Normale

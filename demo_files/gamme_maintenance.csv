@@ -1,0 +1,8 @@
+Code Équipement;Intitulé de l'intervention;N° de plan;Code Action;Intitulé de l'action;Description
+AC-100;PREVENTIF SYSTEMATIQUE MENSUEL COMPRESSEUR;PLAN-AC-01;ACT-01;Vérifier le niveau d'huile synthétique;S'assurer que le niveau est entre MIN et MAX sur le voyant
+AC-100;PREVENTIF SYSTEMATIQUE MENSUEL COMPRESSEUR;PLAN-AC-01;ACT-02;Purger la condensation du réservoir;Ouvrir la vanne de purge inférieure jusqu'à écoulement d'air pur
+AC-100;PREVENTIF SYSTEMATIQUE MENSUEL COMPRESSEUR;PLAN-AC-01;ACT-03;Contrôler la tension des courroies d'entraînement;Vérifier la flèche sous pression de 5kg
+CNC-200;GRAISSAGE ET CONTROL ETANCHEITE;PLAN-CNC-01;ACT-01;Nettoyer les glissières X/Y/Z;Racleurs et évacuation des copeaux
+CNC-200;GRAISSAGE ET CONTROL ETANCHEITE;PLAN-CNC-01;ACT-02;Remplir le réservoir de graissage centralisé;Utiliser graisse lithium grade NLGI 2
+ROBOT-01;CONTROLE ARMOIRE ET SERVO-MOTEURS;PLAN-ROB-01;ACT-01;Dépoussiérer les variateurs de vitesse;Soufflette d'air sec et contrôle filtres d'armoire
+ROBOT-01;CONTROLE ARMOIRE ET SERVO-MOTEURS;PLAN-ROB-01;ACT-02;Contrôler le jeu mécanique sur l'axe 1 et 2;Mesure au comparateur au centième
