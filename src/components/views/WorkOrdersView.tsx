@@ -48,7 +48,6 @@ interface WorkOrdersViewProps {
   onEditWorkOrder?: (id: string, updated: Partial<WorkOrder>) => void;
   onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean) => void;
   onClearAllWorkOrders?: () => void;
-  onRestoreDemoWorkOrders?: () => void;
   onResetLocations?: () => void;
 }
 
@@ -283,7 +282,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   onEditWorkOrder,
   onBulkImportWorkOrders,
   onClearAllWorkOrders,
-  onRestoreDemoWorkOrders,
   onResetLocations
 }) => {
   const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload'>('todo');
@@ -313,12 +311,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Gammes & Checklists state
   const [gammesList, setGammesList] = useState<GammePlan[]>(() => {
     try {
-      return parseGammeCSV(SAMPLE_GAMME_CSV);
+      const saved = localStorage.getItem('gmao_gammesList');
+      if (saved !== null) {
+        return JSON.parse(saved);
+      }
     } catch (err) {
-      console.error('Erreur chargement gammes initiales:', err);
-      return [];
+      console.error('Erreur chargement gammes depuis localStorage:', err);
     }
+    return [];
   });
+
+  // Persist gammesList so it no longer disappears on every reload
+  useEffect(() => {
+    localStorage.setItem('gmao_gammesList', JSON.stringify(gammesList));
+  }, [gammesList]);
   const [newTaskText, setNewTaskText] = useState('');
   
   // Calendar Month & Filter State
@@ -748,7 +754,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       );
       const activeTasks = (selectedWorkOrder.tasks && selectedWorkOrder.tasks.length > 0)
         ? selectedWorkOrder.tasks
-        : (matchedPlan?.tasks.map((t, idx) => ({ code: formatActionCode(t.actionCode, idx), label: t.label, completed: false })) || []);
+        : (matchedPlan?.tasks.map((t, idx) => ({ code: formatActionCode(t.actionCode, idx), label: t.label, completed: false, comment: undefined as string | undefined })) || []);
 
       const printIntervenants = getWorkOrderIntervenants(selectedWorkOrder);
       const printTotalInterMins = computeTotalIntervenantsMinutes(printIntervenants);
@@ -995,7 +1001,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     <td class="action-code">${formatActionCode(t.code, idx)}</td>
                     <td>${t.label}</td>
                     <td class="check-col">${t.completed ? '✅ Oui' : '[  ]'}</td>
-                    <td></td>
+                    <td>${t.comment ? t.comment.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</td>
                   </tr>
                 `).join('') : '<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding: 12px;">Aucune action enregistrée sous cet ordre de travail.</td></tr>'}
               </tbody>
@@ -1341,7 +1347,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             </button>
 
             {/* Clear / Reset All Work Orders Button */}
-            {onClearAllWorkOrders && workOrders.length > 0 ? (
+            {onClearAllWorkOrders && workOrders.length > 0 && (
               <button
                 type="button"
                 onClick={() => setIsResetConfirmOpen(true)}
@@ -1350,16 +1356,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                 <span>Tout vider</span>
-              </button>
-            ) : onRestoreDemoWorkOrders && (
-              <button
-                type="button"
-                onClick={onRestoreDemoWorkOrders}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-2xs"
-                title="Charger les données de démonstration initiales"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                <span>Restaurer démo</span>
               </button>
             )}
 
@@ -2842,6 +2838,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         }
                       };
 
+                      const updateTaskComment = (taskId: string, comment: string) => {
+                        const updatedTasks = activeTasks.map(t => t.id === taskId ? { ...t, comment } : t);
+                        const updatedWO = { ...selectedWorkOrder, tasks: updatedTasks };
+                        setSelectedWorkOrder(updatedWO);
+                        if (onEditWorkOrder) {
+                          onEditWorkOrder(selectedWorkOrder.id, { tasks: updatedTasks });
+                        }
+                      };
+
                       const handleToggleAll = (completedState: boolean) => {
                         const updatedTasks = activeTasks.map(t => ({ ...t, completed: completedState }));
                         const updatedWO = { ...selectedWorkOrder, tasks: updatedTasks };
@@ -2963,6 +2968,28 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                     }`}>
                                       {task.label}
                                     </p>
+
+                                    {/* Commentaire / RAS */}
+                                    <div
+                                      className="mt-1.5 flex items-center gap-1.5"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <input
+                                        type="text"
+                                        value={task.comment || ''}
+                                        onChange={(e) => updateTaskComment(task.id, e.target.value)}
+                                        placeholder="Commentaire / observation..."
+                                        className="flex-1 text-[11px] px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-700 placeholder:text-gray-400"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateTaskComment(task.id, 'RAS')}
+                                        className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                        title="Rien à signaler"
+                                      >
+                                        RAS
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               ))
@@ -3459,7 +3486,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               Voulez-vous effacer l'intégralité des Ordres de Travail actuels ({workOrders.length} OT) ?
             </p>
             <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-lg font-medium">
-              ⚠️ <strong>Cette action efface la liste.</strong> Vous pourrez réimporter vos propres fichiers ou cliquer sur "Restaurer démo" à tout moment.
+              ⚠️ <strong>Cette action efface la liste.</strong> Vous pourrez réimporter vos propres fichiers à tout moment.
             </p>
 
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
@@ -3470,19 +3497,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               >
                 Annuler
               </button>
-              {onRestoreDemoWorkOrders && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRestoreDemoWorkOrders();
-                    setIsResetConfirmOpen(false);
-                  }}
-                  className="px-3.5 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restaurer démo</span>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => {
