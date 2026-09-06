@@ -31,6 +31,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [parsedPreviewGammes, setParsedPreviewGammes] = useState<GammePlan[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   
   // Import strategy: append to existing orders or replace current list
   const [importBehavior, setImportBehavior] = useState<'append' | 'replace'>('replace');
@@ -62,33 +63,71 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     });
   };
 
-  // Handle File Upload (.csv, .txt, .tsv)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Decode a file's raw bytes, auto-detecting UTF-8 vs Windows-1252/ISO-8859-1
+  const decodeFileBuffer = (buffer: ArrayBuffer): string => {
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+      return new TextDecoder('windows-1252').decode(buffer);
+    }
+  };
+
+  const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const buffer = event.target?.result as ArrayBuffer;
+        if (buffer) resolve(decodeFileBuffer(buffer));
+        else reject(new Error('Fichier vide ou illisible'));
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Fusionne plusieurs fichiers CSV en un seul contenu : l'en-tête du premier
+  // fichier est conservée, les lignes de données de tous les fichiers sont
+  // concaténées à la suite (utile pour importer les 30 sites d'un coup).
+  const mergeCSVContents = (contents: string[]): string => {
+    let mergedHeader: string | null = null;
+    const allDataLines: string[] = [];
+
+    contents.forEach((content) => {
+      const lines = content.split(/\r\n|\n/).filter(l => l.trim().length > 0);
+      if (lines.length === 0) return;
+      if (mergedHeader === null) {
+        mergedHeader = lines[0];
+        allDataLines.push(...lines.slice(1));
+      } else {
+        // Ignore la ligne d'en-tête des fichiers suivants, ne garder que les données
+        allDataLines.push(...lines.slice(1));
+      }
+    });
+
+    return mergedHeader !== null ? [mergedHeader, ...allDataLines].join('\n') : '';
+  };
+
+  // Handle File Upload (.csv, .txt, .tsv) — supporte la sélection de plusieurs
+  // fichiers à la fois (ex : les fichiers de 30 sites pour un même mois)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg('');
     setSuccessMsg('');
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const inputEl = e.target;
+    const files = inputEl.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const buffer = event.target?.result as ArrayBuffer;
-      if (buffer) {
-        // Auto-detect encoding: many exports Excel/CSV français sont en Windows-1252
-        // (ISO-8859-1) et non en UTF-8. On tente d'abord un décodage UTF-8 strict ;
-        // s'il échoue (octets invalides), on retombe sur Windows-1252.
-        let content: string;
-        try {
-          content = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
-        } catch {
-          content = new TextDecoder('windows-1252').decode(buffer);
-        }
-        setPastedText(content);
-        processCSVContent(content, activeTab);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    // Reset file input value so re-importing the same file or another file always triggers onChange
-    e.target.value = '';
+    try {
+      const contents = await Promise.all(Array.from(files).map(readFileAsText));
+      const merged = files.length > 1 ? mergeCSVContents(contents) : contents[0];
+      setSelectedFileNames(Array.from(files).map(f => f.name));
+      setPastedText(merged);
+      processCSVContent(merged, activeTab);
+    } catch (err) {
+      setErrorMsg('Erreur lors de la lecture d\'un ou plusieurs fichiers. Vérifiez qu\'il s\'agit bien de fichiers CSV valides.');
+    }
+
+    // Reset file input value so re-importing the same file(s) always triggers onChange
+    inputEl.value = '';
   };
 
   // Process CSV Text
@@ -297,12 +336,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {/* File Upload Zone */}
           <div className="border-2 border-dashed border-gray-300 hover:border-blue-500 rounded-xl p-6 text-center bg-gray-50/50 transition-colors">
             <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-xs font-semibold text-gray-700">Sélectionner un fichier Excel (.csv, .txt, .tsv)</p>
+            <p className="text-xs font-semibold text-gray-700">Sélectionner un ou plusieurs fichiers CSV (.csv, .txt, .tsv)</p>
             <p className="text-[11px] text-gray-500 mt-0.5">Format supporté: séparateur point-virgule (;) ou virgule (,)</p>
+            <p className="text-[11px] text-blue-600 mt-0.5">Astuce : sélectionnez plusieurs fichiers à la fois (ex. un par site) — ils seront fusionnés automatiquement.</p>
 
             <input
               type="file"
-              accept=".csv,.txt,.tsv,.xlsx"
+              accept=".csv,.txt,.tsv"
+              multiple
               onChange={handleFileUpload}
               className="hidden"
               id="csv-file-input"
@@ -313,6 +354,19 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             >
               Parcourir les fichiers
             </label>
+
+            {selectedFileNames.length > 0 && (
+              <div className="mt-3 text-left bg-white border border-gray-200 rounded-lg p-2.5 max-h-24 overflow-y-auto">
+                <p className="text-[11px] font-semibold text-gray-600 mb-1">
+                  {selectedFileNames.length} fichier(s) fusionné(s) :
+                </p>
+                <ul className="text-[10px] text-gray-500 space-y-0.5">
+                  {selectedFileNames.map((name, idx) => (
+                    <li key={idx} className="truncate">📄 {name}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Manual CSV Paste */}
