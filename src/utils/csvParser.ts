@@ -171,10 +171,10 @@ export function parseGammeCSV(csvContent: string): GammePlan[] {
 
   const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 
-  const idxEquipment = headers.findIndex(h => h.includes('equipement'));
-  const idxIntDesc = headers.findIndex(h => h.includes('description intervention') || h.includes('intervention'));
-  const idxAction = headers.findIndex(h => h.includes('action'));
-  const idxEqDesc = headers.findIndex(h => h.includes('description equipement'));
+  const idxEquipment = headers.findIndex(h => h.includes('equipement') && !h.includes('description'));
+  const idxIntDesc = headers.findIndex(h => h.includes('description') && (h.includes('intervention') || h.includes('action')));
+  const idxAction = headers.findIndex(h => !h.includes('description') && (h.includes('intervention') || h.includes('action')));
+  const idxEqDesc = headers.findIndex(h => h.includes('description') && h.includes('equipement'));
 
   const plans: GammePlan[] = [];
   let currentPlan: GammePlan | null = null;
