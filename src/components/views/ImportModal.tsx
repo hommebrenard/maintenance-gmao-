@@ -9,7 +9,9 @@ interface ImportModalProps {
   onClose: () => void;
   onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean) => void;
   onImportGammes: (gammes: GammePlan[]) => void;
+  onClearGammes?: () => void;
   existingGammes: GammePlan[];
+  existingWorkOrdersCount?: number;
   availableSites?: string[];
 }
 
@@ -18,7 +20,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   onClose,
   onImportWorkOrders,
   onImportGammes,
+  onClearGammes,
   existingGammes,
+  existingWorkOrdersCount = 0,
   availableSites = []
 }) => {
   const [activeTab, setActiveTab] = useState<'planning' | 'gamme'>('planning');
@@ -225,6 +229,48 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
+
+          {/* Statut actuel : ce qui est chargé en mémoire */}
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            <span
+              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                existingWorkOrdersCount > 0
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-gray-100 text-gray-500 border-gray-200'
+              }`}
+            >
+              {existingWorkOrdersCount > 0 ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+              Planning : {existingWorkOrdersCount > 0 ? `${existingWorkOrdersCount} OT chargé(s)` : 'aucun fichier chargé'}
+            </span>
+
+            <span
+              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                existingGammes.length > 0
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-gray-100 text-gray-500 border-gray-200'
+              }`}
+            >
+              {existingGammes.length > 0 ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+              Gamme : {existingGammes.length > 0 ? `${existingGammes.length} plan(s) chargé(s)` : 'aucun fichier chargé'}
+            </span>
+
+            {existingGammes.length > 0 && onClearGammes && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Vider la gamme actuellement en mémoire ? Les OT déjà importés ne seront pas affectés, mais les prochains imports de planning ne pourront plus se rattacher à une checklist tant qu\'une nouvelle gamme n\'est pas importée.')) {
+                    onClearGammes();
+                  }
+                }}
+                className="text-[11px] font-medium text-gray-400 hover:text-rose-600 underline"
+              >
+                Vider la gamme
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-3">
+            La gamme reste enregistrée d'une fois sur l'autre : importer un planning seul suffit tant que la bonne gamme est déjà chargée ci-dessus.
+          </p>
 
           {/* Quick Load sample button */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-3">
