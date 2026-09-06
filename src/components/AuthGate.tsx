@@ -72,6 +72,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   const signOut = () => {
     supabase.auth.signOut();
+    setEmail('');
+    setPassword('');
   };
 
   if (loadingSession) {
@@ -98,6 +100,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <input
                 type="email"
+                autoComplete="off"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -110,6 +113,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
