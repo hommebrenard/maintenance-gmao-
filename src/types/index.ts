@@ -26,6 +26,7 @@ export interface WorkOrderTask {
   label: string;
   completed: boolean;
   comment?: string;
+  isAnomaly?: boolean;
 }
 
 export interface GammeTaskItem {
