@@ -200,10 +200,6 @@ export default function App({ session, onSignOut }: AppProps) {
     setWorkOrders([]);
   };
 
-  const handleRestoreDemoWorkOrders = () => {
-    setWorkOrders(INITIAL_WORK_ORDERS);
-  };
-
   const handleEditWorkOrder = (id: string, updated: Partial<WorkOrder>) => {
     setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, ...updated, updatedAt: new Date().toLocaleString('fr-FR') } : wo));
   };
@@ -415,7 +411,6 @@ export default function App({ session, onSignOut }: AppProps) {
             onEditWorkOrder={handleEditWorkOrder}
             onBulkImportWorkOrders={handleBulkImportWorkOrders}
             onClearAllWorkOrders={handleClearAllWorkOrders}
-            onRestoreDemoWorkOrders={handleRestoreDemoWorkOrders}
             onResetLocations={handleResetLocations}
           />
         );
