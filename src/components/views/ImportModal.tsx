@@ -127,7 +127,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         selectedImportSites.forEach((site, siteIdx) => {
           const siteOrders = parsedPreviewWorkOrders.map((wo, woIdx) => ({
             ...wo,
-            id: `imported-${Date.now()}-${siteIdx}-${woIdx}`,
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+              ? `imported-${crypto.randomUUID()}`
+              : `imported-${Date.now()}-${siteIdx}-${woIdx}-${Math.floor(Math.random()*1000000)}`,
             code: siteIdx === 0 ? wo.code : `${wo.code}-${site.substring(0,3).toUpperCase()}`,
             location: site,
             entity: site
