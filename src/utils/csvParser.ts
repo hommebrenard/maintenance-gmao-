@@ -443,7 +443,9 @@ export function parsePlanningCSV(csvContent: string, gammePlans: GammePlan[] = [
       : [];
 
     workOrders.push({
-      id: `wo-imported-${Date.now()}-${i}-${Math.floor(Math.random()*10000)}`,
+      id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? `wo-imported-${crypto.randomUUID()}`
+        : `wo-imported-${Date.now()}-${i}-${Math.floor(Math.random()*1000000)}-${Math.floor(Math.random()*1000000)}`,
       code,
       title,
       description,
