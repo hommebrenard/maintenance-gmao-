@@ -560,9 +560,8 @@ export default function App({ session, onSignOut }: AppProps) {
         <button
           type="button"
           onClick={onSignOut}
-          className="flex items-center gap-1 text-red-600 hover:text-red-700 font-medium"
+          className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-1.5 rounded-full transition-colors"
         >
-          <LogOut size={13} />
           Se déconnecter
         </button>
       </div>
