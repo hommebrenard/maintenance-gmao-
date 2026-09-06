@@ -608,6 +608,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setGammesList(prev => [...importedGammes, ...prev]);
   };
 
+  const handleClearGammes = () => {
+    setGammesList([]);
+  };
+
   // Open Edit Mode inside Detail Modal
   const handleOpenEdit = (wo: WorkOrder) => {
     setSelectedWorkOrder(wo);
@@ -3521,7 +3525,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         onClose={() => setIsImportModalOpen(false)}
         onImportWorkOrders={handleImportWorkOrders}
         onImportGammes={handleImportGammes}
+        onClearGammes={handleClearGammes}
         existingGammes={gammesList}
+        existingWorkOrdersCount={workOrders.length}
         availableSites={availableSiteNames}
       />
 
