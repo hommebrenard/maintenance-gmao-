@@ -325,7 +325,7 @@ export function findMatchingGammePlan(
     match = eligiblePlans.find(p => 
       p.interventionTitle.toLowerCase().includes(matchedKw) || 
       p.equipmentCode.toLowerCase().includes(matchedKw) ||
-      p.equipmentDescription.toLowerCase().includes(matchedKw)
+      (p.equipmentDescription || '').toLowerCase().includes(matchedKw)
     );
     if (match) return match;
   }
