@@ -13,6 +13,7 @@ import {
   Clock, 
   CheckCircle2, 
   Circle,
+  AlertTriangle,
   Building2,
   Users,
   X, 
@@ -534,6 +535,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     else if (selectedStatusFilter === 'En retard') {
       matchesStatus = wo.dueDate < todayStr && wo.status !== 'Terminé';
     }
+    else if (selectedStatusFilter === 'Anomalies') {
+      matchesStatus = !!wo.tasks?.some(t => t.isAnomaly);
+    }
 
     let matchesPriority = true;
     if (selectedPriorityFilter !== 'all') {
@@ -758,7 +762,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       );
       const activeTasks = (selectedWorkOrder.tasks && selectedWorkOrder.tasks.length > 0)
         ? selectedWorkOrder.tasks
-        : (matchedPlan?.tasks.map((t, idx) => ({ code: formatActionCode(t.actionCode, idx), label: t.label, completed: false, comment: undefined as string | undefined })) || []);
+        : (matchedPlan?.tasks.map((t, idx) => ({ code: formatActionCode(t.actionCode, idx), label: t.label, completed: false, comment: undefined as string | undefined, isAnomaly: false })) || []);
 
       const printIntervenants = getWorkOrderIntervenants(selectedWorkOrder);
       const printTotalInterMins = computeTotalIntervenantsMinutes(printIntervenants);
@@ -1005,7 +1009,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     <td class="action-code">${formatActionCode(t.code, idx)}</td>
                     <td>${t.label}</td>
                     <td class="check-col">${t.completed ? '✅ Oui' : '[  ]'}</td>
-                    <td>${t.comment ? t.comment.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</td>
+                    <td>${t.isAnomaly ? '⚠️ ANOMALIE — ' : ''}${t.comment ? t.comment.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</td>
                   </tr>
                 `).join('') : '<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding: 12px;">Aucune action enregistrée sous cet ordre de travail.</td></tr>'}
               </tbody>
@@ -1190,6 +1194,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 {pill}
               </button>
             ))}
+
+            {workOrders.some(wo => wo.tasks?.some(t => t.isAnomaly)) && (
+              <button
+                onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'Anomalies' ? null : 'Anomalies')}
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                  selectedStatusFilter === 'Anomalies'
+                    ? 'bg-red-600 text-white border-red-600'
+                    : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Anomalies ({workOrders.filter(wo => wo.tasks?.some(t => t.isAnomaly)).length})
+              </button>
+            )}
 
             {/* Dropdown Filters */}
             <select
@@ -1459,6 +1477,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             </span>
                           )}
                           <div className="flex items-center gap-1">
+                            {order.tasks?.some(t => t.isAnomaly) && (
+                              <span className="flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300" title="Une anomalie a été signalée sur cet OT">
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                              </span>
+                            )}
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getPriorityBadgeClass(order.priority)}`}>
                               {order.priority}
                             </span>
@@ -2851,6 +2874,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         }
                       };
 
+                      const toggleTaskAnomaly = (taskId: string) => {
+                        const updatedTasks = activeTasks.map(t => t.id === taskId ? { ...t, isAnomaly: !t.isAnomaly } : t);
+                        const updatedWO = { ...selectedWorkOrder, tasks: updatedTasks };
+                        setSelectedWorkOrder(updatedWO);
+                        if (onEditWorkOrder) {
+                          onEditWorkOrder(selectedWorkOrder.id, { tasks: updatedTasks });
+                        }
+                      };
+
                       const handleToggleAll = (completedState: boolean) => {
                         const updatedTasks = activeTasks.map(t => ({ ...t, completed: completedState }));
                         const updatedWO = { ...selectedWorkOrder, tasks: updatedTasks };
@@ -2933,7 +2965,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                   key={task.id}
                                   onClick={() => toggleTask(task.id)}
                                   className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer select-none transition-all border ${
-                                    task.completed
+                                    task.isAnomaly
+                                      ? 'bg-red-50 border-red-300 text-red-950'
+                                      : task.completed
                                       ? 'bg-emerald-50/90 border-emerald-200/90 text-emerald-950 shadow-2xs font-semibold'
                                       : 'bg-white border-gray-200 hover:bg-blue-50/50 hover:border-blue-200 text-gray-800'
                                   }`}
@@ -2964,16 +2998,24 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                           Action Fait ✓
                                         </span>
                                       )}
+                                      {task.isAnomaly && (
+                                        <span className="flex items-center gap-0.5 text-[9px] font-bold text-red-800 bg-red-100 px-1.5 py-0.2 rounded-full uppercase">
+                                          <AlertTriangle className="w-2.5 h-2.5" />
+                                          Anomalie
+                                        </span>
+                                      )}
                                     </div>
                                     <p className={`text-xs leading-relaxed transition-all ${
-                                      task.completed
+                                      task.isAnomaly
+                                        ? 'text-red-950 font-bold'
+                                        : task.completed
                                         ? 'text-emerald-950 font-bold'
                                         : 'font-semibold text-gray-800'
                                     }`}>
                                       {task.label}
                                     </p>
 
-                                    {/* Commentaire / RAS */}
+                                    {/* Commentaire / RAS / Anomalie */}
                                     <div
                                       className="mt-1.5 flex items-center gap-1.5"
                                       onClick={(e) => e.stopPropagation()}
@@ -2983,7 +3025,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                         value={task.comment || ''}
                                         onChange={(e) => updateTaskComment(task.id, e.target.value)}
                                         placeholder="Commentaire / observation..."
-                                        className="flex-1 text-[11px] px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-700 placeholder:text-gray-400"
+                                        className={`flex-1 text-[11px] px-2 py-1 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-gray-400 ${
+                                          task.isAnomaly ? 'border-red-300 bg-white text-red-900' : 'border-gray-200 bg-white text-gray-700'
+                                        }`}
                                       />
                                       <button
                                         type="button"
@@ -2992,6 +3036,19 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                         title="Rien à signaler"
                                       >
                                         RAS
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTaskAnomaly(task.id)}
+                                        className={`shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border transition-colors ${
+                                          task.isAnomaly
+                                            ? 'bg-red-600 border-red-600 text-white hover:bg-red-700'
+                                            : 'border-red-300 text-red-600 hover:bg-red-50'
+                                        }`}
+                                        title="Signaler une anomalie sur cette action"
+                                      >
+                                        <AlertTriangle className="w-3 h-3" />
+                                        {task.isAnomaly ? 'Anomalie ✓' : 'Signaler'}
                                       </button>
                                     </div>
                                   </div>
