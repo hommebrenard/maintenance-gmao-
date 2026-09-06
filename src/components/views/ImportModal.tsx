@@ -67,13 +67,22 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
+      const buffer = event.target?.result as ArrayBuffer;
+      if (buffer) {
+        // Auto-detect encoding: many exports Excel/CSV français sont en Windows-1252
+        // (ISO-8859-1) et non en UTF-8. On tente d'abord un décodage UTF-8 strict ;
+        // s'il échoue (octets invalides), on retombe sur Windows-1252.
+        let content: string;
+        try {
+          content = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+        } catch {
+          content = new TextDecoder('windows-1252').decode(buffer);
+        }
         setPastedText(content);
         processCSVContent(content, activeTab);
       }
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);
     // Reset file input value so re-importing the same file or another file always triggers onChange
     e.target.value = '';
   };
