@@ -52,6 +52,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     return seen.size;
   }, [workOrders, equipmentList]);
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (loc: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(loc)) next.delete(loc);
+      else next.add(loc);
+      return next;
+    });
+  };
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -242,37 +252,97 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
       {/* Split Main Body matching Screenshot 7 */}
       <div className="flex-1 flex overflow-hidden bg-gray-50/20">
         {/* Left Equipment List Pane */}
-        <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto shrink-0 divide-y divide-gray-100">
-          {filteredList.map(eq => {
-            const isSelected = eq.id === (selectedEquipment?.id);
-            return (
-              <div
-                key={eq.id}
-                onClick={() => setSelectedId(eq.id)}
-                className={`p-4 cursor-pointer flex items-center justify-between transition-colors ${
-                  isSelected ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 leading-tight">{eq.name}</h4>
-                    <span className="text-xs font-mono text-gray-500">{eq.code}</span>
-                  </div>
-                </div>
+        <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto shrink-0">
+          {viewMode === 'list' ? (
+            <div className="divide-y divide-gray-100">
+              {filteredList.map(eq => {
+                const isSelected = eq.id === (selectedEquipment?.id);
+                return (
+                  <div
+                    key={eq.id}
+                    onClick={() => setSelectedId(eq.id)}
+                    className={`p-4 cursor-pointer flex items-center justify-between transition-colors ${
+                      isSelected ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-900 leading-tight">{eq.name}</h4>
+                        <span className="text-xs font-mono text-gray-500">{eq.code}</span>
+                      </div>
+                    </div>
 
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                  eq.status === 'En service' ? 'bg-green-100 text-green-700' :
-                  eq.status === 'Arrêt planifié' ? 'bg-amber-100 text-amber-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  {eq.status}
-                </span>
-              </div>
-            );
-          })}
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      eq.status === 'En service' ? 'bg-green-100 text-green-700' :
+                      eq.status === 'Arrêt planifié' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {eq.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Tree view: grouped by emplacement */
+            <div className="py-1">
+              {Object.entries(
+                filteredList.reduce<Record<string, typeof filteredList>>((acc, eq) => {
+                  const key = eq.location?.trim() || 'Sans emplacement';
+                  (acc[key] = acc[key] || []).push(eq);
+                  return acc;
+                }, {})
+              ).sort(([a], [b]) => a.localeCompare(b)).map(([loc, items]) => {
+                const isCollapsed = collapsedGroups.has(loc);
+                return (
+                  <div key={loc} className="border-b border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(loc)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-left"
+                    >
+                      <span className="flex items-center gap-2 text-xs font-bold text-gray-700 uppercase">
+                        <Building className="w-3.5 h-3.5 text-gray-400" />
+                        {loc}
+                        <span className="font-normal text-gray-400 normal-case">({items.length})</span>
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                    </button>
+                    {!isCollapsed && items.map(eq => {
+                      const isSelected = eq.id === (selectedEquipment?.id);
+                      return (
+                        <div
+                          key={eq.id}
+                          onClick={() => setSelectedId(eq.id)}
+                          className={`pl-8 pr-4 py-3 cursor-pointer flex items-center justify-between transition-colors border-t border-gray-50 ${
+                            isSelected ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Layers className="w-4 h-4 text-blue-500 shrink-0" />
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-gray-900 leading-tight truncate">{eq.name}</h4>
+                              <span className="text-[11px] font-mono text-gray-500">{eq.code}</span>
+                            </div>
+                          </div>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ml-2 ${
+                            eq.status === 'En service' ? 'bg-green-100 text-green-700' :
+                            eq.status === 'Arrêt planifié' ? 'bg-amber-100 text-amber-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {eq.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Right Detail Card matching Screenshot 7 */}
@@ -555,6 +625,157 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Edit Equipment Modal */}
+      {isEditModalOpen && selectedEquipment && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-lg font-bold text-gray-900">Modifier l'équipement</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Nom *</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Statut</label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as OperationalStatus)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="En service">En service</option>
+                    <option value="Arrêt planifié">Arrêt planifié</option>
+                    <option value="Arrêt non planifié">Arrêt non planifié</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Criticité</label>
+                  <select
+                    value={criticality}
+                    onChange={(e) => setCriticality(e.target.value as EquipmentCriticality)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="Faible">Faible</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Élevée">Élevée</option>
+                    <option value="Critique">Critique</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Fabricant</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: ATLAS COPCO"
+                    value={manufacturer}
+                    onChange={(e) => setManufacturer(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Modèle</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: GA-37"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Numéro de série</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: SN-987234"
+                    value={serialNumber}
+                    onChange={(e) => setSerialNumber(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Fournisseur</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Distributeur local"
+                    value={supplier}
+                    onChange={(e) => setSupplier(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Emplacement</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Atelier Principal"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de confirmation de suppression */}
       {isDeleteConfirmOpen && selectedEquipment && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
