@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -16,28 +16,42 @@ import {
   Truck,
   FileText
 } from 'lucide-react';
-import { Equipment, OperationalStatus, EquipmentCriticality } from '../../types';
+import { Equipment, OperationalStatus, EquipmentCriticality, WorkOrder } from '../../types';
 
 interface EquipmentViewProps {
   equipmentList: Equipment[];
+  workOrders?: WorkOrder[];
   onAddEquipment: (eq: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt' | 'workOrdersCount'>) => void;
   onUpdateStatus: (id: string, status: OperationalStatus) => void;
   onDeleteEquipment: (id: string) => void;
   onEditEquipment: (id: string, updated: Partial<Equipment>) => void;
+  onSyncFromWorkOrders?: () => void;
 }
 
 export const EquipmentView: React.FC<EquipmentViewProps> = ({
   equipmentList,
+  workOrders = [],
   onAddEquipment,
   onUpdateStatus,
   onDeleteEquipment,
-  onEditEquipment
+  onEditEquipment,
+  onSyncFromWorkOrders
 }) => {
   const [selectedId, setSelectedId] = useState<string>(equipmentList[0]?.id || '');
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  
+
+  const newEquipmentFromWOCount = useMemo(() => {
+    const existingCodes = new Set(equipmentList.map(e => e.code));
+    const seen = new Set<string>();
+    workOrders.forEach(w => {
+      const code = w.equipmentCode;
+      if (code && !existingCodes.has(code)) seen.add(code);
+    });
+    return seen.size;
+  }, [workOrders, equipmentList]);
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -160,6 +174,17 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                 Arborescence
               </button>
             </div>
+
+            {onSyncFromWorkOrders && newEquipmentFromWOCount > 0 && (
+              <button
+                onClick={onSyncFromWorkOrders}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 font-medium rounded-lg text-sm shadow-2xs transition-colors"
+                title="Créer une fiche équipement pour chaque code équipement trouvé dans vos OT importés mais absent de cette liste"
+              >
+                <Layers className="w-4 h-4" />
+                <span>Générer depuis les OT ({newEquipmentFromWOCount})</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
