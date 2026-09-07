@@ -322,6 +322,43 @@ export default function App({ session, onSignOut }: AppProps) {
     setEquipmentList(prev => [newEq, ...prev]);
   };
 
+  // Crée une fiche équipement pour chaque code équipement présent dans les OT importés
+  // mais absent de la bibliothèque Équipements (utile car l'import de planning/gamme
+  // ne crée jamais automatiquement de fiche équipement dédiée).
+  const handleSyncEquipmentFromWorkOrders = () => {
+    const existingCodes = new Set(equipmentList.map(e => e.code));
+    const seen = new Map<string, { code: string; name: string; location?: string }>();
+    workOrders.forEach(w => {
+      if (w.equipmentCode && !existingCodes.has(w.equipmentCode) && !seen.has(w.equipmentCode)) {
+        seen.set(w.equipmentCode, {
+          code: w.equipmentCode,
+          name: w.equipmentName || w.equipmentCode,
+          location: w.location
+        });
+      }
+    });
+    const now = new Date().toLocaleString('fr-FR');
+    const newEquipments: Equipment[] = Array.from(seen.values()).map(e => ({
+      id: `eq-${e.code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      code: e.code,
+      name: e.name,
+      status: 'En service',
+      criticality: 'Normal',
+      location: e.location || '',
+      supplier: '',
+      manufacturer: '',
+      model: '',
+      serialNumber: '',
+      createdAt: now,
+      updatedAt: now,
+      description: '',
+      workOrdersCount: 0
+    }));
+    if (newEquipments.length > 0) {
+      setEquipmentList(prev => [...newEquipments, ...prev]);
+    }
+  };
+
   const handleUpdateEquipmentStatus = (id: string, status: OperationalStatus) => {
     setEquipmentList(prev => prev.map(e => e.id === id ? {
       ...e,
@@ -473,10 +510,12 @@ export default function App({ session, onSignOut }: AppProps) {
         return (
           <EquipmentView
             equipmentList={equipmentList}
+            workOrders={workOrders}
             onAddEquipment={handleAddEquipment}
             onUpdateStatus={handleUpdateEquipmentStatus}
             onDeleteEquipment={handleDeleteEquipment}
             onEditEquipment={handleEditEquipment}
+            onSyncFromWorkOrders={handleSyncEquipmentFromWorkOrders}
           />
         );
       case 'inventory':
