@@ -82,49 +82,49 @@ export default function App({ session, onSignOut }: AppProps) {
 
   // App Centralized State with localStorage persistence
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
-    getInitialState('gmao_workOrders', INITIAL_WORK_ORDERS)
+    getInitialState('gmao_workOrders', [])
   );
   const [requests, setRequests] = useState<MaintenanceRequest[]>(() =>
-    getInitialState('gmao_requests', INITIAL_REQUESTS)
+    getInitialState('gmao_requests', [])
   );
   const [conversations, setConversations] = useState<Conversation[]>(() =>
-    getInitialState('gmao_conversations', INITIAL_CONVERSATIONS)
+    getInitialState('gmao_conversations', [])
   );
   const [messages, setMessages] = useState<Message[]>(() =>
-    getInitialState('gmao_messages', INITIAL_MESSAGES)
+    getInitialState('gmao_messages', [])
   );
   const [equipmentList, setEquipmentList] = useState<Equipment[]>(() =>
-    getInitialState('gmao_equipment', INITIAL_EQUIPMENT)
+    getInitialState('gmao_equipment', [])
   );
   const [inventory, setInventory] = useState<InventoryItem[]>(() =>
-    getInitialState('gmao_inventory', INITIAL_INVENTORY)
+    getInitialState('gmao_inventory', [])
   );
   const [automations, setAutomations] = useState<AutomationRule[]>(() =>
-    getInitialState('gmao_automations', INITIAL_AUTOMATIONS)
+    getInitialState('gmao_automations', [])
   );
   const [meters, setMeters] = useState<Meter[]>(() =>
-    getInitialState('gmao_meters', INITIAL_METERS)
+    getInitialState('gmao_meters', [])
   );
   const [templates, setTemplates] = useState<WorkOrderTemplate[]>(() =>
-    getInitialState('gmao_templates', INITIAL_TEMPLATES)
+    getInitialState('gmao_templates', [])
   );
   const [procedures, setProcedures] = useState<Procedure[]>(() =>
-    getInitialState('gmao_procedures', INITIAL_PROCEDURES)
+    getInitialState('gmao_procedures', [])
   );
   const [tags, setTags] = useState<Tag[]>(() =>
-    getInitialState('gmao_tags', INITIAL_TAGS)
+    getInitialState('gmao_tags', [])
   );
   const [locations, setLocations] = useState<LocationItem[]>(() =>
-    getInitialState('gmao_locations', INITIAL_LOCATIONS)
+    getInitialState('gmao_locations', [])
   );
   const [users, setUsers] = useState<UserItem[]>(() =>
-    getInitialState('gmao_users', INITIAL_USERS)
+    getInitialState('gmao_users', [])
   );
   const [suppliers, setSuppliers] = useState<SupplierItem[]>(() =>
-    getInitialState('gmao_suppliers', INITIAL_SUPPLIERS)
+    getInitialState('gmao_suppliers', [])
   );
   const [clients, setClients] = useState<ClientItem[]>(() =>
-    getInitialState('gmao_clients', INITIAL_CLIENTS)
+    getInitialState('gmao_clients', [])
   );
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
