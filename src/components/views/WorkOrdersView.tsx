@@ -288,6 +288,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload'>('todo');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string | null>(null);
+  const [expandedAssignees, setExpandedAssignees] = useState<Set<string>>(new Set());
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<string>('all');
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>('all');
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all');
@@ -2089,18 +2090,36 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
                       {/* Task preview list */}
                       <div className="space-y-1.5 pt-2 border-t border-gray-200">
-                        {orders.slice(0, 3).map(o => (
-                          <div
-                            key={o.id}
-                            onClick={() => { setSelectedWorkOrder(o); setIsEditMode(false); }}
-                            className="text-xs bg-white p-2 rounded border border-gray-200 flex items-center justify-between cursor-pointer hover:border-blue-300 transition-colors"
+                        <div className={`space-y-1.5 ${expandedAssignees.has(assigneeName) ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                          {(expandedAssignees.has(assigneeName) ? orders : orders.slice(0, 3)).map(o => (
+                            <div
+                              key={o.id}
+                              onClick={() => { setSelectedWorkOrder(o); setIsEditMode(false); }}
+                              className="text-xs bg-white p-2 rounded border border-gray-200 flex items-center justify-between cursor-pointer hover:border-blue-300 transition-colors"
+                            >
+                              <span className="font-medium text-gray-800 truncate">{o.title}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${getStatusBadgeClass(o.status)}`}>
+                                {o.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {orders.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedAssignees(prev => {
+                                const next = new Set(prev);
+                                if (next.has(assigneeName)) next.delete(assigneeName);
+                                else next.add(assigneeName);
+                                return next;
+                              });
+                            }}
+                            className="w-full text-center text-[11px] font-semibold text-blue-600 hover:text-blue-700 pt-1"
                           >
-                            <span className="font-medium text-gray-800 truncate">{o.title}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getStatusBadgeClass(o.status)}`}>
-                              {o.status}
-                            </span>
-                          </div>
-                        ))}
+                            {expandedAssignees.has(assigneeName) ? 'Réduire ▲' : `Voir tout (${orders.length}) ▼`}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
