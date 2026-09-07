@@ -57,16 +57,29 @@ import {
 } from './types';
 
 // Helper for localStorage state persistence
-function getInitialState<T>(key: string, fallback: T): T {
+function getInitialState<T extends { id: string }>(key: string, demoData: T[]): T[] {
   try {
     const saved = localStorage.getItem(key);
     if (saved !== null) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Nettoyage automatique : si ce qui est enregistré correspond exactement (mêmes
+      // identifiants) aux anciennes données de démonstration AI Studio jamais remplacées
+      // par l'utilisateur, on les efface pour repartir sur une liste vide plutôt que de
+      // les laisser traîner indéfiniment dans le navigateur.
+      if (Array.isArray(parsed) && Array.isArray(demoData) && demoData.length > 0 && parsed.length > 0) {
+        const demoIds = new Set(demoData.map(d => d.id));
+        const isPureDemo = parsed.every((item: any) => item && demoIds.has(item.id));
+        if (isPureDemo) {
+          localStorage.removeItem(key);
+          return [];
+        }
+      }
+      return parsed;
     }
   } catch (e) {
     console.error(`Erreur chargement ${key} depuis localStorage:`, e);
   }
-  return fallback;
+  return [];
 }
 
 import type { Session } from '@supabase/supabase-js';
@@ -82,49 +95,49 @@ export default function App({ session, onSignOut }: AppProps) {
 
   // App Centralized State with localStorage persistence
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
-    getInitialState('gmao_workOrders', [])
+    getInitialState('gmao_workOrders', INITIAL_WORK_ORDERS)
   );
   const [requests, setRequests] = useState<MaintenanceRequest[]>(() =>
-    getInitialState('gmao_requests', [])
+    getInitialState('gmao_requests', INITIAL_REQUESTS)
   );
   const [conversations, setConversations] = useState<Conversation[]>(() =>
-    getInitialState('gmao_conversations', [])
+    getInitialState('gmao_conversations', INITIAL_CONVERSATIONS)
   );
   const [messages, setMessages] = useState<Message[]>(() =>
-    getInitialState('gmao_messages', [])
+    getInitialState('gmao_messages', INITIAL_MESSAGES)
   );
   const [equipmentList, setEquipmentList] = useState<Equipment[]>(() =>
-    getInitialState('gmao_equipment', [])
+    getInitialState('gmao_equipment', INITIAL_EQUIPMENT)
   );
   const [inventory, setInventory] = useState<InventoryItem[]>(() =>
-    getInitialState('gmao_inventory', [])
+    getInitialState('gmao_inventory', INITIAL_INVENTORY)
   );
   const [automations, setAutomations] = useState<AutomationRule[]>(() =>
-    getInitialState('gmao_automations', [])
+    getInitialState('gmao_automations', INITIAL_AUTOMATIONS)
   );
   const [meters, setMeters] = useState<Meter[]>(() =>
-    getInitialState('gmao_meters', [])
+    getInitialState('gmao_meters', INITIAL_METERS)
   );
   const [templates, setTemplates] = useState<WorkOrderTemplate[]>(() =>
-    getInitialState('gmao_templates', [])
+    getInitialState('gmao_templates', INITIAL_TEMPLATES)
   );
   const [procedures, setProcedures] = useState<Procedure[]>(() =>
-    getInitialState('gmao_procedures', [])
+    getInitialState('gmao_procedures', INITIAL_PROCEDURES)
   );
   const [tags, setTags] = useState<Tag[]>(() =>
-    getInitialState('gmao_tags', [])
+    getInitialState('gmao_tags', INITIAL_TAGS)
   );
   const [locations, setLocations] = useState<LocationItem[]>(() =>
-    getInitialState('gmao_locations', [])
+    getInitialState('gmao_locations', INITIAL_LOCATIONS)
   );
   const [users, setUsers] = useState<UserItem[]>(() =>
-    getInitialState('gmao_users', [])
+    getInitialState('gmao_users', INITIAL_USERS)
   );
   const [suppliers, setSuppliers] = useState<SupplierItem[]>(() =>
-    getInitialState('gmao_suppliers', [])
+    getInitialState('gmao_suppliers', INITIAL_SUPPLIERS)
   );
   const [clients, setClients] = useState<ClientItem[]>(() =>
-    getInitialState('gmao_clients', [])
+    getInitialState('gmao_clients', INITIAL_CLIENTS)
   );
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
