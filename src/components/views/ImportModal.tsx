@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2 } from 'lucide-react';
 import { WorkOrder, GammePlan } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
@@ -63,7 +64,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     });
   };
 
-  // Decode a file's raw bytes, auto-detecting UTF-8 vs Windows-1252/ISO-8859-1
+// Decode a file's raw bytes, auto-detecting UTF-8 vs Windows-1252/ISO-8859-1
   const decodeFileBuffer = (buffer: ArrayBuffer): string => {
     try {
       return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
@@ -72,13 +73,51 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
+  // Convertit un classeur Excel (.xlsx/.xls) en texte CSV, en réutilisant la
+  // première feuille du classeur. Les cellules de type date sont reformatées
+  // manuellement en JJ/MM/AAAA avant conversion — l'option dateNF de
+  // sheet_to_csv s'est révélée peu fiable (elle est ignorée dès qu'une valeur
+  // affichée mise en cache existe déjà sur la cellule), d'où ce contournement
+  // pour rester compatible avec parseFrenchDate côté csvParser.ts.
+  const convertExcelToCSV = (buffer: ArrayBuffer): string => {
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) throw new Error('Le classeur Excel ne contient aucune feuille.');
+    const sheet = workbook.Sheets[firstSheetName];
+
+    Object.keys(sheet).forEach((address) => {
+      if (address.startsWith('!')) return; // ignore les clés spéciales (!ref, !merges, ...)
+      const cell = sheet[address];
+      if (cell && cell.t === 'd' && cell.v instanceof Date) {
+        const d = cell.v as Date;
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        cell.w = `${dd}/${mm}/${d.getFullYear()}`;
+      }
+    });
+
+    return XLSX.utils.sheet_to_csv(sheet, { FS: ';', blankrows: false });
+  };
+
+  const isExcelFile = (file: File): boolean => {
+    const name = file.name.toLowerCase();
+    return name.endsWith('.xlsx') || name.endsWith('.xls');
+  };
+
   const readFileAsText = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const buffer = event.target?.result as ArrayBuffer;
-        if (buffer) resolve(decodeFileBuffer(buffer));
-        else reject(new Error('Fichier vide ou illisible'));
+        if (!buffer) {
+          reject(new Error('Fichier vide ou illisible'));
+          return;
+        }
+        try {
+          resolve(isExcelFile(file) ? convertExcelToCSV(buffer) : decodeFileBuffer(buffer));
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error('Fichier Excel illisible'));
+        }
       };
       reader.onerror = () => reject(reader.error);
       reader.readAsArrayBuffer(file);
@@ -311,6 +350,32 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             La gamme reste enregistrée d'une fois sur l'autre : importer un planning seul suffit tant que la bonne gamme est déjà chargée ci-dessus.
           </p>
 
+          {/* Avertissement : importer le Planning avant la Gamme empêche le
+              rattachement automatique des checklists à l'aperçu — mieux vaut
+              charger la Gamme en premier (elle change rarement dans l'année). */}
+          {activeTab === 'planning' && existingGammes.length === 0 && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-[11px] text-amber-800">
+                  <strong>Aucune gamme chargée pour l'instant.</strong> Pour que les checklists
+                  se rattachent automatiquement dès l'aperçu du planning, chargez d'abord
+                  l'onglet <strong>« Fichier Gamme de Maintenance »</strong> — la gamme change
+                  rarement dans l'année, ce n'est donc à faire qu'une fois. Vous pouvez tout de
+                  même continuer sans gamme : le rattachement se fera plus tard, une fois la
+                  gamme importée.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('gamme')}
+                  className="mt-1.5 text-[11px] font-semibold text-amber-800 underline hover:text-amber-900"
+                >
+                  Aller charger la gamme maintenant →
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Quick Load sample button */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -336,13 +401,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {/* File Upload Zone */}
           <div className="border-2 border-dashed border-gray-300 hover:border-blue-500 rounded-xl p-6 text-center bg-gray-50/50 transition-colors">
             <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-xs font-semibold text-gray-700">Sélectionner un ou plusieurs fichiers CSV (.csv, .txt, .tsv)</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">Format supporté: séparateur point-virgule (;) ou virgule (,)</p>
+            <p className="text-xs font-semibold text-gray-700">Sélectionner un ou plusieurs fichiers (.xlsx, .xls, .csv, .txt, .tsv)</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">Fichiers Excel acceptés directement — pas besoin de les convertir en CSV au préalable. Pour les CSV : séparateur point-virgule (;) ou virgule (,)</p>
             <p className="text-[11px] text-blue-600 mt-0.5">Astuce : sélectionnez plusieurs fichiers à la fois (ex. un par site) — ils seront fusionnés automatiquement.</p>
 
             <input
               type="file"
-              accept=".csv,.txt,.tsv"
+              accept=".xlsx,.xls,.csv,.txt,.tsv"
               multiple
               onChange={handleFileUpload}
               className="hidden"
