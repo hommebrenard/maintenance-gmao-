@@ -130,9 +130,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
     return durations.reduce((a, b) => a + b, 0) / durations.length;
   }, [filteredOrders]);
 
-  const activeEquipmentCount = equipmentList.filter(e => e.status === 'En service').length;
-  const plannedStopCount = equipmentList.filter(e => e.status === 'Arrêt planifié').length;
-  const unplannedStopCount = equipmentList.filter(e => e.status === 'Arrêt non planifié').length;
+  // Seul le filtre de site (locationFilter) a un sens pour les équipements :
+  // assigneeFilter/priorityFilter/typeFilter/statusFilter sont des concepts
+  // propres aux ordres de travail (un équipement n'a ni "assigné à", ni
+  // "priorité", ni "statut d'OT"). Sans ce filtrage, changer de site dans les
+  // filtres ne changeait jamais la liste/les compteurs d'équipements affichés.
+  const filteredEquipmentList = useMemo(
+    () => locationFilter ? equipmentList.filter(e => e.location === locationFilter) : equipmentList,
+    [equipmentList, locationFilter]
+  );
+
+  const activeEquipmentCount = filteredEquipmentList.filter(e => e.status === 'En service').length;
+  const plannedStopCount = filteredEquipmentList.filter(e => e.status === 'Arrêt planifié').length;
+  const unplannedStopCount = filteredEquipmentList.filter(e => e.status === 'Arrêt non planifié').length;
 
   // --- Données des graphiques (respectent les filtres + la période) ---
   const priorityData = [
@@ -325,7 +335,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                   <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Équipements actifs</span>
                     <div className="text-3xl font-bold text-gray-900 mt-2">
-                      {activeEquipmentCount}/{equipmentList.length}
+                      {activeEquipmentCount}/{filteredEquipmentList.length}
                     </div>
                     <div className="text-xs text-amber-600 font-medium mt-1">
                       {plannedStopCount + unplannedStopCount > 0
@@ -401,9 +411,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
                   <div className="px-5 py-3 border-b border-gray-200">
-                    <h3 className="text-sm font-bold text-gray-900">Liste des équipements ({equipmentList.length})</h3>
+                    <h3 className="text-sm font-bold text-gray-900">Liste des équipements ({filteredEquipmentList.length})</h3>
                   </div>
-                  {equipmentList.length === 0 ? (
+                  {filteredEquipmentList.length === 0 ? (
                     <p className="text-sm text-gray-400 p-6 text-center">Aucun équipement enregistré.</p>
                   ) : (
                     <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
@@ -418,7 +428,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                           </tr>
                         </thead>
                         <tbody>
-                          {equipmentList.map(eq => {
+                          {filteredEquipmentList.map(eq => {
                             const linkedCount = workOrders.filter(w => w.equipmentId === eq.id || (eq.code && w.equipmentCode === eq.code)).length;
                             return (
                               <tr key={eq.id} className="border-t border-gray-100 hover:bg-gray-50">
