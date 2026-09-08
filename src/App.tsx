@@ -17,6 +17,7 @@ import { UsersView } from './components/views/UsersView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment } from './lib/queries/equipment';
+import { fetchWorkOrders } from './lib/queries/work_orders';
 
 import {
   INITIAL_WORK_ORDERS,
@@ -95,9 +96,8 @@ export default function App({ session, onSignOut }: AppProps) {
   const [currentTab, setCurrentTab] = useState<NavigationItem>('work-orders');
 
   // App Centralized State with localStorage persistence
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
-    getInitialState('gmao_workOrders', INITIAL_WORK_ORDERS)
-  );
+ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(true);
   const [requests, setRequests] = useState<MaintenanceRequest[]>(() =>
     getInitialState('gmao_requests', INITIAL_REQUESTS)
   );
@@ -143,8 +143,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Auto Sync to localStorage
   React.useEffect(() => {
-    localStorage.setItem('gmao_workOrders', JSON.stringify(workOrders));
-  }, [workOrders]);
+  fetchWorkOrders()
+    .then(setWorkOrders)
+    .catch(err => console.error('Erreur chargement OT:', err))
+    .finally(() => setIsLoadingWorkOrders(false));
+}, []);
 
   React.useEffect(() => {
     localStorage.setItem('gmao_requests', JSON.stringify(requests));
