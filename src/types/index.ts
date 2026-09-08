@@ -16,7 +16,7 @@ export type NavigationItem =
   | 'suppliers'
   | 'clients';
 
-export type WorkOrderStatus = 'Ouvert' | 'En cours' | 'En attente' | 'Terminé';
+export type WorkOrderStatus = 'Ouvert' | 'En cours' | 'En attente' | 'Terminé' | 'Annulé';
 export type WorkOrderPriority = 'Faible' | 'Moyenne' | 'Élevée' | 'Urgente';
 export type WorkOrderType = 'Corrective' | 'Préventive' | 'Amélioration' | 'Inspection';
 
