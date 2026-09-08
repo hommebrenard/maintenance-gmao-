@@ -16,6 +16,7 @@ import { LocationsView } from './components/views/LocationsView';
 import { UsersView } from './components/views/UsersView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
+import { fetchEquipment } from './lib/queries/equipment';
 
 import {
   INITIAL_WORK_ORDERS,
@@ -106,9 +107,8 @@ export default function App({ session, onSignOut }: AppProps) {
   const [messages, setMessages] = useState<Message[]>(() =>
     getInitialState('gmao_messages', INITIAL_MESSAGES)
   );
-  const [equipmentList, setEquipmentList] = useState<Equipment[]>(() =>
-    getInitialState('gmao_equipment', INITIAL_EQUIPMENT)
-  );
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
+const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   const [inventory, setInventory] = useState<InventoryItem[]>(() =>
     getInitialState('gmao_inventory', INITIAL_INVENTORY)
   );
@@ -151,8 +151,11 @@ export default function App({ session, onSignOut }: AppProps) {
   }, [requests]);
 
   React.useEffect(() => {
-    localStorage.setItem('gmao_equipment', JSON.stringify(equipmentList));
-  }, [equipmentList]);
+  fetchEquipment()
+    .then(setEquipmentList)
+    .catch(err => console.error('Erreur chargement équipements:', err))
+    .finally(() => setIsLoadingEquipment(false));
+}, []);
 
   React.useEffect(() => {
     localStorage.setItem('gmao_locations', JSON.stringify(locations));
