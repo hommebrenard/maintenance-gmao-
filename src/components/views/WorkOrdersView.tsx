@@ -928,7 +928,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </div>
               <div class="info-block" style="margin-top: 6px;">
                 <span class="label">Date d'échéance</span>
-                <span class="value">${selectedWorkOrder.dueDate}</span>
+                <span class="value">${formatDateLabel(selectedWorkOrder.dueDate)}</span>
               </div>
               <div class="info-block" style="margin-top: 6px;">
                 <span class="label">Type d'intervention</span>
@@ -1518,7 +1518,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                           </div>
                           <div className={`flex items-center gap-1 ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
                             <Clock className="w-3.5 h-3.5" />
-                            <span>{order.dueDate}</span>
+                            <span>{formatDateLabel(order.dueDate)}</span>
                           </div>
                         </div>
 
@@ -1610,7 +1610,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     )}
                     {visibleColumns.dueDate && (
                       <td className={`px-4 py-3 text-xs ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                        {order.dueDate}
+                        {formatDateLabel(order.dueDate)}
                       </td>
                     )}
                     {visibleColumns.location && (
