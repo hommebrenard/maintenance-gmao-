@@ -215,7 +215,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     };
     setWorkOrders(prev => [newWO, ...prev]);
 
-    createWorkOrder(newWO)
+    createWorkOrder(newWO, session.user.id)
       .then(created => {
         setWorkOrders(prev => prev.map(wo => wo.id === tempId ? { ...newWO, ...created } : wo));
       })
@@ -272,7 +272,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       try {
         const createdAll: WorkOrder[] = [];
         for (const batch of batches) {
-          createdAll.push(...(await createWorkOrdersBulk(batch)));
+          createdAll.push(...(await createWorkOrdersBulk(batch, session.user.id)));
         }
         const createdByCode = new Map(createdAll.map(c => [c.code, c]));
         setWorkOrders(prev => prev.map(wo => {
@@ -400,7 +400,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     };
     setEquipmentList(prev => [newEq, ...prev]);
 
-    createEquipment(newEq)
+    createEquipment(newEq, session.user.id)
       .then(created => {
         setEquipmentList(prev => prev.map(e => e.id === tempId ? { ...newEq, ...created } : e));
       })
@@ -446,7 +446,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     if (newEquipments.length > 0) {
       setEquipmentList(prev => [...newEquipments, ...prev]);
 
-      createEquipmentBulk(newEquipments)
+      createEquipmentBulk(newEquipments, session.user.id)
         .then(created => {
           const createdByCode = new Map(created.map(c => [c.code, c]));
           setEquipmentList(prev => prev.map(e => {
