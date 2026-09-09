@@ -353,7 +353,59 @@ function cleanHeaderStr(str: string): string {
 }
 
 // Parse Planning CSV into WorkOrder array
-export function parsePlanningCSV(csvContent: string, gammePlans: GammePlan[] = []): WorkOrder[] {
+// Table des abréviations de mois français (3 lettres) utilisée pour générer
+// les codes NC- des OT sans numéro réel, à partir du nom de fichier source
+// (convention observée : "Type Site Mois Année.ext", ex.
+// "PMP AG Type A KENITRA Avril 2026.csv").
+const FRENCH_MONTH_ABBREV: Record<string, string> = {
+  'janvier': 'JAN',
+  'fevrier': 'FEV',
+  'février': 'FEV',
+  'mars': 'MAR',
+  'avril': 'AVR',
+  'mai': 'MAI',
+  'juin': 'JUN',
+  'juillet': 'JUL',
+  'aout': 'AOU',
+  'août': 'AOU',
+  'septembre': 'SEP',
+  'octobre': 'OCT',
+  'novembre': 'NOV',
+  'decembre': 'DEC',
+  'décembre': 'DEC'
+};
+
+// Extrait "<Site>-<MOISANNEE>" depuis un nom de fichier "Type Site Mois Année.ext"
+// (ex. "PMP AG Type A KENITRA Avril 2026.csv" -> "AG Type A KENITRA-AVR2026").
+// Retourne null si le nom ne suit pas ce format reconnaissable (pas de mois/année
+// détectés en fin de nom), auquel cas un code de secours générique sera utilisé.
+function extractSiteMonthYearFromFileName(fileName: string): string | null {
+  const withoutExt = fileName.replace(/\.(csv|xlsx|xls|txt|tsv)$/i, '').trim();
+  const tokens = withoutExt.split(/\s+/);
+  if (tokens.length < 3) return null;
+
+  const year = tokens[tokens.length - 1];
+  const monthAbbrev = FRENCH_MONTH_ABBREV[tokens[tokens.length - 2].toLowerCase()];
+
+  if (!/^\d{4}$/.test(year) || !monthAbbrev) return null;
+
+  const site = tokens.slice(1, tokens.length - 2).join(' ');
+  if (!site) return null;
+
+  return `${site}-${monthAbbrev}${year}`;
+}
+
+// Parse Planning CSV into WorkOrder array.
+// `lineFileNames` (optionnel) : nom du fichier d'origine pour chaque ligne de
+// données, dans le même ordre (utilisé pour générer un code NC-<Site>-<MoisAnnée>-<seq>
+// même quand plusieurs fichiers de sites différents sont fusionnés en un import).
+export function parsePlanningCSV(
+  csvContent: string,
+  gammePlans: GammePlan[] = [],
+  lineFileNames?: string[]
+): WorkOrder[] {
+  // Votre corps de fonction ici
+}
   const lines = csvContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return [];
 
@@ -395,9 +447,7 @@ export function parsePlanningCSV(csvContent: string, gammePlans: GammePlan[] = [
   const idxIntDesc = getIndex(['description de l intervention', 'description intervention', 'libelle']);
   const idxPriority = getIndex(['priorite', 'priority']);
   const idxEntity = getIndex(['entite', 'entity', 'zone', 'site', 'emplacement', 'lieu', 'batiment', 'atelier', 'projet']);
-  const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']);
-
-  const workOrders: WorkOrder[] = [];
+  const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']); let ncSequence = 0; // compte les OT sans numéro réel rencontrés dans cet import const workOrders: WorkOrder[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i], delimiter);
@@ -405,10 +455,27 @@ export function parsePlanningCSV(csvContent: string, gammePlans: GammePlan[] = [
 
     const eqCode = (idxEquipment >= 0 && cols[idxEquipment]) ? cols[idxEquipment].trim() : '';
     const eqDesc = (idxEqDesc >= 0 && cols[idxEqDesc]) ? cols[idxEqDesc].trim() : '';
-    const otNum = (idxOTCode >= 0 && cols[idxOTCode]) ? cols[idxOTCode].trim() : '';
-    const code = (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0')
-      ? (otNum.startsWith('OT-') ? otNum : `OT-${otNum}`)
-      : 'NC';
+   const otNum = (idxOTCode >= 0 && cols[idxOTCode]) ? cols[idxOTCode].trim() : '';
+// Quand aucun vrai n° d'OT n'est fourni dans le planning source, on génère un
+// code unique par ligne au lieu du littéral 'NC' répété pour toutes ces lignes —
+// Supabase impose désormais une contrainte d'unicité sur work_orders.code, que
+// le littéral 'NC' répété violait dès que plusieurs lignes du même import
+// n'avaient pas de numéro d'OT. Format : NC-<Site>-<MoisAnnée>-<séquence>,
+// le site/mois/année étant extraits du nom du fichier source de la ligne
+// (ex. "PMP AG Type A KENITRA Avril 2026.csv" -> "AG Type A KENITRA-AVR2026") ;
+// à défaut de nom de fichier reconnaissable, secours par un suffixe unique.
+let code: string;
+if (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0') {
+  code = otNum.startsWith('OT-') ? otNum : `OT-${otNum}`;
+} else {
+  ncSequence += 1;
+  const seqStr = String(ncSequence).padStart(3, '0');
+  const originFileName = lineFileNames?.[i - 1];
+  const label = originFileName ? extractSiteMonthYearFromFileName(originFileName) : null;
+  code = label
+    ? `NC-${label}-${seqStr}`
+    : `NC-${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : `${Date.now()}-${i}`}`;
+}
     
     const intDesc = (idxIntDesc >= 0 && cols[idxIntDesc]) ? cols[idxIntDesc].trim() : 'Maintenance Préventive';
     const interventionCode = (idxIntervention >= 0 && cols[idxIntervention]) ? cols[idxIntervention].trim() : '';
