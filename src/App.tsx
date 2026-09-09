@@ -170,6 +170,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // Sauvegarde des champs pas encore gérés par Supabase (checklist, intervenants, visa,
   // planner, planNumber, interventionCode, entity, startDate/startTime/endDate/endTime).
   React.useEffect(() => {
+       if (isLoadingWorkOrders) return;
     const extras: Record<string, Partial<WorkOrder>> = {};
     workOrders.forEach(wo => {
       const entry: Partial<WorkOrder> = {};
@@ -179,7 +180,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       extras[wo.id] = entry;
     });
     localStorage.setItem(WO_EXTRAS_KEY, JSON.stringify(extras));
-  }, [workOrders]);
+  }, [workOrders, isLoadingWorkOrders]);
 
   React.useEffect(() => {
     localStorage.setItem('gmao_requests', JSON.stringify(requests));
