@@ -167,12 +167,12 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
  * restent gérés côté app via le stockage `localStorage` séparé prévu pour ces
  * champs). `code` doit être fourni par l'appelant.
  */
-export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; title: string; dueDate: string }): Promise<WorkOrder> {
+export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; title: string; dueDate: string }, createdBy: string): Promise<WorkOrder> {
   const { data, error } = await supabase
-    .from('work_orders')
-    .insert(workOrderToRow(wo))
-    .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
-    .single();
+  .from('work_orders')
+  .insert({ ...workOrderToRow(wo), created_by: createdBy }) 
+  .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
+  .single();
 
   if (error) throw error;
   return rowToWorkOrder(data as unknown as WorkOrderRow);
@@ -186,7 +186,7 @@ export async function createWorkOrdersBulk(items: (Partial<WorkOrder> & { code: 
   if (items.length === 0) return [];
   const { data, error } = await supabase
     .from('work_orders')
-    .insert(items.map(workOrderToRow))
+    .insert(items.map(item => ({ ...workOrderToRow(item), created_by: createdBy })))
     .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)');
 
   if (error) throw error;
@@ -213,7 +213,7 @@ export async function updateWorkOrder(id: string, patch: Partial<WorkOrder>): Pr
 
 // ---------------------------------------------------------------------------
 // Exemple d'intégration dans App.tsx (à adapter, ne remplace pas le code actuel) :
-//
+// Ajout created_by sur createWorkOrder/createWorkOrdersBulk
 //   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
 //   const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(true);
 //
