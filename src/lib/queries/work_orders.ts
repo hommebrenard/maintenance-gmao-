@@ -162,6 +162,38 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
 }
 
 /**
+ * Crée un nouvel OT (champs cœur uniquement — voir note en tête de fichier :
+ * tasks/intervenantsLogs/visa/planner/etc. ne sont PAS envoyés à Supabase et
+ * restent gérés côté app via le stockage `localStorage` séparé prévu pour ces
+ * champs). `code` doit être fourni par l'appelant.
+ */
+export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; title: string; dueDate: string }): Promise<WorkOrder> {
+  const { data, error } = await supabase
+    .from('work_orders')
+    .insert(workOrderToRow(wo))
+    .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
+    .single();
+
+  if (error) throw error;
+  return rowToWorkOrder(data as unknown as WorkOrderRow);
+}
+
+/**
+ * Crée plusieurs OT en une seule requête (utilisé par l'import CSV en masse
+ * d'un planning). Mêmes limites que `createWorkOrder` : champs cœur uniquement.
+ */
+export async function createWorkOrdersBulk(items: (Partial<WorkOrder> & { code: string; title: string; dueDate: string })[]): Promise<WorkOrder[]> {
+  if (items.length === 0) return [];
+  const { data, error } = await supabase
+    .from('work_orders')
+    .insert(items.map(workOrderToRow))
+    .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)');
+
+  if (error) throw error;
+  return (data as unknown as WorkOrderRow[]).map(rowToWorkOrder);
+}
+
+/**
  * Met à jour un OT existant (champs cœur uniquement, ex. changement de statut).
  * ATTENTION : la policy RLS `wo_update_assigned_or_manager` peut restreindre
  * qui a le droit de faire cette mise à jour (voir note en tête de fichier) —
