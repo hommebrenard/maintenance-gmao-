@@ -182,7 +182,7 @@ export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; t
  * Crée plusieurs OT en une seule requête (utilisé par l'import CSV en masse
  * d'un planning). Mêmes limites que `createWorkOrder` : champs cœur uniquement.
  */
-export async function createWorkOrdersBulk(items: (Partial<WorkOrder> & { code: string; title: string; dueDate: string })[]): Promise<WorkOrder[]> {
+export async function createWorkOrdersBulk(items: (Partial<WorkOrder> & { code: string; title: string; dueDate: string })[], createdBy: string): Promise<WorkOrder[]> {
   if (items.length === 0) return [];
   const { data, error } = await supabase
     .from('work_orders')
