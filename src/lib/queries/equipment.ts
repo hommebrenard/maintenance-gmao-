@@ -152,7 +152,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
 export async function createEquipment(eq: Partial<Equipment> & { code: string; name: string }): Promise<Equipment> {
   const { data, error } = await supabase
     .from('equipment')
-    .insert(equipmentToRow(eq))
+    .insert({ ...equipmentToRow(eq), created_by: createdBy }) 
     .select('*, locations(name), suppliers(name)')
     .single();
 
@@ -170,7 +170,7 @@ export async function createEquipmentBulk(items: (Partial<Equipment> & { code: s
   if (items.length === 0) return [];
   const { data, error } = await supabase
     .from('equipment')
-    .insert(items.map(equipmentToRow))
+    .insert(items.map(item => ({ ...equipmentToRow(item), created_by: createdBy })))
     .select('*, locations(name), suppliers(name)');
 
   if (error) throw error;
@@ -198,7 +198,7 @@ export async function deleteEquipment(id: string): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Exemple d'intégration dans App.tsx (à adapter, ne remplace pas le code actuel) :
-//
+//Ajout created_by sur createEquipment/createEquipmentBulk
 //   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
 //   const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 //
