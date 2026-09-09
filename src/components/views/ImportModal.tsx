@@ -127,24 +127,35 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // Fusionne plusieurs fichiers CSV en un seul contenu : l'en-tête du premier
   // fichier est conservée, les lignes de données de tous les fichiers sont
   // concaténées à la suite (utile pour importer les 30 sites d'un coup).
-  const mergeCSVContents = (contents: string[]): string => {
-    let mergedHeader: string | null = null;
-    const allDataLines: string[] = [];
+ const mergeCSVContents = (
+  contents: string[],
+  fileNames: string[]
+): { merged: string; lineFileNames: string[] } => {
+  let mergedHeader: string | null = null;
+  const allDataLines: string[] = [];
+  const lineFileNames: string[] = [];
 
-    contents.forEach((content) => {
-      const lines = content.split(/\r\n|\n/).filter(l => l.trim().length > 0);
-      if (lines.length === 0) return;
-      if (mergedHeader === null) {
-        mergedHeader = lines[0];
-        allDataLines.push(...lines.slice(1));
-      } else {
-        // Ignore la ligne d'en-tête des fichiers suivants, ne garder que les données
-        allDataLines.push(...lines.slice(1));
-      }
-    });
+  contents.forEach((content, idx) => {
+    const lines = content.split(/\r\n|\n/).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return;
 
-    return mergedHeader !== null ? [mergedHeader, ...allDataLines].join('\n') : '';
+    if (mergedHeader === null) {
+      mergedHeader = lines[0];
+      allDataLines.push(...lines.slice(1));
+    } else {
+      allDataLines.push(...lines.slice(1));
+    }
+
+    for (let k = 0; k < lines.length - 1; k++) {
+      lineFileNames.push(fileNames[idx]);
+    }
+  });
+
+  return {
+    merged: mergedHeader !== null ? [mergedHeader, ...allDataLines].join('\n') : '',
+    lineFileNames
   };
+};
 
   // Handle File Upload (.csv, .txt, .tsv) — supporte la sélection de plusieurs
   // fichiers à la fois (ex : les fichiers de 30 sites pour un même mois)
@@ -155,13 +166,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     const files = inputEl.files;
     if (!files || files.length === 0) return;
 
-    try {
-      const contents = await Promise.all(Array.from(files).map(readFileAsText));
-      const merged = files.length > 1 ? mergeCSVContents(contents) : contents[0];
-      setSelectedFileNames(Array.from(files).map(f => f.name));
-      setPastedText(merged);
-      processCSVContent(merged, activeTab);
-    } catch (err) {
+   try {
+  const fileArray = Array.from(files);
+  const contents = await Promise.all(fileArray.map(readFileAsText));
+  const fileNames = fileArray.map(f => f.name);
+  const { merged, lineFileNames } = mergeCSVContents(contents, fileNames);
+  setSelectedFileNames(fileNames);
+  setPastedText(merged);
+  processCSVContent(merged, activeTab, lineFileNames);
+} catch (err) {
       setErrorMsg('Erreur lors de la lecture d\'un ou plusieurs fichiers. Vérifiez qu\'il s\'agit bien de fichiers CSV valides.');
     }
 
@@ -170,10 +183,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   // Process CSV Text
-  const processCSVContent = (content: string, type: 'planning' | 'gamme') => {
-    try {
-      if (type === 'planning') {
-        const parsed = parsePlanningCSV(content, existingGammes);
+ const processCSVContent = (
+  content: string,
+  type: 'planning' | 'gamme',
+  lineFileNames?: string[]
+) => {
+  try {
+    if (type === 'planning') {
+      const parsed = parsePlanningCSV(content, existingGammes, lineFileNames);
         setParsedPreviewWorkOrders(parsed);
         if (parsed.length === 0) {
           setErrorMsg("Aucun ordre de travail valide n'a pu être extrait. Vérifiez les en-têtes CSV.");
