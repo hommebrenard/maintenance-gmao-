@@ -42,8 +42,6 @@ export function formatLocalDate(d: Date = new Date()): string {
 }
 
 // Format Action Code consistently
-// Standard catalog codes (3 digits without hyphen, e.g. ACT080, ACT089) -> 1 - ACT080, 10 - ACT089
-// Custom/Added codes or non-catalog (e.g. ACT-11, ACT-ADD, ACT090) -> 11 - ACT-11
 export function formatActionCode(code: string | undefined, index: number): string {
   const displayIndex = index + 1;
   if (!code || !code.trim()) {
@@ -58,22 +56,18 @@ export function formatActionCode(code: string | undefined, index: number): strin
     const idxPart = withPrefixMatch[1];
     const actPart = withPrefixMatch[2].trim().toUpperCase();
 
-    // If actPart is ACT090 (from previous custom generation), convert to ACT-11
     if (actPart === 'ACT090' || actPart === '090') {
       return `${idxPart} - ACT-${idxPart}`;
     }
 
-    // Standard 3-digit catalog code, e.g. ACT080, ACT089, ACT266
     if (/^ACT\d{3}$/.test(actPart)) {
       return `${idxPart} - ${actPart}`;
     }
 
-    // Hyphenated custom code e.g. ACT-11, ACT-12, ACT-ADD
     if (actPart.startsWith('ACT-')) {
       return `${idxPart} - ${actPart}`;
     }
 
-    // If starts with ACT e.g. ACT11
     if (actPart.startsWith('ACT')) {
       const rest = actPart.replace('ACT', '').trim();
       if (rest) {
@@ -88,22 +82,18 @@ export function formatActionCode(code: string | undefined, index: number): strin
   // Pattern 2: Code without prefix
   const upperClean = clean.toUpperCase();
 
-  // If ACT090 specifically from custom generation
   if (upperClean === 'ACT090' || upperClean === '090') {
     return `${displayIndex} - ACT-${displayIndex}`;
   }
 
-  // Standard 3-digit catalog code (e.g. ACT080, ACT089, ACT266)
   if (/^ACT\d{3}$/.test(upperClean)) {
     return `${displayIndex} - ${upperClean}`;
   }
 
-  // Hyphenated custom code e.g. ACT-11
   if (upperClean.startsWith('ACT-')) {
     return `${displayIndex} - ${upperClean}`;
   }
 
-  // Code starting with ACT e.g. ACT11
   if (upperClean.startsWith('ACT')) {
     const rest = upperClean.replace('ACT', '').trim();
     if (rest) {
@@ -112,7 +102,6 @@ export function formatActionCode(code: string | undefined, index: number): strin
     return `${displayIndex} - ACT-${displayIndex}`;
   }
 
-  // Pure number e.g. "80" -> "1 - ACT080", "11" -> "11 - ACT-11"
   if (/^\d+$/.test(clean)) {
     if (clean.length === 3 && clean !== '090') {
       return `${displayIndex} - ACT${clean}`;
@@ -123,7 +112,7 @@ export function formatActionCode(code: string | undefined, index: number): strin
   return `${displayIndex} - ${clean}`;
 }
 
-// Convert any French date (DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, DD.MM.YYYY, etc.) to YYYY-MM-DD
+// Convert any French date (DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, etc.) to YYYY-MM-DD
 export function parseFrenchDate(dateStr: string): string {
   if (!dateStr) return formatLocalDate(new Date());
   const datePart = dateStr.trim().split(' ')[0];
@@ -131,14 +120,12 @@ export function parseFrenchDate(dateStr: string): string {
 
   const parts = datePart.split(/[\/\-\.]/);
   if (parts.length === 3) {
-    // If first part is 4 digits, assume YYYY-MM-DD or YYYY/MM/DD
     if (parts[0].length === 4) {
       const year = parts[0];
       const month = parts[1].padStart(2, '0');
       const day = parts[2].padStart(2, '0');
       return `${year}-${month}-${day}`;
     } else {
-      // Assume DD/MM/YYYY or DD-MM-YYYY
       const day = parts[0].padStart(2, '0');
       const month = parts[1].padStart(2, '0');
       let year = parts[2];
@@ -161,7 +148,7 @@ function parsePriority(priorityStr?: string): WorkOrderPriority {
   return 'Moyenne';
 }
 
-// Parse Gamme CSV into structured GammePlan array with nested sub-action tasks
+// Parse Gamme CSV into structured GammePlan array
 export function parseGammeCSV(csvContent: string): GammePlan[] {
   const lines = csvContent.split('\n').filter(l => l.trim().length > 0);
   if (lines.length < 2) return [];
@@ -241,7 +228,6 @@ export function findMatchingGammePlan(
   const cleanTitle = (intDesc || '').trim().toLowerCase();
   const cleanSite = (siteLocation || '').trim().toLowerCase();
 
-  // Helper to check if two site/location strings conflict (e.g. Kenitra vs Casa)
   const sitesConflict = (plan: GammePlan): boolean => {
     const pEq = (plan.equipmentCode || '').toLowerCase();
     const pDesc = (plan.equipmentDescription || '').toLowerCase();
@@ -266,36 +252,31 @@ export function findMatchingGammePlan(
     );
 
     if (otSiteKey && planSiteKey && otSiteKey.key !== planSiteKey.key) {
-      return true; // Conflicting sites (e.g. Casa OT vs Kenitra Gamme)
+      return true;
     }
     return false;
   };
 
-  // Filter out plans from conflicting sites if OT has a clear site identifier
   const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
   if (eligiblePlans.length === 0) return undefined;
 
-  // 1. Exact match on planCode and equipmentCode
   let match = eligiblePlans.find(p => 
     p.planCode.trim().toLowerCase() === cleanCode &&
     p.equipmentCode.trim().toLowerCase() === cleanEq
   );
   if (match) return match;
 
-  // 2. Exact match on planCode / interventionCode alone if length >= 3
   if (cleanCode.length >= 3) {
     match = eligiblePlans.find(p => p.planCode.trim().toLowerCase() === cleanCode);
     if (match) return match;
   }
 
-  // 3. Match on equipmentCode and title
   match = eligiblePlans.find(p => 
     p.equipmentCode.trim().toLowerCase() === cleanEq &&
     (p.interventionTitle.trim().toLowerCase().includes(cleanTitle) || cleanTitle.includes(p.interventionTitle.trim().toLowerCase()))
   );
   if (match) return match;
 
-  // 4. Equipment Family code match (e.g., EXT, ASC, PMP, CTA, CAN, GPLC, PTRSF, SANT, SPT, TD, TGBT, PAC, OND, PRAUT, VMC)
   const extractFamily = (str: string) => {
     const m = str.match(/(ext|asc|pmp|pomp|cta|can|gplc|ptrsf|trsf|sant|spt|td|tgbt|pac|ond|praut|vmc|clim)/i);
     return m ? m[1].toLowerCase() : '';
@@ -310,7 +291,6 @@ export function findMatchingGammePlan(
     if (match) return match;
   }
 
-  // 5. Keyword matching in title / description / equipment
   const keywords = [
     'extracteur', 'extract', 'ventilateur', 'ventilation', 'desenfumage',
     'ascenseur', 'pompe', 'groupe electrogene', 'groupe', 'caisson',
@@ -330,33 +310,27 @@ export function findMatchingGammePlan(
     if (match) return match;
   }
 
-  // 6. Substring match on planCode
   if (cleanCode && cleanCode.length >= 3) {
     match = eligiblePlans.find(p => p.planCode.trim().toLowerCase().includes(cleanCode));
     if (match) return match;
   }
 
-  // Never return an arbitrary fallback from a different equipment or site!
   return undefined;
 }
 
-// Helper to clean and normalize header strings (handles non-UTF8 / replacement chars like \ufffd)
+// Helper to clean and normalize header strings
 function cleanHeaderStr(str: string): string {
   return str
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // remove accents
-    .replace(/\uFFFD/g, "e")        // replace corrupted accent char with 'e'
-    .replace(/[^a-z0-9]/g, " ")      // replace non-alphanumeric with space
-    .replace(/\s+/g, " ")            // collapse multi spaces
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\uFFFD/g, "e")
+    .replace(/[^a-z0-9]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-// Parse Planning CSV into WorkOrder array
-// Table des abréviations de mois français (3 lettres) utilisée pour générer
-// les codes NC- des OT sans numéro réel, à partir du nom de fichier source
-// (convention observée : "Type Site Mois Année.ext", ex.
-// "PMP AG Type A KENITRA Avril 2026.csv").
+// Table des abréviations de mois français (3 lettres)
 const FRENCH_MONTH_ABBREV: Record<string, string> = {
   'janvier': 'JAN',
   'fevrier': 'FEV',
@@ -375,10 +349,6 @@ const FRENCH_MONTH_ABBREV: Record<string, string> = {
   'décembre': 'DEC'
 };
 
-// Extrait "<Site>-<MOISANNEE>" depuis un nom de fichier "Type Site Mois Année.ext"
-// (ex. "PMP AG Type A KENITRA Avril 2026.csv" -> "AG Type A KENITRA-AVR2026").
-// Retourne null si le nom ne suit pas ce format reconnaissable (pas de mois/année
-// détectés en fin de nom), auquel cas un code de secours générique sera utilisé.
 function extractSiteMonthYearFromFileName(fileName: string): string | null {
   const withoutExt = fileName.replace(/\.(csv|xlsx|xls|txt|tsv)$/i, '').trim();
   const tokens = withoutExt.split(/\s+/);
@@ -395,17 +365,11 @@ function extractSiteMonthYearFromFileName(fileName: string): string | null {
   return `${site}-${monthAbbrev}${year}`;
 }
 
-// Parse Planning CSV into WorkOrder array.
-// `lineFileNames` (optionnel) : nom du fichier d'origine pour chaque ligne de
-// données, dans le même ordre (utilisé pour générer un code NC-<Site>-<MoisAnnée>-<seq>
-// même quand plusieurs fichiers de sites différents sont fusionnés en un import).
 export function parsePlanningCSV(
   csvContent: string,
   gammePlans: GammePlan[] = [],
   lineFileNames?: string[]
 ): WorkOrder[] {
-  // Votre corps de fonction ici
-}
   const lines = csvContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return [];
 
@@ -420,7 +384,6 @@ export function parsePlanningCSV(
   
   const getIndex = (keywords: string[]) => headers.findIndex(h => keywords.some(k => h.includes(k)));
 
-  // Specific helper to find equipment description column vs equipment code column
   const idxEqDesc = headers.findIndex(h => 
     (h.includes('description') && h.includes('equipement')) || 
     h.includes('libelle equipement') || 
@@ -447,7 +410,10 @@ export function parsePlanningCSV(
   const idxIntDesc = getIndex(['description de l intervention', 'description intervention', 'libelle']);
   const idxPriority = getIndex(['priorite', 'priority']);
   const idxEntity = getIndex(['entite', 'entity', 'zone', 'site', 'emplacement', 'lieu', 'batiment', 'atelier', 'projet']);
-  const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']); let ncSequence = 0; // compte les OT sans numéro réel rencontrés dans cet import const workOrders: WorkOrder[] = [];
+  const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']);
+
+  let ncSequence = 0;
+  const workOrders: WorkOrder[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i], delimiter);
@@ -455,27 +421,20 @@ export function parsePlanningCSV(
 
     const eqCode = (idxEquipment >= 0 && cols[idxEquipment]) ? cols[idxEquipment].trim() : '';
     const eqDesc = (idxEqDesc >= 0 && cols[idxEqDesc]) ? cols[idxEqDesc].trim() : '';
-   const otNum = (idxOTCode >= 0 && cols[idxOTCode]) ? cols[idxOTCode].trim() : '';
-// Quand aucun vrai n° d'OT n'est fourni dans le planning source, on génère un
-// code unique par ligne au lieu du littéral 'NC' répété pour toutes ces lignes —
-// Supabase impose désormais une contrainte d'unicité sur work_orders.code, que
-// le littéral 'NC' répété violait dès que plusieurs lignes du même import
-// n'avaient pas de numéro d'OT. Format : NC-<Site>-<MoisAnnée>-<séquence>,
-// le site/mois/année étant extraits du nom du fichier source de la ligne
-// (ex. "PMP AG Type A KENITRA Avril 2026.csv" -> "AG Type A KENITRA-AVR2026") ;
-// à défaut de nom de fichier reconnaissable, secours par un suffixe unique.
-let code: string;
-if (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0') {
-  code = otNum.startsWith('OT-') ? otNum : `OT-${otNum}`;
-} else {
-  ncSequence += 1;
-  const seqStr = String(ncSequence).padStart(3, '0');
-  const originFileName = lineFileNames?.[i - 1];
-  const label = originFileName ? extractSiteMonthYearFromFileName(originFileName) : null;
-  code = label
-    ? `NC-${label}-${seqStr}`
-    : `NC-${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : `${Date.now()}-${i}`}`;
-}
+    const otNum = (idxOTCode >= 0 && cols[idxOTCode]) ? cols[idxOTCode].trim() : '';
+
+    let code: string;
+    if (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0') {
+      code = otNum.startsWith('OT-') ? otNum : `OT-${otNum}`;
+    } else {
+      ncSequence += 1;
+      const seqStr = String(ncSequence).padStart(3, '0');
+      const originFileName = lineFileNames?.[i - 1];
+      const label = originFileName ? extractSiteMonthYearFromFileName(originFileName) : null;
+      code = label
+        ? `NC-${label}-${seqStr}`
+        : `NC-${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : `${Date.now()}-${i}`}`;
+    }
     
     const intDesc = (idxIntDesc >= 0 && cols[idxIntDesc]) ? cols[idxIntDesc].trim() : 'Maintenance Préventive';
     const interventionCode = (idxIntervention >= 0 && cols[idxIntervention]) ? cols[idxIntervention].trim() : '';
@@ -488,17 +447,11 @@ if (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0') {
     const entity = rawEntity;
     const planNumber = (idxPlanNo >= 0 && cols[idxPlanNo]) ? cols[idxPlanNo].trim() : '';
 
-    // Pure Equipment Name (eqDesc) without code concatenation
     const equipmentName = eqDesc || eqCode || 'Non spécifié';
-
     const title = intDesc || 'Intervention de maintenance';
-    // Description is purely the intervention description (what the equipment underwent)
     const description = intDesc || (eqDesc ? `Intervention sur ${eqDesc}` : 'Maintenance préventive');
-
-    // Clean location: if entity is provided in CSV, use it as location directly
     const locationName = entity || 'Site Principal';
 
-    // Attach matching gamme tasks (respecting site location)
     const matchedPlan = findMatchingGammePlan(eqCode, interventionCode, intDesc, gammePlans, locationName);
     const tasks: WorkOrderTask[] = matchedPlan
       ? matchedPlan.tasks.map((t, idx) => ({
