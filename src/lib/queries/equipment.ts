@@ -144,6 +144,39 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   return row;
 }
 
+/**
+ * Crée un nouvel équipement (champs directs uniquement, pas location/supplier
+ * pour l'instant — voir note en tête de fichier). `code` doit être fourni par
+ * l'appelant (l'app génère déjà ses propres codes lisibles).
+ */
+export async function createEquipment(eq: Partial<Equipment> & { code: string; name: string }): Promise<Equipment> {
+  const { data, error } = await supabase
+    .from('equipment')
+    .insert(equipmentToRow(eq))
+    .select('*, locations(name), suppliers(name)')
+    .single();
+
+  if (error) throw error;
+  return rowToEquipment(data as unknown as EquipmentRow);
+}
+
+/**
+ * Crée plusieurs équipements en une seule requête (utilisé par l'import CSV en
+ * masse — ex. auto-création des fiches équipement manquantes détectées dans un
+ * planning importé). Retourne les lignes créées, dans l'ordre reçu par Supabase
+ * (pas nécessairement l'ordre d'entrée).
+ */
+export async function createEquipmentBulk(items: (Partial<Equipment> & { code: string; name: string })[]): Promise<Equipment[]> {
+  if (items.length === 0) return [];
+  const { data, error } = await supabase
+    .from('equipment')
+    .insert(items.map(equipmentToRow))
+    .select('*, locations(name), suppliers(name)');
+
+  if (error) throw error;
+  return (data as unknown as EquipmentRow[]).map(row => rowToEquipment(row));
+}
+
 /** Met à jour un équipement existant (champs directs uniquement, pas location/supplier). */
 export async function updateEquipment(id: string, patch: Partial<Equipment>): Promise<Equipment> {
   const { data, error } = await supabase
