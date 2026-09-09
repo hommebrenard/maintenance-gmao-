@@ -97,8 +97,8 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
     manufacturer: row.brand ?? '',
     model: row.model ?? '',
     serialNumber: row.serial_number ?? '',
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
     description: row.description ?? '',
     workOrdersCount,
   };
