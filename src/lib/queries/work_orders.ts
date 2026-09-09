@@ -115,7 +115,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     equipmentName: row.equipment?.name,
     location: row.locations?.name ?? '',
     assignee: row.profiles?.full_name ?? '',
-    dueDate: row.due_date,
+       dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
