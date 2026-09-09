@@ -16,8 +16,8 @@ import { LocationsView } from './components/views/LocationsView';
 import { UsersView } from './components/views/UsersView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
-import { fetchEquipment } from './lib/queries/equipment';
-import { fetchWorkOrders } from './lib/queries/work_orders';
+import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
+import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk } from './lib/queries/work_orders';
 
 import {
   INITIAL_WORK_ORDERS,
@@ -84,6 +84,21 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
   return [];
 }
 
+// Stockage local pour les champs de WorkOrder pas encore gérés par Supabase (checklist,
+// intervenants, visa, planner...). À retirer une fois leur mapping en base décidé.
+const WO_EXTRAS_KEY = 'gmao_workOrders_extras';
+const WO_EXTRA_FIELDS = ['tasks', 'intervenantsLogs', 'visa', 'planner', 'planNumber',
+  'interventionCode', 'entity', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
+
+function loadWorkOrderExtras(): Record<string, Partial<WorkOrder>> {
+  try {
+    const raw = localStorage.getItem(WO_EXTRAS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 import type { Session } from '@supabase/supabase-js';
 import { LogOut } from 'lucide-react';
 
@@ -143,11 +158,28 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Auto Sync to localStorage
   React.useEffect(() => {
-  fetchWorkOrders()
-    .then(setWorkOrders)
-    .catch(err => console.error('Erreur chargement OT:', err))
-    .finally(() => setIsLoadingWorkOrders(false));
-}, []);
+    fetchWorkOrders()
+      .then(fetched => {
+        const extras = loadWorkOrderExtras();
+        setWorkOrders(fetched.map(wo => ({ ...wo, ...(extras[wo.id] || {}) })));
+      })
+      .catch(err => console.error('Erreur chargement OT:', err))
+      .finally(() => setIsLoadingWorkOrders(false));
+  }, []);
+
+  // Sauvegarde des champs pas encore gérés par Supabase (checklist, intervenants, visa,
+  // planner, planNumber, interventionCode, entity, startDate/startTime/endDate/endTime).
+  React.useEffect(() => {
+    const extras: Record<string, Partial<WorkOrder>> = {};
+    workOrders.forEach(wo => {
+      const entry: Partial<WorkOrder> = {};
+      WO_EXTRA_FIELDS.forEach(field => {
+        if (wo[field] !== undefined) (entry as any)[field] = wo[field];
+      });
+      extras[wo.id] = entry;
+    });
+    localStorage.setItem(WO_EXTRAS_KEY, JSON.stringify(extras));
+  }, [workOrders]);
 
   React.useEffect(() => {
     localStorage.setItem('gmao_requests', JSON.stringify(requests));
@@ -170,21 +202,37 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Handlers - Work Orders
   const handleCreateWorkOrder = (woData: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'updatedAt'>) => {
-    const newId = `wo-${Date.now()}`;
+    const tempId = `wo-${Date.now()}`;
     const newCode = `OT-${Math.floor(1000 + Math.random() * 9000)}`;
-    const now = new Date().toLocaleString('fr-FR');
+    const now = new Date().toISOString();
     const newWO: WorkOrder = {
       ...woData,
-      id: newId,
+      id: tempId,
       code: newCode,
       createdAt: now,
       updatedAt: now
     };
     setWorkOrders(prev => [newWO, ...prev]);
+
+    createWorkOrder(newWO)
+      .then(created => {
+        setWorkOrders(prev => prev.map(wo => wo.id === tempId ? { ...newWO, ...created } : wo));
+      })
+      .catch(err => {
+        console.error('Erreur création OT:', err);
+        setWorkOrders(prev => prev.filter(wo => wo.id !== tempId));
+        alert("L'ordre de travail n'a pas pu être créé dans Supabase.");
+      });
   };
 
   const handleUpdateWOStatus = (id: string, status: WorkOrderStatus) => {
-    setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, status, updatedAt: new Date().toLocaleString('fr-FR') } : wo));
+    const previous = workOrders;
+    setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, status, updatedAt: new Date().toISOString() } : wo));
+    updateWorkOrder(id, { status }).catch(err => {
+      console.error('Erreur mise à jour statut OT:', err);
+      setWorkOrders(previous);
+      alert("Le changement de statut n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    });
   };
 
   const handleDeleteWorkOrder = (id: string) => {
@@ -213,6 +261,28 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     } else {
       setWorkOrders(prev => [...newOrders, ...prev]);
     }
+
+    // Écriture Supabase en arrière-plan, par lots de 500
+    const BATCH_SIZE = 500;
+    const batches: WorkOrder[][] = [];
+    for (let i = 0; i < newOrders.length; i += BATCH_SIZE) batches.push(newOrders.slice(i, i + BATCH_SIZE));
+
+    (async () => {
+      try {
+        const createdAll: WorkOrder[] = [];
+        for (const batch of batches) {
+          createdAll.push(...(await createWorkOrdersBulk(batch)));
+        }
+        const createdByCode = new Map(createdAll.map(c => [c.code, c]));
+        setWorkOrders(prev => prev.map(wo => {
+          const created = createdByCode.get(wo.code);
+          return created ? { ...wo, ...created } : wo;
+        }));
+      } catch (err) {
+        console.error('Erreur import Supabase (OT) :', err);
+        alert("L'import a fonctionné localement mais N'A PAS pu être enregistré dans Supabase — les données seront perdues au prochain rechargement de la page. Réessaie l'import.");
+      }
+    })();
   };
 
   const handleClearAllWorkOrders = () => {
@@ -318,14 +388,26 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Handlers - Equipment
   const handleAddEquipment = (eq: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt' | 'workOrdersCount'>) => {
+    const tempId = `eq-${Date.now()}`;
+    const now = new Date().toISOString();
     const newEq: Equipment = {
       ...eq,
-      id: `eq-${Date.now()}`,
-      createdAt: new Date().toLocaleString('fr-FR'),
-      updatedAt: new Date().toLocaleString('fr-FR'),
+      id: tempId,
+      createdAt: now,
+      updatedAt: now,
       workOrdersCount: 0
     };
     setEquipmentList(prev => [newEq, ...prev]);
+
+    createEquipment(newEq)
+      .then(created => {
+        setEquipmentList(prev => prev.map(e => e.id === tempId ? { ...newEq, ...created } : e));
+      })
+      .catch(err => {
+        console.error('Erreur création équipement:', err);
+        setEquipmentList(prev => prev.filter(e => e.id !== tempId));
+        alert("L'équipement n'a pas pu être créé dans Supabase.");
+      });
   };
 
   // Crée une fiche équipement pour chaque code équipement présent dans les OT importés
@@ -343,7 +425,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         });
       }
     });
-    const now = new Date().toLocaleString('fr-FR');
+    const now = new Date().toISOString();
     const newEquipments: Equipment[] = Array.from(seen.values()).map(e => ({
       id: `eq-${e.code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       code: e.code,
@@ -362,15 +444,30 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     }));
     if (newEquipments.length > 0) {
       setEquipmentList(prev => [...newEquipments, ...prev]);
+
+      createEquipmentBulk(newEquipments)
+        .then(created => {
+          const createdByCode = new Map(created.map(c => [c.code, c]));
+          setEquipmentList(prev => prev.map(e => {
+            const c = createdByCode.get(e.code);
+            return c ? { ...e, ...c } : e;
+          }));
+        })
+        .catch(err => {
+          console.error('Erreur création équipements (sync import) :', err);
+          alert("Les fiches équipement créées automatiquement n'ont pas pu être enregistrées dans Supabase.");
+        });
     }
   };
 
   const handleUpdateEquipmentStatus = (id: string, status: OperationalStatus) => {
-    setEquipmentList(prev => prev.map(e => e.id === id ? {
-      ...e,
-      status,
-      updatedAt: new Date().toLocaleString('fr-FR')
-    } : e));
+    const previous = equipmentList;
+    setEquipmentList(prev => prev.map(e => e.id === id ? { ...e, status, updatedAt: new Date().toISOString() } : e));
+    updateEquipment(id, { status }).catch(err => {
+      console.error('Erreur mise à jour statut équipement:', err);
+      setEquipmentList(previous);
+      alert("Le changement de statut n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    });
   };
 
   const handleDeleteEquipment = (id: string) => {
