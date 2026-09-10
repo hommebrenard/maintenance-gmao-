@@ -166,7 +166,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
  * planning importé). Retourne les lignes créées, dans l'ordre reçu par Supabase
  * (pas nécessairement l'ordre d'entrée).
  */
-   export async function createEquipmentBulk(items: (Partial<Equipment> & { code: string; name: string })[]): Promise<Equipment[]> {
+  export async function createEquipmentBulk(items: (Partial<Equipment> & { code: string; name: string })[], createdBy: string): Promise<Equipment[]> {
   if (items.length === 0) return [];
   const { data, error } = await supabase
     .from('equipment')
