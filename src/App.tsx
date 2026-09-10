@@ -227,14 +227,24 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   };
 
   const handleUpdateWOStatus = (id: string, status: WorkOrderStatus) => {
-    const previous = workOrders;
-    setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, status, updatedAt: new Date().toISOString() } : wo));
-    updateWorkOrder(id, { status }).catch(err => {
-      console.error('Erreur mise à jour statut OT:', err);
-      setWorkOrders(previous);
-      alert("Le changement de statut n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
-    });
-  };
+  const previous = workOrders;
+  setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, status, updatedAt: new Date().toISOString() } : wo));
+
+  // 🛡️ Garde-fou : si l'id n'est pas un UUID Supabase valide, on évite
+  // d'envoyer un PATCH qui planterait avec l'erreur 22P02.
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (!isUuid) {
+    console.warn(`OT ${id} sans UUID Supabase — mise à jour locale uniquement.`);
+    alert("Cet ordre de travail n'a pas encore été enregistré côté serveur. La modification sera perdue au prochain rechargement.");
+    return;
+  }
+
+  updateWorkOrder(id, { status }).catch(err => {
+    console.error('Erreur mise à jour statut OT:', err);
+    setWorkOrders(previous);
+    alert("Le changement de statut n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+  });
+};
 
   const handleDeleteWorkOrder = (id: string) => {
     setWorkOrders(prev => prev.filter(wo => wo.id !== id));
