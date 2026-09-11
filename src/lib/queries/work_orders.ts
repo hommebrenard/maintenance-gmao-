@@ -123,13 +123,30 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
 
 /** Récupère tous les ordres de travail, champs cœur uniquement. */
 export async function fetchWorkOrders(): Promise<WorkOrder[]> {
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
-    .order('due_date', { ascending: false });
+  // Supabase/PostgREST plafonne à 1000 lignes par requête par défaut.
+  // On paginate par lots de 1000 jusqu'à avoir tout récupéré.
+  const PAGE_SIZE = 1000;
+  const allRows: WorkOrderRow[] = [];
+  let page = 0;
 
-  if (error) throw error;
-  return (data as unknown as WorkOrderRow[]).map(rowToWorkOrder);
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
+      .order('due_date', { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+    const rows = (data as unknown as WorkOrderRow[]) || [];
+    allRows.push(...rows);
+
+    if (rows.length < PAGE_SIZE) break;
+    page += 1;
+  }
+
+  return allRows.map(rowToWorkOrder);
 }
 
 // ---------------------------------------------------------------------------
