@@ -273,13 +273,59 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       setWorkOrders(prev => [...newOrders, ...prev]);
     }
 
-    // Écriture Supabase en arrière-plan, par lots de 500
+       // Écriture Supabase en arrière-plan : équipements manquants d'abord, puis les OT liés
     const BATCH_SIZE = 500;
-    const batches: WorkOrder[][] = [];
-    for (let i = 0; i < newOrders.length; i += BATCH_SIZE) batches.push(newOrders.slice(i, i + BATCH_SIZE));
 
     (async () => {
       try {
+        // 1) Détecter les codes équipement présents dans cet import mais absents de la bibliothèque
+        const existingCodes = new Set(equipmentList.map(e => e.code));
+        const seen = new Map<string, { code: string; name: string; location?: string }>();
+        newOrders.forEach(w => {
+          if (w.equipmentCode && !existingCodes.has(w.equipmentCode) && !seen.has(w.equipmentCode)) {
+            seen.set(w.equipmentCode, { code: w.equipmentCode, name: w.equipmentName || w.equipmentCode, location: w.location });
+          }
+        });
+        const now = new Date().toISOString();
+        const newEquipments: Equipment[] = Array.from(seen.values()).map(e => ({
+          id: `eq-${e.code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          code: e.code,
+          name: e.name,
+          status: 'En service',
+          criticality: 'Normal',
+          location: e.location || '',
+          supplier: '',
+          manufacturer: '',
+          model: '',
+          serialNumber: '',
+          createdAt: now,
+          updatedAt: now,
+          description: '',
+          workOrdersCount: 0
+        }));
+
+        // 2) Créer ces équipements dans Supabase avant les OT, pour pouvoir les lier tout de suite
+        let createdEquipments: Equipment[] = [];
+        if (newEquipments.length > 0) {
+          createdEquipments = await createEquipmentBulk(newEquipments, session.user.id);
+          setEquipmentList(prev => [...createdEquipments, ...prev]);
+        }
+
+        // 3) Correspondance code équipement -> id (existants + nouvellement créés)
+        const codeToId = new Map<string, string>();
+        equipmentList.forEach(e => codeToId.set(e.code, e.id));
+        createdEquipments.forEach(e => codeToId.set(e.code, e.id));
+
+        // 4) Attacher equipmentId à chaque OT avant de l'enregistrer dans Supabase
+        const ordersWithEquipmentId = newOrders.map(w =>
+          w.equipmentCode && codeToId.has(w.equipmentCode)
+            ? { ...w, equipmentId: codeToId.get(w.equipmentCode) }
+            : w
+        );
+
+        const batches: WorkOrder[][] = [];
+        for (let i = 0; i < ordersWithEquipmentId.length; i += BATCH_SIZE) batches.push(ordersWithEquipmentId.slice(i, i + BATCH_SIZE));
+
         const createdAll: WorkOrder[] = [];
         for (const batch of batches) {
           createdAll.push(...(await createWorkOrdersBulk(batch, session.user.id)));
