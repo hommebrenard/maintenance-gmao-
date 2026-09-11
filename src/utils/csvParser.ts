@@ -228,6 +228,12 @@ export function findMatchingGammePlan(
   const cleanTitle = (intDesc || '').trim().toLowerCase();
   const cleanSite = (siteLocation || '').trim().toLowerCase();
 
+   const hasSiteToken = (str: string, token: string): boolean => {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i');
+    return re.test(str);
+  };
+
   const sitesConflict = (plan: GammePlan): boolean => {
     const pEq = (plan.equipmentCode || '').toLowerCase();
     const pDesc = (plan.equipmentDescription || '').toLowerCase();
@@ -244,11 +250,11 @@ export function findMatchingGammePlan(
     ];
 
     const otSiteKey = knownSites.find(s => 
-      s.names.some(n => cleanSite.includes(n) || cleanEq.includes(n) || cleanTitle.includes(n))
+      s.names.some(n => hasSiteToken(cleanSite, n) || hasSiteToken(cleanEq, n) || hasSiteToken(cleanTitle, n))
     );
 
     const planSiteKey = knownSites.find(s => 
-      s.names.some(n => pEq.includes(n) || pDesc.includes(n) || pTitle.includes(n))
+      s.names.some(n => hasSiteToken(pEq, n) || hasSiteToken(pDesc, n) || hasSiteToken(pTitle, n))
     );
 
     if (otSiteKey && planSiteKey && otSiteKey.key !== planSiteKey.key) {
