@@ -116,7 +116,8 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     location: row.locations?.name ?? '',
     assignee: row.profiles?.full_name ?? '',
     dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
-    createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
+        createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
   };
 }
 
