@@ -169,9 +169,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Sauvegarde des champs pas encore gérés par Supabase (checklist, intervenants, visa,
   // planner, planNumber, interventionCode, entity, startDate/startTime/endDate/endTime).
-  React.useEffect(() => {
+    React.useEffect(() => {
        if (isLoadingWorkOrders) return;
-    const extras: Record<string, Partial<WorkOrder>> = {};
+    // Fusionne avec ce qui existe déjà, pour ne jamais effacer les OT
+    // absents de l'état courant (ex. après un "Vider et remplacer" partiel).
+    const extras: Record<string, Partial<WorkOrder>> = { ...loadWorkOrderExtras() };
     workOrders.forEach(wo => {
       const entry: Partial<WorkOrder> = {};
       WO_EXTRA_FIELDS.forEach(field => {
