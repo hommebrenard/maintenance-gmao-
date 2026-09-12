@@ -189,11 +189,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   lineFileNames?: string[]
 ) => {
   try {
-    if (type === 'planning') {
+        if (type === 'planning') {
       const parsed = parsePlanningCSV(content, existingGammes, lineFileNames);
         setParsedPreviewWorkOrders(parsed);
+        const skipped = (parsed as typeof parsed & { skippedNoDate?: number }).skippedNoDate || 0;
         if (parsed.length === 0) {
           setErrorMsg("Aucun ordre de travail valide n'a pu être extrait. Vérifiez les en-têtes CSV.");
+        } else if (skipped > 0) {
+          setSuccessMsg(`${parsed.length} ordre(s) de travail détecté(s) prêts à être importés. (${skipped} ligne(s) ignorée(s) faute de date d'échéance renseignée.)`);
         } else {
           setSuccessMsg(`${parsed.length} ordre(s) de travail détecté(s) prêts à être importés.`);
         }
@@ -207,8 +210,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           setSuccessMsg(`${parsed.length} gamme(s) détectée(s) avec un total de ${totalTasks} action(s) / checklist(s).`);
         }
       }
-    } catch (err) {
-      setErrorMsg("Erreur lors de la lecture du fichier. Assurez-vous qu'il s'agit d'un fichier CSV valide.");
+        } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Erreur lors de la lecture du fichier. Assurez-vous qu'il s'agit d'un fichier CSV valide.");
     }
   };
 
