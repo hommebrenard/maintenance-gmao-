@@ -18,6 +18,7 @@ import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk } from './lib/queries/work_orders';
+import { fetchLocationCodeMap } from './lib/queries/locations';
 
 import {
   INITIAL_WORK_ORDERS,
@@ -325,8 +326,19 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             : w
         );
 
+                // 4bis) Attacher locationId à partir du code Zone (entity) du CSV.
+        // Tant que `locations.code` n'est pas renseigné pour un site donné,
+        // locationId reste undefined et location_id restera NULL en base
+        // (comportement inchangé pour les sites pas encore configurés).
+        const locationCodeMap = await fetchLocationCodeMap();
+        const ordersWithLocationId = ordersWithEquipmentId.map(w =>
+          w.entity && locationCodeMap.has(w.entity)
+            ? { ...w, locationId: locationCodeMap.get(w.entity) }
+            : w
+        );
+
         const batches: WorkOrder[][] = [];
-        for (let i = 0; i < ordersWithEquipmentId.length; i += BATCH_SIZE) batches.push(ordersWithEquipmentId.slice(i, i + BATCH_SIZE));
+        for (let i = 0; i < ordersWithLocationId.length; i += BATCH_SIZE) batches.push(ordersWithLocationId.slice(i, i + BATCH_SIZE));
 
         const createdAll: WorkOrder[] = [];
         for (const batch of batches) {
