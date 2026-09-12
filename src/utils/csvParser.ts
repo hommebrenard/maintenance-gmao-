@@ -510,5 +510,6 @@ export function parsePlanningCSV(
     });
   }
 
+    (workOrders as WorkOrder[] & { skippedNoDate?: number }).skippedNoDate = skippedNoDate;
   return workOrders;
 }
