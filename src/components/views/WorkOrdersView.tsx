@@ -1374,11 +1374,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsResetConfirmOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors shadow-2xs"
-                title="Vider et effacer tous les Ordres de Travail actuels"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors shadow-2xs"
+                title="Vide uniquement l'affichage local — les données restent en base et reviendront au prochain rechargement"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Tout vider</span>
+                <span>Vider l'affichage</span>
               </button>
             )}
 
@@ -3559,14 +3559,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Tout vider - Effacer tous les Ordres de Travail ?</h3>
+                           <h3 className="text-lg font-bold text-gray-900">Vider l'affichage - Masquer les Ordres de Travail à l'écran ?</h3>
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed">
-              Voulez-vous effacer l'intégralité des Ordres de Travail actuels ({workOrders.length} OT) ?
+              Voulez-vous masquer l'intégralité des Ordres de Travail actuels ({workOrders.length} OT) de cet écran ?
             </p>
             <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-lg font-medium">
-              ⚠️ <strong>Cette action efface la liste.</strong> Vous pourrez réimporter vos propres fichiers à tout moment.
+              ℹ️ <strong>Ceci ne supprime rien en base.</strong> Les {workOrders.length} OT restent dans Supabase et réapparaîtront automatiquement au prochain rechargement de la page (F5).
             </p>
 
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
@@ -3587,8 +3587,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 }}
                 className="px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Oui, tout vider</span>
+                                <Trash2 className="w-3.5 h-3.5" />
+                <span>Oui, vider l'affichage</span>
               </button>
             </div>
           </div>
