@@ -416,14 +416,33 @@ export function parsePlanningCSV(
   const idxIntDesc = getIndex(['description de l intervention', 'description intervention', 'libelle']);
   const idxPriority = getIndex(['priorite', 'priority']);
   const idxEntity = getIndex(['entite', 'entity', 'zone', 'site', 'emplacement', 'lieu', 'batiment', 'atelier', 'projet']);
-  const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']);
+   const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']);
+
+  // Garde-fou : un vrai fichier Planning a toujours une colonne date d'échéance
+  // et/ou un planificateur. Un fichier Gamme (Équipement;Description
+  // intervention;Action;Description équipement) n'a ni l'un ni l'autre — s'il
+  // est déposé par erreur dans l'onglet Planning, on le rejette clairement
+  // plutôt que de fabriquer des centaines de faux OT.
+  if (idxDueDate === -1 && idxPlanner === -1) {
+    throw new Error(
+      "Ce fichier ressemble à un fichier de Gamme de Maintenance (colonnes Équipement/Action), pas à un Planning OT. Vérifie qu'il a été déposé dans le bon onglet."
+    );
+  }
 
   let ncSequence = 0;
+  let skippedNoDate = 0;
   const workOrders: WorkOrder[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i], delimiter);
     if (cols.length < 2) continue;
+
+    const rawDate = (idxDueDate >= 0 && cols[idxDueDate]) ? cols[idxDueDate].trim() : '';
+    // Une ligne sans date d'échéance exploitable n'est pas un OT valide : on
+    // l'ignore plutôt que de lui attribuer silencieusement la date du jour
+    // (ce qui fabriquait de faux OT "urgents" à chaque import).
+    if (!rawDate) { skippedNoDate += 1; continue; }
+    const dueDate = parseFrenchDate(rawDate);
 
     const eqCode = (idxEquipment >= 0 && cols[idxEquipment]) ? cols[idxEquipment].trim() : '';
     const eqDesc = (idxEqDesc >= 0 && cols[idxEqDesc]) ? cols[idxEqDesc].trim() : '';
@@ -444,8 +463,6 @@ export function parsePlanningCSV(
     
     const intDesc = (idxIntDesc >= 0 && cols[idxIntDesc]) ? cols[idxIntDesc].trim() : 'Maintenance Préventive';
     const interventionCode = (idxIntervention >= 0 && cols[idxIntervention]) ? cols[idxIntervention].trim() : '';
-    const rawDate = (idxDueDate >= 0 && cols[idxDueDate]) ? cols[idxDueDate].trim() : '';
-    const dueDate = parseFrenchDate(rawDate);
     const assignee = (idxPlanner >= 0 && cols[idxPlanner]) ? cols[idxPlanner].trim() : 'Technicien';
     const priorityStr = (idxPriority >= 0 && cols[idxPriority]) ? cols[idxPriority].trim() : '';
     const priority = parsePriority(priorityStr);
