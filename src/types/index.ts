@@ -71,6 +71,7 @@ export interface WorkOrder {
   equipmentCode?: string;
   equipmentName?: string;
   location?: string;
+  locationId?: string;
   assignee?: string;
   dueDate: string;
   createdAt: string;
