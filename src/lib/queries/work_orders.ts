@@ -174,6 +174,7 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
   if (wo.priority !== undefined) row.priority = PRIORITY_APP_TO_ROW[wo.priority];
   if (wo.status !== undefined) row.status = STATUS_APP_TO_ROW[wo.status];
   if (wo.equipmentId !== undefined) row.equipment_id = wo.equipmentId;
+  if (wo.locationId !== undefined) row.location_id = wo.locationId;
   if (wo.dueDate !== undefined) row.due_date = wo.dueDate;
   return row;
 }
