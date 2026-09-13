@@ -149,6 +149,37 @@ export async function fetchWorkOrders(): Promise<WorkOrder[]> {
   return allRows.map(rowToWorkOrder);
 }
 
+/**
+ * Vérifie, parmi une liste de codes d'OT (typiquement extraits d'un fichier
+ * CSV avant import), lesquels existent déjà en base. Utilisé par la modale
+ * d'import pour avertir l'utilisateur AVANT toute écriture, plutôt que de le
+ * laisser découvrir le problème via l'erreur Postgres 23505 (contrainte
+ * unique `work_orders_code_key`) rencontrée le 12/09/2026 lors d'un réimport.
+ *
+ * Découpe la requête par lots de 200 codes pour rester sous les limites de
+ * longueur d'URL du filtre `.in()` de PostgREST sur les gros fichiers.
+ */
+export async function fetchExistingWorkOrderCodes(codes: string[]): Promise<Set<string>> {
+  const uniqueCodes = Array.from(new Set(codes.filter((c): c is string => Boolean(c && c.trim()))));
+  if (uniqueCodes.length === 0) return new Set();
+
+  const CHUNK_SIZE = 200;
+  const existing = new Set<string>();
+
+  for (let i = 0; i < uniqueCodes.length; i += CHUNK_SIZE) {
+    const chunk = uniqueCodes.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select('code')
+      .in('code', chunk);
+
+    if (error) throw error;
+    (data as { code: string }[] | null)?.forEach(row => existing.add(row.code));
+  }
+
+  return existing;
+}
+
 // ---------------------------------------------------------------------------
 // Écritures — champs cœur uniquement (voir note en tête de fichier).
 // ---------------------------------------------------------------------------
