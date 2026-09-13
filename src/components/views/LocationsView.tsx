@@ -34,9 +34,33 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
     (l.parentLocation || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Nombre d'OT déjà chargés pour ce site (voir note sur workOrders ci-dessus).
-  const loadedCount = (loc: LocationItem): number =>
-    workOrders.filter(w => w.location === loc.name || (loc.code && w.entity === loc.code)).length;
+    const MONTH_NAMES = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+
+  const formatMonthLabel = (ym: string) => {
+    const [year, monthStr] = ym.split('-');
+    const monthIdx = parseInt(monthStr, 10) - 1;
+    return `${MONTH_NAMES[monthIdx] || monthStr} ${year}`;
+  };
+
+  // Détail par mois des OT déjà chargés pour ce site (13/09/2026) — même
+  // logique que le filtre "Tous les mois" de la vue Ordres de travail
+  // (regroupement sur `dueDate.slice(0,7)`), pour savoir précisément quels
+  // mois sont couverts et lesquels manquent encore, pas juste un total.
+  const monthBreakdown = (loc: LocationItem): { ym: string; label: string; count: number }[] => {
+    const matching = workOrders.filter(w => w.location === loc.name || (loc.code && w.entity === loc.code));
+    const counts = new Map<string, number>();
+    matching.forEach(w => {
+      const ym = w.dueDate && w.dueDate.length >= 7 ? w.dueDate.slice(0, 7) : null;
+      const key = ym || 'Sans date';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([ym, count]) => ({ ym, label: ym === 'Sans date' ? 'Sans date' : formatMonthLabel(ym), count }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,9 +151,10 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
-            {filtered.map(loc => {
-              const count = loadedCount(loc);
-              const isLoaded = count > 0;
+          {filtered.map(loc => {
+              const months = monthBreakdown(loc);
+              const total = months.reduce((sum, m) => sum + m.count, 0);
+              const isLoaded = total > 0;
               return (
                 <div key={loc.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs space-y-3 relative group">
                   <div className="flex items-start justify-between gap-2">
@@ -159,9 +184,22 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
 
                   <div className="pt-2 border-t text-xs">
                     {isLoaded ? (
-                      <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Chargé ({count} OT)</span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Chargé ({total} OT)</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pl-5">
+                          {months.map(m => (
+                            <span
+                              key={m.ym}
+                              className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium"
+                              title={`${m.count} OT`}
+                            >
+                              {m.label} ({m.count})
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-gray-400 font-medium">
