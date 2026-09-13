@@ -18,7 +18,8 @@ import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk } from './lib/queries/work_orders';
-import { fetchLocationCodeMap } from './lib/queries/locations';
+import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
+
 
 import {
   INITIAL_WORK_ORDERS,
@@ -32,7 +33,6 @@ import {
   INITIAL_TEMPLATES,
   INITIAL_PROCEDURES,
   INITIAL_TAGS,
-  INITIAL_LOCATIONS,
   INITIAL_USERS,
   INITIAL_SUPPLIERS,
   INITIAL_CLIENTS
@@ -143,9 +143,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   const [tags, setTags] = useState<Tag[]>(() =>
     getInitialState('gmao_tags', INITIAL_TAGS)
   );
-  const [locations, setLocations] = useState<LocationItem[]>(() =>
-    getInitialState('gmao_locations', INITIAL_LOCATIONS)
-  );
+  // Sites/emplacements : liste maîtresse persistée dans Supabase (`locations`)
+  // depuis le 13/09/2026 — avant cette date, plus de mock local synchronisé
+  // via localStorage (voir handlers plus bas pour le CRUD Supabase).
+  const [locations, setLocations] = useState<LocationItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>(() =>
     getInitialState('gmao_users', INITIAL_USERS)
   );
@@ -197,8 +198,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 }, []);
 
   React.useEffect(() => {
-    localStorage.setItem('gmao_locations', JSON.stringify(locations));
-  }, [locations]);
+    fetchLocations()
+      .then(setLocations)
+      .catch(err => console.error('Erreur chargement sites/emplacements:', err));
+  }, []);
 
   React.useEffect(() => {
     localStorage.setItem('gmao_inventory', JSON.stringify(inventory));
@@ -256,22 +259,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean) => {
     if (replaceExisting) {
       setWorkOrders(newOrders);
-      // Update locations state to match only the imported sites
-      const importedSites = Array.from(
-        new Set(newOrders.flatMap(w => [w.location, w.entity]).filter((s): s is string => Boolean(s) && s.trim().length > 0))
-      );
-      if (importedSites.length > 0) {
-        setLocations(
-          importedSites.map((name, idx) => ({
-            id: `loc-imp-${Date.now()}-${idx}`,
-            name,
-            type: 'Site',
-            equipmentCount: newOrders.filter(w => w.location === name || w.entity === name).length
-          }))
-        );
-      } else {
-        setLocations([]);
-      }
+      // Depuis le 13/09/2026 : `locations` est une liste maîtresse persistée
+      // dans Supabase, indépendante des imports d'OT — on ne l'écrase plus
+      // ici (voir fetchLocations/createLocation/etc. et LocationsView.tsx).
     } else {
       setWorkOrders(prev => [...newOrders, ...prev]);
     }
@@ -578,34 +568,41 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setTags(prev => [...prev, { ...tag, id: `tag-${Date.now()}` }]);
   };
 
+   // Sites/emplacements (Supabase depuis le 13/09/2026, voir aussi useEffect
+  // de chargement plus haut). Écriture optimiste + retour arrière si l'appel
+  // Supabase échoue, comme pour workOrders/equipment.
   const handleAddLocation = (loc: Omit<LocationItem, 'id'>) => {
-    setLocations(prev => [...prev, { ...loc, id: `loc-${Date.now()}` }]);
+    const tempId = `loc-temp-${Date.now()}`;
+    setLocations(prev => [...prev, { ...loc, id: tempId }]);
+    createLocation({ name: loc.name, code: loc.code, type: loc.type })
+      .then(created => {
+        setLocations(prev => prev.map(l => (l.id === tempId ? created : l)));
+      })
+      .catch(err => {
+        console.error('Erreur création site:', err);
+        setLocations(prev => prev.filter(l => l.id !== tempId));
+        alert("Le site n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+      });
   };
 
   const handleDeleteLocation = (id: string) => {
+    const previous = locations;
     setLocations(prev => prev.filter(l => l.id !== id));
+    deleteLocation(id).catch(err => {
+      console.error('Erreur suppression site:', err);
+      setLocations(previous);
+      alert("Le site n'a pas pu être supprimé. Vérifie ta connexion ou tes droits.");
+    });
   };
 
   const handleClearAllLocations = () => {
+    const previous = locations;
     setLocations([]);
-  };
-
-  const handleResetLocations = () => {
-    const currentSites = Array.from(
-      new Set(workOrders.flatMap(w => [w.location, w.entity]).filter((s): s is string => Boolean(s) && s.trim().length > 0))
-    );
-    if (currentSites.length > 0) {
-      setLocations(
-        currentSites.map((name, idx) => ({
-          id: `loc-${idx}`,
-          name,
-          type: 'Site',
-          equipmentCount: workOrders.filter(w => w.location === name || w.entity === name).length
-        }))
-      );
-    } else {
-      setLocations([]);
-    }
+    Promise.all(previous.map(l => deleteLocation(l.id))).catch(err => {
+      console.error('Erreur suppression des sites:', err);
+      setLocations(previous);
+      alert("La suppression n'a pas pu être enregistrée intégralement. Vérifie ta connexion ou tes droits, puis réessaie.");
+    });
   };
 
   const handleAddUser = (user: Omit<UserItem, 'id'>) => {
@@ -635,7 +632,6 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onEditWorkOrder={handleEditWorkOrder}
             onBulkImportWorkOrders={handleBulkImportWorkOrders}
             onClearAllWorkOrders={handleClearAllWorkOrders}
-            onResetLocations={handleResetLocations}
           />
         );
       case 'requests':
@@ -723,14 +719,14 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onAddTag={handleAddTag}
           />
         );
-      case 'locations':
+       case 'locations':
         return (
           <LocationsView
             locations={locations}
+            workOrders={workOrders}
             onAddLocation={handleAddLocation}
             onDeleteLocation={handleDeleteLocation}
             onClearAllLocations={handleClearAllLocations}
-            onResetLocations={handleResetLocations}
           />
         );
       case 'users':
