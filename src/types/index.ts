@@ -200,6 +200,7 @@ export interface Tag {
 export interface LocationItem {
   id: string;
   name: string;
+  code?: string;
   parentLocation?: string;
   type: 'Site' | 'Bâtiment' | 'Zone' | 'Atelier';
   equipmentCount: number;
