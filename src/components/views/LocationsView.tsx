@@ -1,32 +1,42 @@
 import React, { useState } from 'react';
-import { MapPin, Plus, Search, Building2, Trash2, RotateCcw } from 'lucide-react';
-import { LocationItem } from '../../types';
+import { MapPin, Plus, Search, Building2, Trash2, CheckCircle2, Circle } from 'lucide-react';
+import { LocationItem, WorkOrder } from '../../types';
 
 interface LocationsViewProps {
   locations: LocationItem[];
+  // Utilisé uniquement pour calculer le badge "Chargé / Pas encore chargé"
+  // (13/09/2026) : compte les OT déjà présents pour chaque site, en
+  // comparant au nom du site ET à son code Zone (les OT non encore
+  // rattachés via location_id n'ont que le code Zone brut du CSV).
+  workOrders?: WorkOrder[];
   onAddLocation: (loc: Omit<LocationItem, 'id'>) => void;
   onDeleteLocation?: (id: string) => void;
   onClearAllLocations?: () => void;
-  onResetLocations?: () => void;
 }
 
 export const LocationsView: React.FC<LocationsViewProps> = ({
   locations,
+  workOrders = [],
   onAddLocation,
   onDeleteLocation,
-  onClearAllLocations,
-  onResetLocations
+  onClearAllLocations
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [parentLocation, setParentLocation] = useState('');
 
   const filtered = locations.filter(l =>
     l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (l.code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (l.parentLocation || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Nombre d'OT déjà chargés pour ce site (voir note sur workOrders ci-dessus).
+  const loadedCount = (loc: LocationItem): number =>
+    workOrders.filter(w => w.location === loc.name || (loc.code && w.entity === loc.code)).length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,41 +44,31 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
 
     onAddLocation({
       name,
+      code: code.trim() || undefined,
       parentLocation: parentLocation || 'Site Principal',
-      type: 'Zone',
+      type: 'Site',
       equipmentCount: 0
     });
 
     setName('');
+    setCode('');
     setParentLocation('');
     setIsModalOpen(false);
   };
 
   return (
     <div className="flex-1 bg-white min-h-screen flex flex-col">
-      {/* Header matching Screenshot 13 */}
+      {/* Header */}
       <div className="px-6 py-5 border-b border-gray-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Emplacements / Sites</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Gérez les usines, les bâtiments, les sites et les zones.
+              Liste maîtresse des sites ({locations.length}) — gérez les usines, bâtiments, sites et zones.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {onResetLocations && (
-              <button
-                type="button"
-                onClick={onResetLocations}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-2xs"
-                title="Réinitialiser la liste officielle des sites"
-              >
-                <RotateCcw className="w-4 h-4 text-blue-600" />
-                <span>Réinitialiser les sites</span>
-              </button>
-            )}
-
             {locations.length > 0 && onClearAllLocations && (
               <button
                 type="button"
@@ -108,7 +108,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
       {/* Content */}
       <div className="flex-1 p-6 bg-gray-50/30">
         {filtered.length === 0 ? (
-          /* Empty state matching Screenshot 13 */
+          /* Empty state */
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto shadow-2xs">
             <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 text-blue-500">
               <MapPin className="w-8 h-8" />
@@ -127,37 +127,52 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
-            {filtered.map(loc => (
-              <div key={loc.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs space-y-3 relative group">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                      <Building2 className="w-5 h-5" />
+            {filtered.map(loc => {
+              const count = loadedCount(loc);
+              const isLoaded = count > 0;
+              return (
+                <div key={loc.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs space-y-3 relative group">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-base">{loc.name}</h3>
+                        <p className="text-xs text-gray-500">
+                          {loc.code ? <span className="font-mono">{loc.code}</span> : 'Aucun code Zone'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-base">{loc.name}</h3>
-                      <p className="text-xs text-gray-500">{loc.parentLocation || 'Site Principal'}</p>
-                    </div>
+
+                    {onDeleteLocation && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteLocation(loc.id)}
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="Supprimer ce site"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
-                  {onDeleteLocation && (
-                    <button
-                      type="button"
-                      onClick={() => onDeleteLocation(loc.id)}
-                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="Supprimer ce site"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <div className="pt-2 border-t text-xs">
+                    {isLoaded ? (
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Chargé ({count} OT)</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-gray-400 font-medium">
+                        <Circle className="w-3.5 h-3.5" />
+                        <span>Pas encore chargé</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                <div className="pt-2 border-t text-xs text-gray-500 flex justify-between">
-                  <span>Équipements rattachés:</span>
-                  <span className="font-semibold text-gray-900">{loc.equipmentCount || 0}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -174,7 +189,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed">
-              Voulez-vous supprimer tous les emplacements actuels ({locations.length} site(s)) ?
+              Voulez-vous supprimer tous les emplacements actuels ({locations.length} site(s)) ? Cette action supprime les sites de la base — les OT déjà importés pour ces sites ne seront pas supprimés, mais perdront leur rattachement.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">
@@ -214,11 +229,25 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Usine Nord - Bâtiment B"
+                  placeholder="Ex: AG Type A KENITRA"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Code Zone</label>
+                <input
+                  type="text"
+                  placeholder="Ex: BAM_KNT_AG"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Doit correspondre à la colonne "Zone" du fichier planning pour ce site, pour que les OT s'y rattachent automatiquement à l'import.
+                </p>
               </div>
 
               <div>
