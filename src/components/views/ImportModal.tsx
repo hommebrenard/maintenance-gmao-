@@ -4,6 +4,7 @@ import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChec
 import { WorkOrder, GammePlan } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
+import { fetchExistingWorkOrderCodes } from '../../lib/queries/work_orders';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   
   // Import strategy: append to existing orders or replace current list
   const [importBehavior, setImportBehavior] = useState<'append' | 'replace'>('replace');
@@ -228,7 +230,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   // Confirm Import
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (activeTab === 'planning') {
       if (parsedPreviewWorkOrders.length === 0) return;
       
@@ -252,9 +254,46 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         finalWorkOrders = parsedPreviewWorkOrders;
       }
 
+      // Vérification anti-doublon AVANT toute écriture (locale ou Supabase),
+      // ajoutée le 13/09/2026 pour éviter la confusion de l'erreur Postgres
+      // 23505 (contrainte unique work_orders_code_key) en cas de réimport
+      // d'un fichier déjà enregistré. Si la vérification elle-même échoue
+      // (ex. coupure réseau), on ne bloque pas l'import : le comportement
+      // redevient celui d'avant (l'éventuelle erreur 23505 sera alors
+      // rattrapée par le message générique existant côté App.tsx).
+      setIsCheckingDuplicates(true);
+      let existingCodes: Set<string> = new Set();
+      try {
+        existingCodes = await fetchExistingWorkOrderCodes(finalWorkOrders.map(wo => wo.code));
+      } catch (err) {
+        console.error('Erreur lors de la vérification anti-doublon :', err);
+      } finally {
+        setIsCheckingDuplicates(false);
+      }
+
+      const duplicateCount = finalWorkOrders.filter(wo => existingCodes.has(wo.code)).length;
+      if (duplicateCount > 0) {
+        const total = finalWorkOrders.length;
+        const allDuplicates = duplicateCount === total;
+        const message = allDuplicates
+          ? `Les ${total} OT de ce fichier existent déjà en base (mêmes codes) — il s'agit probablement d'un réimport du même fichier.\n\nAucun nouvel OT à importer. Annuler ?`
+          : `${duplicateCount} des ${total} OT de ce fichier existent déjà en base (même code) — probablement déjà importés précédemment.\n\nContinuer pour importer uniquement les ${total - duplicateCount} OT restants (nouveaux) ? Les doublons seront ignorés.`;
+
+        if (allDuplicates) {
+          window.alert(message);
+          return;
+        }
+
+        const proceed = window.confirm(message);
+        if (!proceed) return;
+
+        finalWorkOrders = finalWorkOrders.filter(wo => !existingCodes.has(wo.code));
+      }
+
       onImportWorkOrders(finalWorkOrders, importBehavior === 'replace');
       const actionLabel = importBehavior === 'replace' ? 'Remplacement effectué' : 'Ajout effectué';
-      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
+      const skippedNote = duplicateCount > 0 ? ` (${duplicateCount} doublon(s) ignoré(s))` : '';
+      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${skippedNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
       setParsedPreviewWorkOrders([]);
       setPastedText('');
     } else {
@@ -733,6 +772,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           <button
             onClick={handleConfirmImport}
             disabled={
+              isCheckingDuplicates ||
               (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
               (activeTab === 'gamme' && parsedPreviewGammes.length === 0)
             }
@@ -740,7 +780,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           >
             <Check className="w-4 h-4" />
             <span>
-              Valider et intégrer ({activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})
+              {isCheckingDuplicates
+                ? 'Vérification des doublons…'
+                : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})`}
             </span>
           </button>
         </div>
