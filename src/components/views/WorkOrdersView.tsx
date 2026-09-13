@@ -48,8 +48,7 @@ interface WorkOrdersViewProps {
   onDeleteWorkOrder?: (id: string) => void;
   onEditWorkOrder?: (id: string, updated: Partial<WorkOrder>) => void;
   onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean) => void;
-  onClearAllWorkOrders?: () => void;
-  onResetLocations?: () => void;
+   onClearAllWorkOrders?: () => void;
 }
 
 function getEquipmentNameOnly(wo?: WorkOrder | null, equipmentList: Equipment[] = []): string {
@@ -282,8 +281,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   onDeleteWorkOrder,
   onEditWorkOrder,
   onBulkImportWorkOrders,
-  onClearAllWorkOrders,
-  onResetLocations
+    onClearAllWorkOrders,
 }) => {
   const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload'>('todo');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1240,9 +1238,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 type="button"
                 onClick={() => {
                   setSelectedLocationFilter('all');
-                  if (onResetLocations) {
-                    onResetLocations();
-                  }
                 }}
                 className={`p-1 rounded transition-colors ${
                   selectedLocationFilter !== 'all'
