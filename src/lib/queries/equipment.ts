@@ -129,6 +129,8 @@ interface EquipmentWritableRow {
   serial_number?: string;
   status?: EquipmentStatusRow;
   criticality?: string;
+  location_id?: string;
+  supplier_id?: string;
 }
 
 function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
@@ -141,6 +143,12 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   if (eq.serialNumber !== undefined) row.serial_number = eq.serialNumber;
   if (eq.status !== undefined) row.status = statusAppToRow(eq.status);
   if (eq.criticality !== undefined) row.criticality = eq.criticality;
+  // `locationId`/`supplierId` : champs d'écriture uniquement (résolus en amont
+  // depuis un code Zone ou un nom, voir handleBulkImportWorkOrders /
+  // handleSyncEquipmentFromWorkOrders dans App.tsx). Pas de lecture via ces
+  // clés : la lecture continue de passer par `location`/`supplier` (jointure).
+  if (eq.locationId !== undefined) row.location_id = eq.locationId;
+  if (eq.supplierId !== undefined) row.supplier_id = eq.supplierId;
   return row;
 }
 
