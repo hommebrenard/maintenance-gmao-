@@ -16,8 +16,11 @@ import type { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType } fro
 // - `intervenantsLogs` ({id, name, timeSpent}) : `work_order_history` existe
 //   mais c'est un journal d'audit générique (action/old_value/new_value), pas
 //   une liste d'intervenants avec temps passé.
-// - `planner`, `planNumber`, `interventionCode`, `entity`, `visa` : aucun
-//   équivalent en base.
+// - `planNumber`, `interventionCode`, `entity`, `visa` : aucun équivalent en
+//   base pour l'instant.
+// - `planner` : colonne `text` ajoutée en base le 14/09/2026 — lu/écrit
+//   réellement depuis cette date (n'est plus dépendant du localStorage/du
+//   navigateur, voir WO_EXTRA_FIELDS dans App.tsx).
 // - `startDate`/`startTime`/`endDate`/`endTime` : la base a `scheduled_start`/
 //   `actual_start`/`actual_end` (timestamptz combinés), pas de mapping direct
 //   décidé pour l'instant.
@@ -52,6 +55,7 @@ interface WorkOrderRow {
   status: WorkOrderStatusRow;
   equipment_id: string | null;
   location_id: string | null;
+  planner: string | null;
   due_date: string;
   created_at: string;
   updated_at: string;
@@ -115,6 +119,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     equipmentName: row.equipment?.name,
     location: row.locations?.name ?? '',
     assignee: row.profiles?.full_name ?? '',
+    planner: row.planner ?? undefined,
     dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
         createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
@@ -193,6 +198,7 @@ interface WorkOrderWritableRow {
   status?: WorkOrderStatusRow;
   equipment_id?: string;
   location_id?: string;
+  planner?: string;
   due_date?: string;
 }
 
@@ -206,6 +212,7 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
   if (wo.status !== undefined) row.status = STATUS_APP_TO_ROW[wo.status];
   if (wo.equipmentId !== undefined) row.equipment_id = wo.equipmentId;
   if (wo.locationId !== undefined) row.location_id = wo.locationId;
+  if (wo.planner !== undefined) row.planner = wo.planner;
   if (wo.dueDate !== undefined) row.due_date = wo.dueDate;
   return row;
 }
