@@ -86,9 +86,12 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
 }
 
 // Stockage local pour les champs de WorkOrder pas encore gérés par Supabase (checklist,
-// intervenants, visa, planner...). À retirer une fois leur mapping en base décidé.
+// intervenants, visa...). À retirer une fois leur mapping en base décidé.
+// `planner` a été retiré de cette liste le 14/09/2026 : colonne Supabase dédiée
+// désormais lue/écrite directement (voir lib/queries/work_orders.ts), donc plus
+// besoin de le faire transiter par le localStorage du navigateur.
 const WO_EXTRAS_KEY = 'gmao_workOrders_extras';
-const WO_EXTRA_FIELDS = ['tasks', 'intervenantsLogs', 'visa', 'planner', 'planNumber',
+const WO_EXTRA_FIELDS = ['tasks', 'intervenantsLogs', 'visa', 'planNumber',
   'interventionCode', 'entity', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
 
 function loadWorkOrderExtras(): Record<string, Partial<WorkOrder>> {
@@ -163,7 +166,22 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     fetchWorkOrders()
       .then(fetched => {
         const extras = loadWorkOrderExtras();
-        setWorkOrders(fetched.map(wo => ({ ...wo, ...(extras[wo.id] || {}) })));
+        const merged = fetched.map(wo => ({ ...wo, ...(extras[wo.id] || {}) }));
+        setWorkOrders(merged);
+
+        // Backfill ponctuel (14/09/2026) : avant l'ajout de la colonne Supabase
+        // `planner`, ce champ ne vivait qu'en localStorage. Le prochain cycle de
+        // sauvegarde va réécrire ce localStorage SANS `planner` (retiré de
+        // WO_EXTRA_FIELDS ci-dessus) — on pousse donc une fois vers Supabase
+        // toute valeur encore uniquement locale, pour ne rien perdre.
+        merged.forEach(wo => {
+          const alreadyInSupabase = fetched.find(f => f.id === wo.id)?.planner;
+          if (wo.planner && !alreadyInSupabase) {
+            updateWorkOrder(wo.id, { planner: wo.planner }).catch(err =>
+              console.error(`Erreur backfill planner pour l'OT ${wo.code}:`, err)
+            );
+          }
+        });
       })
       .catch(err => console.error('Erreur chargement OT:', err))
       .finally(() => setIsLoadingWorkOrders(false));
@@ -271,6 +289,13 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
     (async () => {
       try {
+        // 0) Correspondance code Zone -> id de site, récupérée une seule fois et
+        // réutilisée à la fois pour les équipements auto-créés (1-2) et pour les
+        // OT eux-mêmes (4bis). Tant que `locations.code` n'est pas renseigné pour
+        // un site donné, la résolution reste sans effet (comportement inchangé
+        // pour les sites pas encore configurés dans "Emplacements").
+        const locationCodeMap = await fetchLocationCodeMap();
+
         // 1) Détecter les codes équipement présents dans cet import mais absents de la bibliothèque
         const existingCodes = new Set(equipmentList.map(e => e.code));
         const seen = new Map<string, { code: string; name: string; location?: string }>();
@@ -287,6 +312,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           status: 'En service',
           criticality: 'Normal',
           location: e.location || '',
+          // `e.location` porte en réalité le code Zone brut du CSV (voir
+          // csvParser.ts : `location = entity`), d'où la résolution via la
+          // même map que pour les OT. Avant le 14/09/2026, ce champ n'était
+          // jamais résolu et les équipements auto-créés restaient avec
+          // `location_id` NULL même quand le site était déjà configuré.
+          locationId: e.location ? locationCodeMap.get(e.location) : undefined,
           supplier: '',
           manufacturer: '',
           model: '',
@@ -316,11 +347,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             : w
         );
 
-                // 4bis) Attacher locationId à partir du code Zone (entity) du CSV.
-        // Tant que `locations.code` n'est pas renseigné pour un site donné,
-        // locationId reste undefined et location_id restera NULL en base
-        // (comportement inchangé pour les sites pas encore configurés).
-        const locationCodeMap = await fetchLocationCodeMap();
+        // 4bis) Attacher locationId à partir du code Zone (entity) du CSV.
         const ordersWithLocationId = ordersWithEquipmentId.map(w =>
           w.entity && locationCodeMap.has(w.entity)
             ? { ...w, locationId: locationCodeMap.get(w.entity) }
@@ -487,6 +514,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       }
     });
     const now = new Date().toISOString();
+    // Ici `w.location` est le NOM déjà résolu par la jointure Supabase (l'OT est
+    // déjà en base), contrairement à handleBulkImportWorkOrders où c'est encore
+    // le code Zone brut du CSV — d'où une correspondance par nom, à partir de la
+    // liste "Emplacements" déjà chargée en mémoire.
+    const locationNameToId = new Map(locations.map(l => [l.name, l.id]));
     const newEquipments: Equipment[] = Array.from(seen.values()).map(e => ({
       id: `eq-${e.code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       code: e.code,
@@ -494,6 +526,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       status: 'En service',
       criticality: 'Normal',
       location: e.location || '',
+      locationId: e.location ? locationNameToId.get(e.location) : undefined,
       supplier: '',
       manufacturer: '',
       model: '',
