@@ -133,7 +133,9 @@ export interface Equipment {
   status: OperationalStatus;
   criticality: EquipmentCriticality;
   location: string;
+  locationId?: string;
   supplier: string;
+  supplierId?: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
