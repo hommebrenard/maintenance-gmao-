@@ -36,6 +36,7 @@ import {
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog } from '../../types';
 import { ImportModal } from './ImportModal';
 import { parseGammeCSV, findMatchingGammePlan, formatLocalDate, formatActionCode } from '../../utils/csvParser';
+import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
 
@@ -308,7 +309,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [deletingWoId, setDeletingWoId] = useState<string | null>(null);
   
-  // Gammes & Checklists state
+   // Gammes & Checklists state
+  // Migration du 14/09/2026 : la Gamme vit désormais dans Supabase (table
+  // `gamme_plans`), plus uniquement dans le localStorage du navigateur — voir
+  // le commentaire d'en-tête de lib/queries/gammes.ts pour le détail des deux
+  // incidents (multi-onglets, poste différent) qui ont motivé ce changement.
+  // Le localStorage sert juste de cache d'affichage immédiat le temps que le
+  // fetch Supabase revienne ; il est écrasé par la réponse Supabase dès
+  // qu'elle arrive, donc plus jamais de source de vérité contradictoire.
   const [gammesList, setGammesList] = useState<GammePlan[]>(() => {
     try {
       const saved = localStorage.getItem('gmao_gammesList');
@@ -316,12 +324,22 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         return JSON.parse(saved);
       }
     } catch (err) {
-      console.error('Erreur chargement gammes depuis localStorage:', err);
+      console.error('Erreur chargement gammes depuis cache local:', err);
     }
     return [];
   });
+  const [isLoadingGammes, setIsLoadingGammes] = useState(true);
 
-  // Persist gammesList so it no longer disappears on every reload
+  // Charger la vraie gamme depuis Supabase au montage (remplace le cache local)
+  useEffect(() => {
+    fetchGammePlans()
+      .then(plans => setGammesList(plans))
+      .catch(err => console.error('Erreur chargement gammes depuis Supabase:', err))
+      .finally(() => setIsLoadingGammes(false));
+  }, []);
+
+  // Cache local (affichage immédiat au prochain chargement, avant que le
+  // fetch Supabase ci-dessus ne réponde) — plus jamais la source de vérité.
   useEffect(() => {
     localStorage.setItem('gmao_gammesList', JSON.stringify(gammesList));
   }, [gammesList]);
@@ -523,7 +541,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     const matchesSearch = wo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           wo.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (wo.assignee && wo.assignee.toLowerCase().includes(searchQuery.toLowerCase()));
+                          (wo.assignee && wo.assignee.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (wo.planner && wo.planner.toLowerCase().includes(searchQuery.toLowerCase()));
     
     let matchesStatus = true;
     if (selectedStatusFilter === 'Ouvert') matchesStatus = wo.status === 'Ouvert';
@@ -608,10 +627,37 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   const handleImportGammes = (importedGammes: GammePlan[]) => {
-    setGammesList(prev => [...importedGammes, ...prev]);
+    // Affichage optimiste immédiat, dédoublonné par (equipmentCode, planCode)
+    // pour qu'un ré-import répété dans la même session ne fasse pas gonfler
+    // la liste indéfiniment en attendant la confirmation Supabase.
+    setGammesList(prev => {
+      const key = (p: GammePlan) => `${p.equipmentCode}::${p.planCode}`;
+      const importedKeys = new Set(importedGammes.map(key));
+      return [...importedGammes, ...prev.filter(p => !importedKeys.has(key(p)))];
+    });
+
+    // Écriture réelle en base — remplace ensuite les entrées optimistes par
+    // les vraies lignes Supabase (mêmes clés (equipment_code, plan_code) que
+    // celles déjà en base sont mises à jour, pas dupliquées, grâce à la
+    // contrainte unique + upsert).
+    createGammePlansBulk(importedGammes)
+      .then(savedGammes => {
+        setGammesList(prev => {
+          const key = (p: GammePlan) => `${p.equipmentCode}::${p.planCode}`;
+          const savedKeys = new Set(savedGammes.map(key));
+          return [...savedGammes, ...prev.filter(p => !savedKeys.has(key(p)))];
+        });
+      })
+      .catch(err => {
+        console.error('Erreur enregistrement de la gamme dans Supabase (reste disponible localement pour cette session) :', err);
+      });
   };
 
   const handleClearGammes = () => {
+    // Ne vide que l'affichage/le rattachement pour cette session — n'efface
+    // rien en base. Un rechargement de page restaurera la gamme depuis
+    // Supabase (comportement volontaire : "vider" sert à repartir propre
+    // avant un nouveau chargement, pas à supprimer le référentiel partagé).
     setGammesList([]);
   };
 
@@ -725,7 +771,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       `"${wo.priority}"`,
       `"${wo.type}"`,
       `"${(wo.equipmentName || '').replace(/"/g, '""')}"`,
-      `"${wo.assignee}"`,
+      `"${wo.assignee || wo.planner || ''}"`,
       `"${wo.dueDate}"`,
       `"${(wo.location || '').replace(/"/g, '""')}"`,
       `"${wo.createdAt}"`
@@ -1085,8 +1131,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   // Workload Helper Grouping
-  const assigneesMap = filteredOrders.reduce((acc, wo) => {
-    const name = wo.assignee || 'Non assigné';
+    const assigneesMap = filteredOrders.reduce((acc, wo) => {
+    const name = wo.assignee || wo.planner || 'Non assigné';
     if (!acc[name]) acc[name] = [];
     acc[name].push(wo);
     return acc;
@@ -1509,7 +1555,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
                           <div className="flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-gray-400" />
-                            <span>{order.assignee}</span>
+                            <span>{order.assignee || order.planner || 'Non spécifié'}</span>
                           </div>
                           <div className={`flex items-center gap-1 ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
                             <Clock className="w-3.5 h-3.5" />
@@ -1601,7 +1647,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       </td>
                     )}
                     {visibleColumns.assignee && (
-                      <td className="px-4 py-3 text-gray-600">{order.assignee}</td>
+                      <td className="px-4 py-3 text-gray-600">{order.assignee || order.planner || '—'}</td>
                     )}
                     {visibleColumns.dueDate && (
                       <td className={`px-4 py-3 text-xs ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
@@ -2691,7 +2737,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
                     <div>
                       <span className="text-gray-500 block font-medium">Assigné à / Planificateur:</span>
-                      <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.assignee || selectedWorkOrder.planner || 'Jean Dupont'}</span>
+                      <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.assignee || selectedWorkOrder.planner || '—'}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block font-medium">Date d'échéance:</span>
@@ -3461,7 +3507,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <h4 className="text-base font-bold text-gray-900">{wo.title}</h4>
                         <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-4">
                           <span>Équipement: <strong className="text-gray-800">{getEquipmentLabel(wo, equipmentList)}</strong></span>
-                          <span>Assigné à: <strong className="text-gray-800">{wo.assignee}</strong></span>
+                          <span>Assigné à: <strong className="text-gray-800">{wo.assignee || wo.planner || '—'}</strong></span>
                         </div>
                       </div>
 
