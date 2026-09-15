@@ -2733,7 +2733,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
                     <div>
                       <span className="text-gray-500 block font-medium">Emplacement:</span>
-                      <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.location || 'Atelier Principal'}</span>
+                      <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.location || '—'}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block font-medium">Assigné à / Planificateur:</span>
