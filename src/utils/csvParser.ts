@@ -240,7 +240,7 @@ export function findMatchingGammePlan(
     const pDesc = (plan.equipmentDescription || '').toLowerCase();
     const pTitle = (plan.interventionTitle || '').toLowerCase();
     
-    const knownSites = [
+       const knownSites = [
       { key: 'knt', names: ['knt', 'kenitra', 'kénitra'] },
       { key: 'cas', names: ['cas', 'casa', 'casablanca'] },
       { key: 'rab', names: ['rab', 'rabat'] },
@@ -248,6 +248,8 @@ export function findMatchingGammePlan(
       { key: 'mar', names: ['mar', 'marrakech'] },
       { key: 'fez', names: ['fez', 'fes', 'fès'] },
       { key: 'agd', names: ['agd', 'agadir'] },
+      { key: 'mkn', names: ['mkn', 'meknes', 'meknès'] },
+      { key: 'bml', names: ['bml', 'beni mellal', 'béni mellal', 'benimellal'] },
     ];
 
     const otSiteKey = knownSites.find(s => 
