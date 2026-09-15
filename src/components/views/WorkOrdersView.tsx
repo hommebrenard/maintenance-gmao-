@@ -3646,6 +3646,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         existingGammes={gammesList}
         existingWorkOrdersCount={workOrders.length}
         availableSites={availableSiteNames}
+        locations={locations}
       />
 
       {/* Delete Work Order Confirmation Modal */}
