@@ -1,4 +1,5 @@
 import { WorkOrder, GammePlan, GammeTaskItem, GammeItem, WorkOrderPriority, WorkOrderTask } from '../types';
+import { normalizeSiteName, SiteLocationItem } from './siteNormalization';
 
 // Helper to parse a CSV or TSV line with quotes and variable delimiter
 export function parseCSVLine(line: string, delimiter?: string): string[] {
@@ -263,8 +264,30 @@ export function findMatchingGammePlan(
     return false;
   };
 
-  const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
+   const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
   if (eligiblePlans.length === 0) return undefined;
+
+  // Ajouté le 15/09/2026 (idée reprise et vérifiée d'un essai fait via AI
+  // Studio) : deux passes de correspondance exacte SENSIBLES À LA CASSE,
+  // avant les passes insensibles à la casse déjà en place. Utile quand deux
+  // codes ne diffèrent que par la casse mais désignent volontairement deux
+  // plans différents (rare mais déjà vu sur des fichiers Gamme mal saisis) —
+  // priorité à la correspondance la plus stricte d'abord.
+  const rawEqTrimmed = (eqCode || '').trim();
+  const rawCodeTrimmed = (interventionCode || '').trim();
+
+  if (rawCodeTrimmed && rawEqTrimmed) {
+    const exactMatch = eligiblePlans.find(p =>
+      p.planCode.trim() === rawCodeTrimmed &&
+      p.equipmentCode.trim() === rawEqTrimmed
+    );
+    if (exactMatch) return exactMatch;
+  }
+
+  if (rawCodeTrimmed.length >= 3) {
+    const exactCodeMatch = eligiblePlans.find(p => p.planCode.trim() === rawCodeTrimmed);
+    if (exactCodeMatch) return exactCodeMatch;
+  }
 
   let match = eligiblePlans.find(p => 
     p.planCode.trim().toLowerCase() === cleanCode &&
@@ -277,14 +300,37 @@ export function findMatchingGammePlan(
     if (match) return match;
   }
 
+  // Ajouté le 15/09/2026 : correspondance par titre d'intervention EXACT —
+  // utile quand le fichier Planning n'a ni code équipement ni code plan
+  // renseigné, mais un intitulé d'intervention identique mot pour mot à
+  // celui de la Gamme.
+  if (cleanTitle.length >= 5) {
+    match = eligiblePlans.find(p => p.interventionTitle.trim().toLowerCase() === cleanTitle);
+    if (match) return match;
+  }
+
   match = eligiblePlans.find(p => 
     p.equipmentCode.trim().toLowerCase() === cleanEq &&
     (p.interventionTitle.trim().toLowerCase().includes(cleanTitle) || cleanTitle.includes(p.interventionTitle.trim().toLowerCase()))
   );
   if (match) return match;
 
+  // Ajouté le 15/09/2026 : correspondance par titre approximatif (l'un
+  // contient l'autre), sans exiger que le code équipement corresponde aussi
+  // — plus permissif que la passe précédente, donc placé après elle et
+  // borné à des titres d'au moins 8 caractères pour limiter les faux positifs.
+  if (cleanTitle.length >= 8) {
+    match = eligiblePlans.find(p => {
+      const pTitle = p.interventionTitle.trim().toLowerCase();
+      return pTitle.length >= 8 && (pTitle.includes(cleanTitle) || cleanTitle.includes(pTitle));
+    });
+    if (match) return match;
+  }
+
   const extractFamily = (str: string) => {
-    const m = str.match(/(ext|asc|pmp|pomp|cta|can|gplc|ptrsf|trsf|sant|spt|td|tgbt|pac|ond|praut|vmc|clim)/i);
+    // 'mtc'/'monte' ajoutés le 15/09/2026 pour reconnaître les monte-charges,
+    // absents de la liste d'origine.
+    const m = str.match(/(ext|asc|mtc|monte|pmp|pomp|cta|can|gplc|ptrsf|trsf|sant|spt|td|tgbt|pac|ond|praut|vmc|clim)/i);
     return m ? m[1].toLowerCase() : '';
   };
 
@@ -297,13 +343,14 @@ export function findMatchingGammePlan(
     if (match) return match;
   }
 
-  const keywords = [
+    const keywords = [
     'extracteur', 'extract', 'ventilateur', 'ventilation', 'desenfumage',
-    'ascenseur', 'pompe', 'groupe electrogene', 'groupe', 'caisson',
-    'centrale', 'cta', 'onduleur', 'porte automatique', 'porte', 'split',
-    'tableau', 'tgbt', 'sanitaire', 'transformateur', 'pac', 'pompe a chaleur',
-    'clim', 'climatiseur', 'chaudiere', 'compresseur', 'armoire', 'eclairage',
-    'extincteur', 'ria', 'vmc'
+    // 'monte charge'/'monte-charge'/'monte'/'mtc' ajoutés le 15/09/2026
+    'ascenseur', 'monte charge', 'monte-charge', 'monte', 'mtc', 'pompe',
+    'groupe electrogene', 'groupe', 'caisson', 'centrale', 'cta', 'onduleur',
+    'porte automatique', 'porte', 'split', 'tableau', 'tgbt', 'sanitaire',
+    'transformateur', 'pac', 'pompe a chaleur', 'clim', 'climatiseur',
+    'chaudiere', 'compresseur', 'armoire', 'eclairage', 'extincteur', 'ria', 'vmc'
   ];
 
   const matchedKw = keywords.find(kw => cleanTitle.includes(kw) || cleanEq.includes(kw));
@@ -374,7 +421,13 @@ function extractSiteMonthYearFromFileName(fileName: string): string | null {
 export function parsePlanningCSV(
   csvContent: string,
   gammePlans: GammePlan[] = [],
-  lineFileNames?: string[]
+  lineFileNames?: string[],
+  // Ajouté le 15/09/2026 : liste des emplacements réellement configurés
+  // (table Supabase `locations`, référence officielle), pour harmoniser le
+  // nom de site affiché (BAM_KNT_AG -> Kénitra) via normalizeSiteName.
+  // Optionnel et rétro-compatible : si omis, comportement strictement
+  // identique à avant (locationName = entity brut).
+  knownLocations?: SiteLocationItem[]
 ): WorkOrder[] {
   const lines = csvContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return [];
@@ -473,7 +526,12 @@ export function parsePlanningCSV(
     const equipmentName = eqDesc || eqCode || 'Non spécifié';
     const title = intDesc || 'Intervention de maintenance';
     const description = intDesc || (eqDesc ? `Intervention sur ${eqDesc}` : 'Maintenance préventive');
-    const locationName = entity || 'Site Principal';
+        // Ajouté le 15/09/2026 : normalisation du nom de site affiché à partir du
+    // code Zone brut (entity), en priorité via les emplacements réellement
+    // configurés (knownLocations), sinon via les 4 sites confirmés dans
+    // siteNormalization.ts. Si rien ne correspond, on retombe sur le
+    // comportement d'avant (entity brut, ou 'Site Principal').
+    const locationName = normalizeSiteName(entity, knownLocations) || entity || 'Site Principal';
 
     const matchedPlan = findMatchingGammePlan(eqCode, interventionCode, intDesc, gammePlans, locationName);
     const tasks: WorkOrderTask[] = matchedPlan
