@@ -439,7 +439,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
 
                 <div>
                   <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">FABRICANT</span>
-                  <span className="text-gray-900 font-medium">{selectedEquipment.manufacturer || 'ATLAS COPCO'}</span>
+                  <span className="text-gray-900 font-medium">{selectedEquipment.manufacturer || '—'}</span>
                 </div>
 
                 <div>
