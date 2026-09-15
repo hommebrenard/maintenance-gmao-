@@ -24,6 +24,12 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  // Ajouté le 15/09/2026, suite à l'incident du même jour (suppression
+  // accidentelle des 4 emplacements en un clic, sans aucune sauvegarde
+  // possible ensuite) : la modale exige désormais de taper un mot de
+  // confirmation avant d'activer le bouton de suppression.
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
+  const DELETE_ALL_CONFIRM_WORD = 'SUPPRIMER';
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [parentLocation, setParentLocation] = useState('');
@@ -227,26 +233,42 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed">
-              Voulez-vous supprimer tous les emplacements actuels ({locations.length} site(s)) ? Cette action supprime les sites de la base — les OT déjà importés pour ces sites ne seront pas supprimés, mais perdront leur rattachement.
+              Voulez-vous supprimer tous les emplacements actuels ({locations.length} site(s)) ? Cette action supprime les sites de la base — <strong className="text-rose-700">tous les OT déjà importés perdront immédiatement leur rattachement au site</strong> (pas seulement ceux des sites supprimés), et cette information ne peut être reconstituée par aucune sauvegarde automatique.
             </p>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                Pour confirmer, tape <span className="font-mono text-rose-700">{DELETE_ALL_CONFIRM_WORD}</span> ci-dessous :
+              </label>
+              <input
+                type="text"
+                value={deleteAllConfirmText}
+                onChange={(e) => setDeleteAllConfirmText(e.target.value)}
+                placeholder={DELETE_ALL_CONFIRM_WORD}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                autoFocus
+              />
+            </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setIsResetConfirmOpen(false)}
+                onClick={() => { setIsResetConfirmOpen(false); setDeleteAllConfirmText(''); }}
                 className="px-4 py-2 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 Annuler
               </button>
               <button
                 type="button"
+                disabled={deleteAllConfirmText.trim().toUpperCase() !== DELETE_ALL_CONFIRM_WORD}
                 onClick={() => {
                   if (onClearAllLocations) {
                     onClearAllLocations();
                   }
                   setIsResetConfirmOpen(false);
+                  setDeleteAllConfirmText('');
                 }}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs transition-colors"
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg shadow-2xs transition-colors"
               >
                 Oui, tout supprimer
               </button>
