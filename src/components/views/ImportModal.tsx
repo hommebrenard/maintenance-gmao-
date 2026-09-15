@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2 } from 'lucide-react';
-import { WorkOrder, GammePlan } from '../../types';
+import { WorkOrder, GammePlan, LocationItem } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { fetchExistingWorkOrderCodes } from '../../lib/queries/work_orders';
@@ -15,6 +15,10 @@ interface ImportModalProps {
   existingGammes: GammePlan[];
   existingWorkOrdersCount?: number;
   availableSites?: string[];
+  // Ajouté le 15/09/2026 : pour normaliser le nom de site affiché à l'import
+  // (voir normalizeSiteName dans utils/siteNormalization.ts). Optionnel :
+  // sans ce prop, comportement inchangé.
+  locations?: LocationItem[];
 }
 
 export const ImportModal: React.FC<ImportModalProps> = ({
@@ -25,7 +29,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   onClearGammes,
   existingGammes,
   existingWorkOrdersCount = 0,
-  availableSites = []
+  availableSites = [],
+  locations = []
 }) => {
   const [activeTab, setActiveTab] = useState<'planning' | 'gamme'>('planning');
   const [pastedText, setPastedText] = useState('');
@@ -192,7 +197,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 ) => {
   try {
         if (type === 'planning') {
-      const parsed = parsePlanningCSV(content, existingGammes, lineFileNames);
+        const parsed = parsePlanningCSV(content, existingGammes, lineFileNames, locations);
         setParsedPreviewWorkOrders(parsed);
         const skipped = (parsed as typeof parsed & { skippedNoDate?: number }).skippedNoDate || 0;
         if (parsed.length === 0) {
