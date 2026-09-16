@@ -282,15 +282,39 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   // Confirm Import
-  const handleConfirmImport = async () => {
+    const handleConfirmImport = async () => {
     if (activeTab === 'planning') {
       if (parsedPreviewWorkOrders.length === 0) return;
-      
+      await runPlanningImport(parsedPreviewWorkOrders);
+    } else {
+      if (parsedPreviewGammes.length === 0) return;
+      onImportGammes(parsedPreviewGammes);
+      setSuccessMsg(`✅ Importation réussie de ${parsedPreviewGammes.length} gamme(s) opératoire(s) ! Vos checklists et actions ont été mises à jour.`);
+      setParsedPreviewGammes([]);
+      setPastedText('');
+    }
+  };
+
+  // Ajouté le 16/09/2026 (Phase 1 — étape 4) : import volontairement partiel,
+  // qui exclut les OT en statut "conflit" (site incompatible avec le plan
+  // Gamme trouvé). Bouton séparé, toujours disponible même quand le bouton
+  // principal est bloqué — pour ne pas transformer un vrai conflit en
+  // blocage total de l'import (voir consolidation multi-IA du 16/09/2026).
+  const handleImportWithoutConflicts = async () => {
+    if (activeTab !== 'planning' || parsedPreviewWorkOrders.length === 0) return;
+    const safeWorkOrders = parsedPreviewWorkOrders.filter(wo => wo.gammeMatchStatus !== 'conflit');
+    await runPlanningImport(safeWorkOrders, true);
+  };
+
+  // Extrait le 16/09/2026 du corps de handleConfirmImport (comportement
+  // identique à avant) pour être appelable aussi bien depuis le bouton
+  // principal que depuis l'import partiel ci-dessus.
+  const runPlanningImport = async (workOrdersToImport: WorkOrder[], excludedConflicts = false) => {
       let finalWorkOrders: WorkOrder[] = [];
       
       if (useMultiSiteOverride && selectedImportSites.length > 0) {
         selectedImportSites.forEach((site, siteIdx) => {
-          const siteOrders = parsedPreviewWorkOrders.map((wo, woIdx) => ({
+          const siteOrders = workOrdersToImport.map((wo, woIdx) => ({
             ...wo,
             id: (typeof crypto !== 'undefined' && crypto.randomUUID)
               ? `imported-${crypto.randomUUID()}`
@@ -303,7 +327,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         });
       } else {
         // Keep original sites/locations extracted directly from the uploaded CSV file
-        finalWorkOrders = parsedPreviewWorkOrders;
+        finalWorkOrders = workOrdersToImport;
       }
 
       // Vérification anti-doublon AVANT toute écriture (locale ou Supabase),
@@ -345,16 +369,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       onImportWorkOrders(finalWorkOrders, importBehavior === 'replace');
       const actionLabel = importBehavior === 'replace' ? 'Remplacement effectué' : 'Ajout effectué';
       const skippedNote = duplicateCount > 0 ? ` (${duplicateCount} doublon(s) ignoré(s))` : '';
-      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${skippedNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
+      const conflictNote = excludedConflicts ? ` (OT en conflit de site exclus)` : '';
+      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${skippedNote}${conflictNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
       setParsedPreviewWorkOrders([]);
       setPastedText('');
-    } else {
-      if (parsedPreviewGammes.length === 0) return;
-      onImportGammes(parsedPreviewGammes);
-      setSuccessMsg(`✅ Importation réussie de ${parsedPreviewGammes.length} gamme(s) opératoire(s) ! Vos checklists et actions ont été mises à jour.`);
-      setParsedPreviewGammes([]);
-      setPastedText('');
-    }
   };
 
   return (
@@ -836,30 +854,52 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Fermer
-          </button>
-          <button
-            onClick={handleConfirmImport}
-            disabled={
-              isCheckingDuplicates ||
-              (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
-              (activeTab === 'gamme' && parsedPreviewGammes.length === 0)
-            }
-            className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5"
-          >
-            <Check className="w-4 h-4" />
-            <span>
-              {isCheckingDuplicates
-                ? 'Vérification des doublons…'
-                : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})`}
-            </span>
-          </button>
+         {/* Modal Footer */}
+        <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-200 flex flex-col items-end gap-2">
+          {/* Ajouté le 16/09/2026 (Phase 1 — étape 4) : message + bouton
+              d'import partiel, visibles uniquement quand des conflits de
+              site existent sur le fichier Planning en cours. */}
+          {activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0 && (
+            <div className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert size={13} />
+                {gammeMatchSummary!.conflit} OT en conflit de site bloquent la validation complète — le plan Gamme trouvé appartient à un autre site.
+              </span>
+              <button
+                onClick={handleImportWithoutConflicts}
+                disabled={isCheckingDuplicates}
+                className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-white border border-red-300 rounded hover:bg-red-100 disabled:opacity-50"
+              >
+                Importer sans les {gammeMatchSummary!.conflit} en conflit
+              </button>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Fermer
+            </button>
+            <button
+              onClick={handleConfirmImport}
+              disabled={
+                isCheckingDuplicates ||
+                (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
+                (activeTab === 'gamme' && parsedPreviewGammes.length === 0) ||
+                (activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0)
+              }
+              title={activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0 ? 'Résolvez les conflits de site, ou utilisez l\'import partiel ci-dessus' : undefined}
+              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>
+                {isCheckingDuplicates
+                  ? 'Vérification des doublons…'
+                  : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})`}
+              </span>
+            </button>
+          </div>
         </div>
 
       </div>
