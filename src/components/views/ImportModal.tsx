@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2 } from 'lucide-react';
+import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
 import { WorkOrder, GammePlan, LocationItem } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
@@ -58,6 +58,53 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const combinedSiteList = React.useMemo(() => {
     return Array.from(new Set([...sitesFromParsedCSV, ...availableSites])).filter(Boolean);
   }, [sitesFromParsedCSV, availableSites]);
+
+  // Ajouté le 16/09/2026 (Phase 1 — écran d'aperçu, étape 3) : bandeau de
+  // synthèse du rattachement Gamme, calculé sur la TOTALITÉ des OT parsés
+  // (pas seulement les 10 premiers affichés dans le tableau ci-dessous).
+  // Purement informatif à ce stade — n'empêche pas encore la validation
+  // (viendra dans une étape suivante une fois l'affichage confirmé fiable).
+  const gammeMatchSummary = React.useMemo(() => {
+    if (activeTab !== 'planning' || parsedPreviewWorkOrders.length === 0) return null;
+    const counts = { exact: 0, approximatif: 0, non_trouve: 0, conflit: 0 };
+    parsedPreviewWorkOrders.forEach(wo => {
+      const status = wo.gammeMatchStatus || 'non_trouve';
+      counts[status] = (counts[status] || 0) + 1;
+    });
+    return counts;
+  }, [parsedPreviewWorkOrders, activeTab]);
+
+  // Petit badge coloré réutilisé dans le bandeau de synthèse et le tableau.
+  const renderGammeBadge = (wo: WorkOrder) => {
+    const status = wo.gammeMatchStatus || 'non_trouve';
+    const title = wo.gammeMatchMethod || '';
+    if (status === 'exact') {
+      return (
+        <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
+          <CheckCircle2 size={11} /> Certain
+        </span>
+      );
+    }
+    if (status === 'approximatif') {
+      return (
+        <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700">
+          <AlertTriangle size={11} /> À vérifier
+        </span>
+      );
+    }
+    if (status === 'conflit') {
+      return (
+        <span title={`${title}${wo.gammeConflictPlanCode ? ` (plan ${wo.gammeConflictPlanCode})` : ''}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
+          <ShieldAlert size={11} /> Conflit
+        </span>
+      );
+    }
+    return (
+      <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-600">
+        <XCircle size={11} /> Non trouvé
+      </span>
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -688,10 +735,31 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             </div>
           )}
 
-          {/* Preview Table */}
+                  {/* Preview Table */}
           {activeTab === 'planning' && parsedPreviewWorkOrders.length > 0 && (
             <div>
               <h4 className="text-xs font-bold text-gray-900 mb-2">Aperçu des ordres de travail à importer ({parsedPreviewWorkOrders.length})</h4>
+
+              {/* Ajouté le 16/09/2026 (Phase 1 — étape 3) : bandeau de synthèse
+                  du rattachement Gamme, sur la totalité du fichier (pas
+                  seulement les 10 lignes affichées ci-dessous). */}
+              {gammeMatchSummary && (
+                <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
+                    <CheckCircle2 size={12} /> {gammeMatchSummary.exact} certaine(s)
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium">
+                    <AlertTriangle size={12} /> {gammeMatchSummary.approximatif} à vérifier
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 text-red-700 font-medium">
+                    <ShieldAlert size={12} /> {gammeMatchSummary.conflit} en conflit de site
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-600 font-medium">
+                    <XCircle size={12} /> {gammeMatchSummary.non_trouve} sans gamme trouvée
+                  </span>
+                </div>
+              )}
+
               <div className="border border-gray-200 rounded-lg overflow-x-auto max-h-48">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-100 font-semibold text-gray-700">
@@ -700,6 +768,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                       <th className="p-2">Titre</th>
                       <th className="p-2">Équipement</th>
                       <th className="p-2">Actions/Tasks</th>
+                      <th className="p-2">Gamme</th>
                       <th className="p-2">Planificateur</th>
                       <th className="p-2">Échéance</th>
                     </tr>
@@ -711,6 +780,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                         <td className="p-2 font-medium text-gray-900">{wo.title}</td>
                         <td className="p-2 text-gray-600">{wo.equipmentCode || '—'}</td>
                         <td className="p-2 text-blue-600 font-semibold">{wo.tasks ? `${wo.tasks.length} action(s)` : '0'}</td>
+                        <td className="p-2">{renderGammeBadge(wo)}</td>
                         <td className="p-2 text-gray-600">{wo.planner || wo.assignee}</td>
                         <td className="p-2 text-gray-600">{wo.dueDate}</td>
                       </tr>
