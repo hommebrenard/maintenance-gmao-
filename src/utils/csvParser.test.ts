@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parsePlanningCSV, parseFrenchDate, parseCSVLine } from './csvParser';
+import { parsePlanningCSV, parseFrenchDate, parseCSVLine, findMatchingGammePlan, findMatchingGammePlanDetailed } from './csvParser';
+import { GammePlan } from '../types';
 
 // En-têtes calqués sur le fichier réel "PMP AG Type A KENITRA Avril 2026"
 const HEADER =
@@ -90,5 +91,61 @@ describe('parsePlanningCSV — génération des codes', () => {
     const result = parsePlanningCSV(csv);
     expect(result[0].code.startsWith('NC-')).toBe(true);
     expect(result[1].code.startsWith('NC-')).toBe(true);
+  });
+});
+
+function buildGammePlan(fields: Partial<GammePlan>): GammePlan {
+  return {
+    id: fields.id || 'plan-1',
+    equipmentCode: fields.equipmentCode || '',
+    planCode: fields.planCode || '',
+    interventionTitle: fields.interventionTitle || '',
+    equipmentDescription: fields.equipmentDescription,
+    tasks: fields.tasks || [{ id: 't1', actionCode: 'A1', label: 'Tâche test' }]
+  };
+}
+
+describe('findMatchingGammePlanDetailed — statuts de confiance (Phase 1 aperçu import)', () => {
+  it('renvoie le même plan que findMatchingGammePlan (aucune régression de comportement)', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'CTA-04', planCode: 'GAM-CTA-SEM' })];
+    const legacy = findMatchingGammePlan('CTA-04', 'GAM-CTA-SEM', 'Intervention test', plans);
+    const detailed = findMatchingGammePlanDetailed('CTA-04', 'GAM-CTA-SEM', 'Intervention test', plans);
+    expect(detailed.plan).toBe(legacy);
+  });
+
+  it('statut "exact" pour une correspondance code plan + code équipement', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'CTA-04', planCode: 'GAM-CTA-SEM' })];
+    const res = findMatchingGammePlanDetailed('CTA-04', 'GAM-CTA-SEM', 'Intervention test', plans);
+    expect(res.status).toBe('exact');
+    expect(res.plan?.planCode).toBe('GAM-CTA-SEM');
+  });
+
+  it('statut "approximatif" pour une correspondance devinée (famille/mot-clé), jamais "exact"', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'POMPE-01', planCode: 'GAM-DIVERS', interventionTitle: 'Vidange pompe circulation' })];
+    const res = findMatchingGammePlanDetailed('AUTRE-CODE', '', 'Contrôle pompe annuel', plans);
+    expect(res.status).toBe('approximatif');
+    expect(res.method).toContain('approximatif');
+  });
+
+  it('statut "approximatif" spécifiquement pour une correspondance par mot-clé (aucune famille reconnue)', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'GAINE-01', planCode: 'GAM-VENT', interventionTitle: 'Nettoyage ventilation toiture' })];
+    const res = findMatchingGammePlanDetailed('SANS-RAPPORT', '', 'Contrôle ventilation annuelle', plans);
+    expect(res.status).toBe('approximatif');
+    expect(res.method).toContain('mot-clé');
+  });
+
+  it('statut "non_trouve" quand aucune passe ne matche', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'XYZ', planCode: 'GAM-XYZ', interventionTitle: 'Autre chose' })];
+    const res = findMatchingGammePlanDetailed('INCONNU', 'CODE-INCONNU', 'Rien à voir', plans);
+    expect(res.status).toBe('non_trouve');
+    expect(res.plan).toBeUndefined();
+  });
+
+  it('statut "conflit" quand un plan matcherait mais appartient à un autre site (bug mkn/bml du 15/09)', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'MTC-01', planCode: 'GAM-MTC-01', interventionTitle: 'Entretien monte-charge Meknès' })];
+    const res = findMatchingGammePlanDetailed('MTC-01', 'GAM-MTC-01', 'Entretien monte-charge', plans, 'Béni Mellal');
+    expect(res.status).toBe('conflit');
+    expect(res.plan).toBeUndefined();
+    expect(res.conflictPlan?.planCode).toBe('GAM-MTC-01');
   });
 });
