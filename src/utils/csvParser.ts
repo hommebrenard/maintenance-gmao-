@@ -585,7 +585,15 @@ export function parsePlanningCSV(
     // comportement d'avant (entity brut, ou 'Site Principal').
     const locationName = normalizeSiteName(entity, knownLocations) || entity || 'Site Principal';
 
-    const matchedPlan = findMatchingGammePlan(eqCode, interventionCode, intDesc, gammePlans, locationName);
+    // Ajouté le 16/09/2026 (Phase 1 — écran d'aperçu) : on capture le statut
+    // de confiance au moment exact où le matching a lieu (seul endroit où
+    // `intDesc` brut, avant tout repli, est encore disponible). `matchedPlan`
+    // reste calculé exactement comme avant (result.plan === ce que
+    // findMatchingGammePlan aurait renvoyé) — la génération des tasks est
+    // inchangée. Les 3 champs gammeMatch* sont uniquement pour l'aperçu,
+    // jamais envoyés à Supabase (voir workOrderToRow).
+    const gammeMatchResult = findMatchingGammePlanDetailed(eqCode, interventionCode, intDesc, gammePlans, locationName);
+    const matchedPlan = gammeMatchResult.plan;
     const tasks: WorkOrderTask[] = matchedPlan
       ? matchedPlan.tasks.map((t, idx) => ({
           id: `task-${i}-${idx}-${Math.floor(Math.random()*10000)}`,
@@ -616,8 +624,11 @@ export function parsePlanningCSV(
       planNumber,
       interventionCode,
       entity,
-      tasks
-    });
+      tasks,
+      gammeMatchStatus: gammeMatchResult.status,
+      gammeMatchMethod: gammeMatchResult.method,
+      gammeConflictPlanCode: gammeMatchResult.conflictPlan?.planCode
+    }); 
   }
 
     (workOrders as WorkOrder[] & { skippedNoDate?: number }).skippedNoDate = skippedNoDate;
