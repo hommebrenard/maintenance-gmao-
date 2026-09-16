@@ -148,4 +148,15 @@ describe('findMatchingGammePlanDetailed — statuts de confiance (Phase 1 aperç
     expect(res.plan).toBeUndefined();
     expect(res.conflictPlan?.planCode).toBe('GAM-MTC-01');
   });
+
+  it('parsePlanningCSV attache bien le statut de confiance sur chaque WorkOrder généré', () => {
+    const plans: GammePlan[] = [buildGammePlan({ equipmentCode: 'BAM-KNT_AG-PMP-09', planCode: 'INT-1' })];
+    const csv = [
+      HEADER,
+      buildRow({ eq: 'BAM-KNT_AG-PMP-09', otNum: '101785' }),
+    ].join('\n');
+    const result = parsePlanningCSV(csv, plans);
+    expect(result[0].gammeMatchStatus).toBe('exact');
+    expect(result[0].gammeMatchMethod).toBeTruthy();
+  });
 });
