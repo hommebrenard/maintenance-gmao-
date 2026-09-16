@@ -85,8 +85,14 @@ export interface WorkOrder {
   startTime?: string;
   endDate?: string;
   endTime?: string;
-  intervenantsLogs?: IntervenantLog[];
+   intervenantsLogs?: IntervenantLog[];
   visa?: string;
+  // Ajoutés le 16/09/2026 (Phase 1 — écran d'aperçu import) : statut de
+  // confiance du rattachement Gamme, calculé au parsing. Usage écran
+  // uniquement — jamais envoyés à Supabase (absents de workOrderToRow).
+  gammeMatchStatus?: 'exact' | 'approximatif' | 'non_trouve' | 'conflit';
+  gammeMatchMethod?: string;
+  gammeConflictPlanCode?: string;
 }
 
 export type RequestStatus = 'En attente' | 'Approuvée' | 'Rejetée';
