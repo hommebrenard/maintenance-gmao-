@@ -214,7 +214,24 @@ export function parseGammeCSV(csvContent: string): GammePlan[] {
   return plans;
 }
 
-// Find matching GammePlan for a given OT
+// Ajouté le 16/09/2026 (Phase 1 de la feuille de route import — écran
+// d'aperçu) : statut de confiance exposé pour chaque correspondance Gamme,
+// SANS changer le résultat écrit en base. 'conflit' est un cas particulier
+// de 'non_trouve' : un plan aurait matché par code/titre mais appartient à
+// un autre site (même mécanisme que le bug mkn/bml corrigé le 15/09) — on ne
+// l'écarte plus en silence, on le signale.
+export type GammeMatchStatus = 'exact' | 'approximatif' | 'non_trouve' | 'conflit';
+
+export interface GammeMatchResult {
+  plan?: GammePlan;
+  status: GammeMatchStatus;
+  method: string;
+  conflictPlan?: GammePlan;
+}
+
+// Find matching GammePlan for a given OT (comportement d'écriture inchangé —
+// wrapper fin autour de findMatchingGammePlanDetailed, gardé pour tous les
+// appelants existants).
 export function findMatchingGammePlan(
   eqCode: string,
   interventionCode: string,
@@ -222,7 +239,23 @@ export function findMatchingGammePlan(
   gammePlans: GammePlan[],
   siteLocation?: string
 ): GammePlan | undefined {
-  if (!gammePlans || gammePlans.length === 0) return undefined;
+  return findMatchingGammePlanDetailed(eqCode, interventionCode, intDesc, gammePlans, siteLocation).plan;
+}
+
+// Version détaillée, utilisée par l'écran d'aperçu (Phase 1). Rejoue
+// exactement les mêmes passes, dans le même ordre, sur le même pool de plans
+// éligibles — donc si `plan` est défini ici, c'est TOUJOURS le même plan que
+// findMatchingGammePlan aurait renvoyé.
+export function findMatchingGammePlanDetailed(
+  eqCode: string,
+  interventionCode: string,
+  intDesc: string,
+  gammePlans: GammePlan[],
+  siteLocation?: string
+): GammeMatchResult {
+  if (!gammePlans || gammePlans.length === 0) {
+    return { status: 'non_trouve', method: 'aucune gamme importée' };
+  }
 
   const cleanEq = (eqCode || '').trim().toLowerCase();
   const cleanCode = (interventionCode || '').trim().toLowerCase();
@@ -266,111 +299,128 @@ export function findMatchingGammePlan(
     return false;
   };
 
-   const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
-  if (eligiblePlans.length === 0) return undefined;
+  const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
+  // Pool des plans écartés UNIQUEMENT pour conflit de site (sert seulement à
+  // détecter le cas 'conflit' ci-dessous, jamais à choisir un plan réel).
+  const conflictingPlans = gammePlans.filter(p => sitesConflict(p) && p.tasks && p.tasks.length > 0);
 
-  // Ajouté le 15/09/2026 (idée reprise et vérifiée d'un essai fait via AI
-  // Studio) : deux passes de correspondance exacte SENSIBLES À LA CASSE,
-  // avant les passes insensibles à la casse déjà en place. Utile quand deux
-  // codes ne diffèrent que par la casse mais désignent volontairement deux
-  // plans différents (rare mais déjà vu sur des fichiers Gamme mal saisis) —
-  // priorité à la correspondance la plus stricte d'abord.
-  const rawEqTrimmed = (eqCode || '').trim();
-  const rawCodeTrimmed = (interventionCode || '').trim();
+  // Rejoue la même cascade de passes sur un pool donné ; retourne le plan et
+  // le libellé de la passe qui a matché, ou undefined si aucune ne matche.
+  const runPasses = (pool: GammePlan[]): { plan: GammePlan; method: string } | undefined => {
+    if (pool.length === 0) return undefined;
 
-  if (rawCodeTrimmed && rawEqTrimmed) {
-    const exactMatch = eligiblePlans.find(p =>
-      p.planCode.trim() === rawCodeTrimmed &&
-      p.equipmentCode.trim() === rawEqTrimmed
+    const rawEqTrimmed = (eqCode || '').trim();
+    const rawCodeTrimmed = (interventionCode || '').trim();
+
+    if (rawCodeTrimmed && rawEqTrimmed) {
+      const exactMatch = pool.find(p =>
+        p.planCode.trim() === rawCodeTrimmed &&
+        p.equipmentCode.trim() === rawEqTrimmed
+      );
+      if (exactMatch) return { plan: exactMatch, method: 'code plan + code équipement (exact, casse sensible)' };
+    }
+
+    if (rawCodeTrimmed.length >= 3) {
+      const exactCodeMatch = pool.find(p => p.planCode.trim() === rawCodeTrimmed);
+      if (exactCodeMatch) return { plan: exactCodeMatch, method: 'code plan (exact, casse sensible)' };
+    }
+
+    let match = pool.find(p =>
+      p.planCode.trim().toLowerCase() === cleanCode &&
+      p.equipmentCode.trim().toLowerCase() === cleanEq
     );
-    if (exactMatch) return exactMatch;
-  }
+    if (match) return { plan: match, method: 'code plan + code équipement (exact)' };
 
-  if (rawCodeTrimmed.length >= 3) {
-    const exactCodeMatch = eligiblePlans.find(p => p.planCode.trim() === rawCodeTrimmed);
-    if (exactCodeMatch) return exactCodeMatch;
-  }
+    if (cleanCode.length >= 3) {
+      match = pool.find(p => p.planCode.trim().toLowerCase() === cleanCode);
+      if (match) return { plan: match, method: 'code plan (exact)' };
+    }
 
-  let match = eligiblePlans.find(p => 
-    p.planCode.trim().toLowerCase() === cleanCode &&
-    p.equipmentCode.trim().toLowerCase() === cleanEq
-  );
-  if (match) return match;
+    if (cleanTitle.length >= 5) {
+      match = pool.find(p => p.interventionTitle.trim().toLowerCase() === cleanTitle);
+      if (match) return { plan: match, method: 'titre d\'intervention (exact)' };
+    }
 
-  if (cleanCode.length >= 3) {
-    match = eligiblePlans.find(p => p.planCode.trim().toLowerCase() === cleanCode);
-    if (match) return match;
-  }
+    match = pool.find(p =>
+      p.equipmentCode.trim().toLowerCase() === cleanEq &&
+      (p.interventionTitle.trim().toLowerCase().includes(cleanTitle) || cleanTitle.includes(p.interventionTitle.trim().toLowerCase()))
+    );
+    if (match) return { plan: match, method: 'code équipement + titre (approximatif)' };
 
-  // Ajouté le 15/09/2026 : correspondance par titre d'intervention EXACT —
-  // utile quand le fichier Planning n'a ni code équipement ni code plan
-  // renseigné, mais un intitulé d'intervention identique mot pour mot à
-  // celui de la Gamme.
-  if (cleanTitle.length >= 5) {
-    match = eligiblePlans.find(p => p.interventionTitle.trim().toLowerCase() === cleanTitle);
-    if (match) return match;
-  }
+    if (cleanTitle.length >= 8) {
+      match = pool.find(p => {
+        const pTitle = p.interventionTitle.trim().toLowerCase();
+        return pTitle.length >= 8 && (pTitle.includes(cleanTitle) || cleanTitle.includes(pTitle));
+      });
+      if (match) return { plan: match, method: 'titre (approximatif)' };
+    }
 
-  match = eligiblePlans.find(p => 
-    p.equipmentCode.trim().toLowerCase() === cleanEq &&
-    (p.interventionTitle.trim().toLowerCase().includes(cleanTitle) || cleanTitle.includes(p.interventionTitle.trim().toLowerCase()))
-  );
-  if (match) return match;
+    const extractFamily = (str: string) => {
+      const m = str.match(/(ext|asc|mtc|monte|pmp|pomp|cta|can|gplc|ptrsf|trsf|sant|spt|td|tgbt|pac|ond|praut|vmc|clim)/i);
+      return m ? m[1].toLowerCase() : '';
+    };
 
-  // Ajouté le 15/09/2026 : correspondance par titre approximatif (l'un
-  // contient l'autre), sans exiger que le code équipement corresponde aussi
-  // — plus permissif que la passe précédente, donc placé après elle et
-  // borné à des titres d'au moins 8 caractères pour limiter les faux positifs.
-  if (cleanTitle.length >= 8) {
-    match = eligiblePlans.find(p => {
-      const pTitle = p.interventionTitle.trim().toLowerCase();
-      return pTitle.length >= 8 && (pTitle.includes(cleanTitle) || cleanTitle.includes(pTitle));
-    });
-    if (match) return match;
-  }
-
-  const extractFamily = (str: string) => {
-    // 'mtc'/'monte' ajoutés le 15/09/2026 pour reconnaître les monte-charges,
-    // absents de la liste d'origine.
-    const m = str.match(/(ext|asc|mtc|monte|pmp|pomp|cta|can|gplc|ptrsf|trsf|sant|spt|td|tgbt|pac|ond|praut|vmc|clim)/i);
-    return m ? m[1].toLowerCase() : '';
-  };
-
-  const otFamily = extractFamily(cleanEq) || extractFamily(cleanCode) || extractFamily(cleanTitle);
-  if (otFamily) {
-    match = eligiblePlans.find(p => {
-      const pFam = extractFamily(p.planCode) || extractFamily(p.equipmentCode) || extractFamily(p.interventionTitle);
-      return pFam === otFamily;
-    });
-    if (match) return match;
-  }
+    const otFamily = extractFamily(cleanEq) || extractFamily(cleanCode) || extractFamily(cleanTitle);
+    if (otFamily) {
+      match = pool.find(p => {
+        const pFam = extractFamily(p.planCode) || extractFamily(p.equipmentCode) || extractFamily(p.interventionTitle);
+        return pFam === otFamily;
+      });
+      if (match) return { plan: match, method: `famille "${otFamily}" (approximatif)` };
+    }
 
     const keywords = [
-    'extracteur', 'extract', 'ventilateur', 'ventilation', 'desenfumage',
-    // 'monte charge'/'monte-charge'/'monte'/'mtc' ajoutés le 15/09/2026
-    'ascenseur', 'monte charge', 'monte-charge', 'monte', 'mtc', 'pompe',
-    'groupe electrogene', 'groupe', 'caisson', 'centrale', 'cta', 'onduleur',
-    'porte automatique', 'porte', 'split', 'tableau', 'tgbt', 'sanitaire',
-    'transformateur', 'pac', 'pompe a chaleur', 'clim', 'climatiseur',
-    'chaudiere', 'compresseur', 'armoire', 'eclairage', 'extincteur', 'ria', 'vmc'
-  ];
+      'extracteur', 'extract', 'ventilateur', 'ventilation', 'desenfumage',
+      'ascenseur', 'monte charge', 'monte-charge', 'monte', 'mtc', 'pompe',
+      'groupe electrogene', 'groupe', 'caisson', 'centrale', 'cta', 'onduleur',
+      'porte automatique', 'porte', 'split', 'tableau', 'tgbt', 'sanitaire',
+      'transformateur', 'pac', 'pompe a chaleur', 'clim', 'climatiseur',
+      'chaudiere', 'compresseur', 'armoire', 'eclairage', 'extincteur', 'ria', 'vmc'
+    ];
 
-  const matchedKw = keywords.find(kw => cleanTitle.includes(kw) || cleanEq.includes(kw));
-  if (matchedKw) {
-    match = eligiblePlans.find(p => 
-      p.interventionTitle.toLowerCase().includes(matchedKw) || 
-      p.equipmentCode.toLowerCase().includes(matchedKw) ||
-      (p.equipmentDescription || '').toLowerCase().includes(matchedKw)
-    );
-    if (match) return match;
+    const matchedKw = keywords.find(kw => cleanTitle.includes(kw) || cleanEq.includes(kw));
+    if (matchedKw) {
+      match = pool.find(p =>
+        p.interventionTitle.toLowerCase().includes(matchedKw) ||
+        p.equipmentCode.toLowerCase().includes(matchedKw) ||
+        (p.equipmentDescription || '').toLowerCase().includes(matchedKw)
+      );
+      if (match) return { plan: match, method: `mot-clé "${matchedKw}" (approximatif)` };
+    }
+
+    if (cleanCode && cleanCode.length >= 3) {
+      match = pool.find(p => p.planCode.trim().toLowerCase().includes(cleanCode));
+      if (match) return { plan: match, method: 'code plan (sous-chaîne, approximatif)' };
+    }
+
+    return undefined;
+  };
+
+  const result = runPasses(eligiblePlans);
+  if (result) {
+    // 'exact' seulement pour les 4 premières passes (code/titre EXACT) ;
+    // toutes les passes par famille/mots-clés/sous-chaîne restent
+    // 'approximatif' même si un match a été trouvé — point non-négociable
+    // identifié à la consolidation du 16/09/2026 (une valeur devinée par
+    // mot-clé ne doit jamais avoir le même statut qu'une correspondance
+    // exacte).
+    const isExact = result.method.includes('(exact');
+    return { plan: result.plan, status: isExact ? 'exact' : 'approximatif', method: result.method };
   }
 
-  if (cleanCode && cleanCode.length >= 3) {
-    match = eligiblePlans.find(p => p.planCode.trim().toLowerCase().includes(cleanCode));
-    if (match) return match;
+  // Rien trouvé dans le pool éligible : vérifie si un plan aurait matché
+  // uniquement en levant le garde-fou de site (= conflit réel, pas une
+  // absence de donnée).
+  const conflictResult = runPasses(conflictingPlans);
+  if (conflictResult) {
+    return {
+      status: 'conflit',
+      method: `${conflictResult.method} — plan trouvé mais rattaché à un autre site`,
+      conflictPlan: conflictResult.plan
+    };
   }
 
-  return undefined;
+  return { status: 'non_trouve', method: 'aucune passe de correspondance n\'a matché' };
 }
 
 // Helper to clean and normalize header strings
