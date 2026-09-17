@@ -33,7 +33,7 @@ import {
   Eye,
   Filter
 } from 'lucide-react';
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog } from '../../types';
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate } from '../../types';
 import { ImportModal } from './ImportModal';
 import { parseGammeCSV, findMatchingGammePlan, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
@@ -48,7 +48,7 @@ interface WorkOrdersViewProps {
   onUpdateStatus: (id: string, status: WorkOrderStatus) => void;
   onDeleteWorkOrder?: (id: string) => void;
   onEditWorkOrder?: (id: string, updated: Partial<WorkOrder>) => void;
-  onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean) => void;
+  onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => void;
    onClearAllWorkOrders?: () => void;
 }
 
@@ -599,12 +599,12 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   // Bulk Import Handlers
-  const handleImportWorkOrders = (importedOrders: WorkOrder[], replaceExisting?: boolean) => {
+  const handleImportWorkOrders = (importedOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => {
     if (replaceExisting && onClearAllWorkOrders) {
       onClearAllWorkOrders();
     }
     if (onBulkImportWorkOrders) {
-      onBulkImportWorkOrders(importedOrders, replaceExisting);
+      onBulkImportWorkOrders(importedOrders, replaceExisting, patchCandidates);
     } else {
       importedOrders.forEach(wo => {
         onAddWorkOrder({
