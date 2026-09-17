@@ -377,8 +377,48 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setWorkOrders([]);
   };
 
-  const handleEditWorkOrder = (id: string, updated: Partial<WorkOrder>) => {
+   const handleEditWorkOrder = (id: string, updated: Partial<WorkOrder>) => {
+    const previous = workOrders;
     setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, ...updated, updatedAt: new Date().toLocaleString('fr-FR') } : wo));
+
+    // 🛡️ Garde-fou : si l'id n'est pas un UUID Supabase valide, on évite
+    // d'envoyer un PATCH qui planterait avec l'erreur 22P02 (même garde-fou
+    // que handleUpdateWOStatus).
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      console.warn(`OT ${id} sans UUID Supabase — mise à jour locale uniquement.`);
+      alert("Cet ordre de travail n'a pas encore été enregistré côté serveur. La modification sera perdue au prochain rechargement.");
+      return;
+    }
+
+    // `location` est un nom saisi dans le formulaire (pas un id) : on le
+    // résout via la liste `locations` déjà chargée, même principe que dans
+    // handleSyncEquipmentFromWorkOrders.
+    const locationNameToId = new Map(locations.map(l => [l.name, l.id]));
+
+    // Champs cœur uniquement (voir workOrderToRow, src/lib/queries/work_orders.ts).
+    // `assignee`, dates début/fin, tâches, intervenants et visa restent en
+    // localStorage pour l'instant — comportement inchangé, pas envoyés ici.
+    const corePatch: Partial<WorkOrder> = {};
+    if (updated.title !== undefined) corePatch.title = updated.title;
+    if (updated.description !== undefined) corePatch.description = updated.description;
+    if (updated.priority !== undefined) corePatch.priority = updated.priority;
+    if (updated.type !== undefined) corePatch.type = updated.type;
+    if (updated.status !== undefined) corePatch.status = updated.status;
+    if (updated.dueDate !== undefined) corePatch.dueDate = updated.dueDate;
+    if (updated.equipmentId !== undefined) corePatch.equipmentId = updated.equipmentId;
+    if (updated.planner !== undefined) corePatch.planner = updated.planner;
+    if (updated.location !== undefined && locationNameToId.has(updated.location)) {
+      corePatch.locationId = locationNameToId.get(updated.location);
+    }
+
+    if (Object.keys(corePatch).length === 0) return;
+
+    updateWorkOrder(id, corePatch).catch(err => {
+      console.error('Erreur mise à jour OT:', err);
+      setWorkOrders(previous);
+      alert("La modification n'a pas pu être enregistrée dans Supabase. Vérifie ta connexion ou tes droits.");
+    });
   };
 
   // Handlers - Requests
