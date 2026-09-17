@@ -380,6 +380,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
   const [location, setLocation] = useState('');
   const [assignee, setAssignee] = useState('Jean Dupont');
+  const [planner, setPlanner] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     const y = d.getFullYear();
@@ -586,6 +587,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setSelectedEquipmentId('');
     setLocation('');
     setAssignee('Jean Dupont');
+    setPlanner('');
     const todayFormatted = formatLocalDate(new Date());
     setDueDate(todayFormatted);
     setStartDate(todayFormatted);
@@ -673,6 +675,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setEquipmentCodeInput(getEquipmentCodeOnly(wo, equipmentList));
     setLocation(wo.location || '');
     setAssignee(wo.assignee);
+    setPlanner(wo.planner || '');
     setDueDate(wo.dueDate);
     setStartDate(wo.startDate || wo.dueDate || '');
     setStartTime(wo.startTime || '');
@@ -730,8 +733,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       equipmentId: selectedEquipmentId || undefined,
       equipmentName: finalEqName,
       equipmentCode: finalEqCode,
-      location: location || selectedWorkOrder.location,
+      
       assignee,
+      planner,
       dueDate,
       startDate,
       startTime,
@@ -2489,13 +2493,23 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Assigné à / Responsable</label>
                     <input
                       type="text"
                       value={assignee}
                       onChange={(e) => setAssignee(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Planificateur</label>
+                    <input
+                      type="text"
+                      value={planner}
+                      onChange={(e) => setPlanner(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
