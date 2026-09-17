@@ -185,6 +185,49 @@ export async function fetchExistingWorkOrderCodes(codes: string[]): Promise<Set<
   return existing;
 }
 
+/**
+ * Ajouté le 18/09/2026 — cause racine du cas OT-106146 (Meknès) : un
+ * réimport avec un N° d'OT déjà en base était jusqu'ici entièrement ignoré
+ * (voir fetchExistingWorkOrderCodes), même quand le fichier réimporté
+ * apportait des champs que la version en base n'avait jamais eus (import
+ * initial fait avant que le site source ait fini d'assigner
+ * équipement/planificateur à cet OT).
+ *
+ * Cette fonction récupère, pour les codes déjà en base, uniquement les 3
+ * champs cœur concernés (equipment_id/location_id/planner) + l'id, pour
+ * permettre un complément CIBLÉ : ne combler que ce qui est vide, ne
+ * jamais toucher un champ déjà renseigné (import précédent OU édition
+ * manuelle via le formulaire — voir handleEditWorkOrder).
+ */
+export async function fetchExistingWorkOrdersCore(
+  codes: string[]
+): Promise<Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }>> {
+  const uniqueCodes = Array.from(new Set(codes.filter((c): c is string => Boolean(c && c.trim()))));
+  const result = new Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }>();
+  if (uniqueCodes.length === 0) return result;
+
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < uniqueCodes.length; i += CHUNK_SIZE) {
+    const chunk = uniqueCodes.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select('id, code, equipment_id, location_id, planner')
+      .in('code', chunk);
+
+    if (error) throw error;
+    (data as { id: string; code: string; equipment_id: string | null; location_id: string | null; planner: string | null }[] | null)?.forEach(row => {
+      result.set(row.code, {
+        id: row.id,
+        equipmentId: row.equipment_id ?? undefined,
+        locationId: row.location_id ?? undefined,
+        planner: row.planner ?? undefined
+      });
+    });
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Écritures — champs cœur uniquement (voir note en tête de fichier).
 // ---------------------------------------------------------------------------
