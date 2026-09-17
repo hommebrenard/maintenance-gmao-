@@ -510,11 +510,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <div className="flex items-center gap-3">
               <Zap className="w-5 h-5 text-blue-600 shrink-0" />
               <div>
-                <h4 className="text-xs font-bold text-gray-900">Utiliser le modèle de données fourni</h4>
+                <h4 className="text-xs font-bold text-gray-900">Échantillon de test / démo (13 OT)</h4>
                 <p className="text-[11px] text-gray-600">
                   {activeTab === 'planning' 
-                    ? "Charge instantanément les ordres de travail extraits du fichier planning."
-                    : "Charge instantanément les gammes opératoires avec leurs checklists d'actions."}
+                    ? "Charge un exemple de démonstration à 13 lignes pour tester l'import — ne remplace pas un vrai fichier."
+                    : "Charge un exemple de démonstration de gammes opératoires pour tester l'import — ne remplace pas un vrai fichier."}
                 </p>
               </div>
             </div>
