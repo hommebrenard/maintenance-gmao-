@@ -95,6 +95,16 @@ export interface WorkOrder {
   gammeConflictPlanCode?: string;
 }
 
+// Ajouté le 18/09/2026 — réimport d'un N° d'OT déjà en base (voir cas
+// OT-106146/Meknès) : au lieu d'ignorer silencieusement la ligne, on ne
+// comble que les champs cœur restés vides côté base, sans jamais écraser
+// une valeur déjà présente (import précédent OU édition manuelle).
+export interface WorkOrderPatchCandidate {
+  existingId: string;
+  existing: { equipmentId?: string; locationId?: string; planner?: string };
+  row: WorkOrder;
+}
+
 export type RequestStatus = 'En attente' | 'Approuvée' | 'Rejetée';
 
 export interface MaintenanceRequest {
