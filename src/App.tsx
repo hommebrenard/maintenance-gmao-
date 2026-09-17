@@ -56,7 +56,8 @@ import {
   SupplierItem,
   ClientItem,
   WorkOrderStatus,
-  OperationalStatus
+  OperationalStatus,
+  WorkOrderPatchCandidate
 } from './types';
 
 // Helper for localStorage state persistence
@@ -274,7 +275,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setWorkOrders(prev => prev.filter(wo => wo.id !== id));
   };
 
-  const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean) => {
+  const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => {
     if (replaceExisting) {
       setWorkOrders(newOrders);
       // Depuis le 13/09/2026 : `locations` est une liste maîtresse persistée
@@ -286,6 +287,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
        // Écriture Supabase en arrière-plan : équipements manquants d'abord, puis les OT liés
     const BATCH_SIZE = 500;
+    const candidates = patchCandidates || [];
 
     (async () => {
       try {
@@ -296,10 +298,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         // pour les sites pas encore configurés dans "Emplacements").
         const locationCodeMap = await fetchLocationCodeMap();
 
-        // 1) Détecter les codes équipement présents dans cet import mais absents de la bibliothèque
+        // 1) Détecter les codes équipement présents dans cet import (nouveaux OT
+        // ET OT à compléter) mais absents de la bibliothèque.
+        const allIncomingRows = [...newOrders, ...candidates.map(c => c.row)];
         const existingCodes = new Set(equipmentList.map(e => e.code));
         const seen = new Map<string, { code: string; name: string; location?: string }>();
-        newOrders.forEach(w => {
+        allIncomingRows.forEach(w => {
           if (w.equipmentCode && !existingCodes.has(w.equipmentCode) && !seen.has(w.equipmentCode)) {
             seen.set(w.equipmentCode, { code: w.equipmentCode, name: w.equipmentName || w.equipmentCode, location: w.location });
           }
@@ -340,19 +344,21 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         equipmentList.forEach(e => codeToId.set(e.code, e.id));
         createdEquipments.forEach(e => codeToId.set(e.code, e.id));
 
-        // 4) Attacher equipmentId à chaque OT avant de l'enregistrer dans Supabase
-        const ordersWithEquipmentId = newOrders.map(w =>
-          w.equipmentCode && codeToId.has(w.equipmentCode)
-            ? { ...w, equipmentId: codeToId.get(w.equipmentCode) }
-            : w
-        );
+        // Résolution equipmentId/locationId commune aux nouveaux OT ET aux
+        // candidats de complément (même logique, réutilisée telle quelle).
+        const resolveIds = (w: WorkOrder): WorkOrder => {
+          let resolved = w;
+          if (w.equipmentCode && codeToId.has(w.equipmentCode)) {
+            resolved = { ...resolved, equipmentId: codeToId.get(w.equipmentCode) };
+          }
+          if (w.entity && locationCodeMap.has(w.entity)) {
+            resolved = { ...resolved, locationId: locationCodeMap.get(w.entity) };
+          }
+          return resolved;
+        };
 
-        // 4bis) Attacher locationId à partir du code Zone (entity) du CSV.
-        const ordersWithLocationId = ordersWithEquipmentId.map(w =>
-          w.entity && locationCodeMap.has(w.entity)
-            ? { ...w, locationId: locationCodeMap.get(w.entity) }
-            : w
-        );
+        // 4) Attacher equipmentId/locationId à chaque nouvel OT avant de l'enregistrer dans Supabase
+        const ordersWithLocationId = newOrders.map(resolveIds);
 
         const batches: WorkOrder[][] = [];
         for (let i = 0; i < ordersWithLocationId.length; i += BATCH_SIZE) batches.push(ordersWithLocationId.slice(i, i + BATCH_SIZE));
@@ -362,10 +368,42 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           createdAll.push(...(await createWorkOrdersBulk(batch, session.user.id)));
         }
         const createdByCode = new Map(createdAll.map(c => [c.code, c]));
+
+        // 5) Compléter les OT déjà en base — UNIQUEMENT les champs cœur restés
+        // vides côté base (equipment_id/location_id/planner). Ajouté le
+        // 18/09/2026 suite au cas réel OT-106146 (Meknès) : un réimport avec
+        // le même N° d'OT ne doit plus être silencieusement ignoré quand le
+        // fichier apporte des données que la version en base n'a jamais eues,
+        // mais ne doit JAMAIS écraser une valeur déjà présente (import
+        // antérieur ou édition manuelle via handleEditWorkOrder).
+        const patchResults = new Map<string, Partial<WorkOrder>>();
+        if (candidates.length > 0) {
+          await Promise.all(candidates.map(async (c) => {
+            const resolvedRow = resolveIds(c.row);
+            const patch: Partial<WorkOrder> = {};
+            if (!c.existing.equipmentId && resolvedRow.equipmentId) patch.equipmentId = resolvedRow.equipmentId;
+            if (!c.existing.locationId && resolvedRow.locationId) patch.locationId = resolvedRow.locationId;
+            if (!c.existing.planner && resolvedRow.planner) patch.planner = resolvedRow.planner;
+            if (Object.keys(patch).length === 0) return;
+            try {
+              await updateWorkOrder(c.existingId, patch);
+              patchResults.set(c.existingId, patch);
+            } catch (err) {
+              console.error(`Erreur complément OT ${c.row.code} :`, err);
+            }
+          }));
+        }
+
         setWorkOrders(prev => prev.map(wo => {
           const created = createdByCode.get(wo.code);
-          return created ? { ...wo, ...created } : wo;
+          if (created) return { ...wo, ...created };
+          const patch = patchResults.get(wo.id);
+          return patch ? { ...wo, ...patch } : wo;
         }));
+
+        if (patchResults.size > 0) {
+          console.info(`${patchResults.size} OT déjà en base complété(s) (champs vides uniquement) suite à cet import.`);
+        }
       } catch (err) {
         console.error('Erreur import Supabase (OT) :', err);
         alert("L'import a fonctionné localement mais N'A PAS pu être enregistré dans Supabase — les données seront perdues au prochain rechargement de la page. Réessaie l'import.");
