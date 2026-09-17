@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
-import { WorkOrder, GammePlan, LocationItem } from '../../types';
+import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
-import { fetchExistingWorkOrderCodes } from '../../lib/queries/work_orders';
+import { fetchExistingWorkOrdersCore } from '../../lib/queries/work_orders';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean) => void;
+  onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => void;
   onImportGammes: (gammes: GammePlan[]) => void;
   onClearGammes?: () => void;
   existingGammes: GammePlan[];
@@ -333,29 +333,53 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       // Vérification anti-doublon AVANT toute écriture (locale ou Supabase),
       // ajoutée le 13/09/2026 pour éviter la confusion de l'erreur Postgres
       // 23505 (contrainte unique work_orders_code_key) en cas de réimport
-      // d'un fichier déjà enregistré. Si la vérification elle-même échoue
-      // (ex. coupure réseau), on ne bloque pas l'import : le comportement
-      // redevient celui d'avant (l'éventuelle erreur 23505 sera alors
-      // rattrapée par le message générique existant côté App.tsx).
+      // d'un fichier déjà enregistré.
+      //
+      // Étendu le 18/09/2026 (cas réel OT-106146/Meknès) : un OT déjà en
+      // base n'est plus systématiquement ignoré. On regarde ses champs
+      // cœur (equipment_id/location_id/planner) : s'ils sont vides ET que
+      // le fichier réimporté apporte une valeur, l'OT est marqué pour un
+      // complément CIBLÉ (jamais un écrasement — voir handleBulkImportWorkOrders
+      // côté App.tsx). Un OT déjà complet reste ignoré comme avant.
       setIsCheckingDuplicates(true);
-      let existingCodes: Set<string> = new Set();
+      let existingCore: Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }> = new Map();
       try {
-        existingCodes = await fetchExistingWorkOrderCodes(finalWorkOrders.map(wo => wo.code));
+        existingCore = await fetchExistingWorkOrdersCore(finalWorkOrders.map(wo => wo.code));
       } catch (err) {
         console.error('Erreur lors de la vérification anti-doublon :', err);
       } finally {
         setIsCheckingDuplicates(false);
       }
 
-      const duplicateCount = finalWorkOrders.filter(wo => existingCodes.has(wo.code)).length;
+      const newRows: WorkOrder[] = [];
+      const patchCandidates: WorkOrderPatchCandidate[] = [];
+      let ignoredCount = 0;
+
+      finalWorkOrders.forEach(wo => {
+        const existing = existingCore.get(wo.code);
+        if (!existing) {
+          newRows.push(wo);
+          return;
+        }
+        const canFillEquipment = !existing.equipmentId && !!wo.equipmentCode;
+        const canFillLocation = !existing.locationId && !!wo.entity;
+        const canFillPlanner = !existing.planner && !!wo.planner;
+        if (canFillEquipment || canFillLocation || canFillPlanner) {
+          patchCandidates.push({ existingId: existing.id, existing, row: wo });
+        } else {
+          ignoredCount++;
+        }
+      });
+
+      const duplicateCount = patchCandidates.length + ignoredCount;
       if (duplicateCount > 0) {
         const total = finalWorkOrders.length;
-        const allDuplicates = duplicateCount === total;
-        const message = allDuplicates
-          ? `Les ${total} OT de ce fichier existent déjà en base (mêmes codes) — il s'agit probablement d'un réimport du même fichier.\n\nAucun nouvel OT à importer. Annuler ?`
-          : `${duplicateCount} des ${total} OT de ce fichier existent déjà en base (même code) — probablement déjà importés précédemment.\n\nContinuer pour importer uniquement les ${total - duplicateCount} OT restants (nouveaux) ? Les doublons seront ignorés.`;
+        const allIgnored = newRows.length === 0 && patchCandidates.length === 0;
+        const message = allIgnored
+          ? `Les ${total} OT de ce fichier existent déjà en base, et sont déjà complets (équipement/emplacement/planificateur renseignés) — il s'agit probablement d'un réimport du même fichier.\n\nRien à importer. Annuler ?`
+          : `Sur les ${total} OT de ce fichier : ${newRows.length} nouveau(x), ${patchCandidates.length} déjà en base seront complétés (seuls les champs vides — équipement/emplacement/planificateur — seront remplis, aucune donnée existante ne sera écrasée), ${ignoredCount} déjà complet(s) et ignoré(s).\n\nContinuer ?`;
 
-        if (allDuplicates) {
+        if (allIgnored) {
           window.alert(message);
           return;
         }
@@ -363,14 +387,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         const proceed = window.confirm(message);
         if (!proceed) return;
 
-        finalWorkOrders = finalWorkOrders.filter(wo => !existingCodes.has(wo.code));
+        finalWorkOrders = newRows;
       }
 
-      onImportWorkOrders(finalWorkOrders, importBehavior === 'replace');
+      onImportWorkOrders(finalWorkOrders, importBehavior === 'replace', patchCandidates);
       const actionLabel = importBehavior === 'replace' ? 'Remplacement effectué' : 'Ajout effectué';
-      const skippedNote = duplicateCount > 0 ? ` (${duplicateCount} doublon(s) ignoré(s))` : '';
+      const patchedNote = patchCandidates.length > 0 ? ` (${patchCandidates.length} OT existant(s) complété(s))` : '';
+      const skippedNote = ignoredCount > 0 ? ` (${ignoredCount} déjà complet(s) ignoré(s))` : '';
       const conflictNote = excludedConflicts ? ` (OT en conflit de site exclus)` : '';
-      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${skippedNote}${conflictNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
+      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${patchedNote}${skippedNote}${conflictNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
       setParsedPreviewWorkOrders([]);
       setPastedText('');
   };
