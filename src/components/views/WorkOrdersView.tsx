@@ -381,7 +381,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [type, setType] = useState<WorkOrderType>('Corrective');
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
   const [location, setLocation] = useState('');
-  const [assignee, setAssignee] = useState('Jean Dupont');
+  const [assignee, setAssignee] = useState('');
   const [planner, setPlanner] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
@@ -588,7 +588,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setType('Corrective');
     setSelectedEquipmentId('');
     setLocation('');
-    setAssignee('Jean Dupont');
+    setAssignee('');
     setPlanner('');
     const todayFormatted = formatLocalDate(new Date());
     setDueDate(todayFormatted);
