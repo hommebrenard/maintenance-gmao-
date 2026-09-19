@@ -31,11 +31,13 @@ import {
   ListChecks,
   Share2,
   Eye,
-  Filter
+  Filter,
+  ShieldAlert,
+  XCircle
 } from 'lucide-react';
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate } from '../../types';
 import { ImportModal } from './ImportModal';
-import { parseGammeCSV, findMatchingGammePlan, formatLocalDate, formatActionCode } from '../../utils/csvParser';
+import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
@@ -2885,13 +2887,19 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   {/* Gamme Opératoire / Checklist Actions */}
                   <div className="border-t border-gray-200 pt-3">
                     {(() => {
-                      const matchedPlan = findMatchingGammePlan(
+                      // Modifié le 19/09/2026 : on appelle la version détaillée (mêmes
+                      // arguments qu'avant) pour exposer aussi le statut de confiance
+                      // du rattachement Gamme. `gammeMatch.plan` est TOUJOURS le même plan
+                      // que findMatchingGammePlan aurait renvoyé (garanti par un test dans
+                      // csvParser.test.ts) : la checklist affichée ne change pas.
+                      const gammeMatch = findMatchingGammePlanDetailed(
                         selectedWorkOrder.equipmentCode || '',
                         selectedWorkOrder.interventionCode || '',
                         selectedWorkOrder.title || '',
                         gammesList,
                         selectedWorkOrder.location || selectedWorkOrder.entity || ''
                       );
+                      const matchedPlan = gammeMatch.plan;
 
                       // Filter out tasks if they came from an old mismatched fallback import (e.g. Ascenseur task on Extracteur OT)
                       const tasksAreMismatched = (() => {
@@ -2929,6 +2937,41 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
                       const doneCount = activeTasks.filter(t => t.completed).length;
                       const progressPercent = activeTasks.length > 0 ? Math.round((doneCount / activeTasks.length) * 100) : 0;
+
+                      // Ajouté le 19/09/2026 : badge de statut de correspondance Gamme
+                      // (mêmes 4 statuts et mêmes couleurs que l'écran d'aperçu d'import).
+                      const gammeBadge = (() => {
+                        switch (gammeMatch.status) {
+                          case 'exact':
+                            return {
+                              wrapper: 'bg-green-50 border-green-200 text-green-800',
+                              Icon: CheckCircle2,
+                              label: 'Gamme certaine',
+                              detail: gammeMatch.method
+                            };
+                          case 'approximatif':
+                            return {
+                              wrapper: 'bg-orange-50 border-orange-200 text-orange-800',
+                              Icon: AlertTriangle,
+                              label: 'Gamme à vérifier',
+                              detail: `${gammeMatch.method} — correspondance devinée, à contrôler avant de s'y fier`
+                            };
+                          case 'conflit':
+                            return {
+                              wrapper: 'bg-red-50 border-red-200 text-red-800',
+                              Icon: ShieldAlert,
+                              label: 'Conflit de site',
+                              detail: `Un plan${gammeMatch.conflictPlan ? ` (${gammeMatch.conflictPlan.planCode})` : ''} correspond mais appartient à un autre site — aucune checklist automatique appliquée`
+                            };
+                          default:
+                            return {
+                              wrapper: 'bg-gray-100 border-gray-200 text-gray-600',
+                              Icon: XCircle,
+                              label: 'Aucune gamme trouvée',
+                              detail: gammeMatch.method
+                            };
+                        }
+                      })();
 
                       const toggleTask = (taskId: string) => {
                         const updatedTasks = activeTasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
@@ -3003,6 +3046,19 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                 <span className="font-semibold text-blue-900">{matchedPlan.interventionTitle}</span>
                               </div>
                               <span className="text-[10px] text-blue-700 font-mono">({matchedPlan.equipmentCode})</span>
+                            </div>
+                          )}
+
+                          {/* Statut de correspondance Gamme (ajouté le 19/09/2026).
+                              Masqué pendant le chargement des gammes pour ne pas afficher
+                              un statut calculé sur une liste vide ou périmée. */}
+                          {!isLoadingGammes && (
+                            <div className={`mb-2 border rounded-lg px-2 py-1.5 text-[11px] flex items-start gap-1.5 ${gammeBadge.wrapper}`}>
+                              <gammeBadge.Icon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <span className="font-bold">{gammeBadge.label}</span>
+                                <span className="block text-[10px] opacity-90 break-words">{gammeBadge.detail}</span>
+                              </div>
                             </div>
                           )}
 
