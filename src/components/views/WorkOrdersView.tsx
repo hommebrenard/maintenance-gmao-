@@ -2631,6 +2631,27 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
                   </div>
 
+                  {/* Ajouté le 20/09/2026 : vider les heures d'un coup (un champ heure ne se
+                      vide pas sur tous les appareils). Le temps passé calculé automatiquement
+                      à partir de ces heures repasse à 00:00 ; une valeur saisie à la main est
+                      conservée. Enregistré comme « effacé » (chaîne vide) en base. */}
+                  {(startTime || endTime) && (
+                    <div className="flex justify-end -mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const autoTime = formatMinutesToHHMM(computeDurationMinutes(startDate, startTime, endDate, endTime));
+                          setIntervenantsLogs(prev => prev.map(l => l.timeSpent === autoTime ? { ...l, timeSpent: '00:00' } : l));
+                          setStartTime('');
+                          setEndTime('');
+                        }}
+                        className="text-[11px] font-semibold text-slate-600 hover:text-red-600 underline underline-offset-2"
+                      >
+                        Effacer les heures
+                      </button>
+                    </div>
+                  )}
+
                   {/* Calculated Duration & Écart */}
                   {(() => {
                     const durMins = computeDurationMinutes(startDate, startTime, endDate, endTime);
