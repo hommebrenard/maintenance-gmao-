@@ -16,13 +16,14 @@ import {
   Truck,
   FileText
 } from 'lucide-react';
-import { Equipment, OperationalStatus, EquipmentCriticality, WorkOrder } from '../../types';
+import { Equipment, OperationalStatus, EquipmentCriticality, WorkOrder, LocationItem } from '../../types';
 import {
   isBlankField,
   getLinkedWorkOrders,
   getOperationalStatusBadgeClass,
   getWorkOrderStatusBadgeClass,
   formatIsoDate,
+  buildEquipmentEditPatch,
 } from '../../utils/equipmentDisplay';
 
 // Affichage d'un champ de la fiche équipement non renseigné (vide ou '—').
@@ -31,6 +32,8 @@ const NotSet: React.FC = () => <span className="text-gray-400">Non renseigné</s
 interface EquipmentViewProps {
   equipmentList: Equipment[];
   workOrders?: WorkOrder[];
+  /** Liste des emplacements (table `locations`) proposée dans les formulaires. */
+  locations?: LocationItem[];
   onAddEquipment: (eq: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt' | 'workOrdersCount'>) => void;
   onUpdateStatus: (id: string, status: OperationalStatus) => void;
   onDeleteEquipment: (id: string) => void;
@@ -41,6 +44,7 @@ interface EquipmentViewProps {
 export const EquipmentView: React.FC<EquipmentViewProps> = ({
   equipmentList,
   workOrders = [],
+  locations = [],
   onAddEquipment,
   onUpdateStatus,
   onDeleteEquipment,
@@ -83,11 +87,10 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<OperationalStatus>('En service');
   const [criticality, setCriticality] = useState<EquipmentCriticality>('Normal');
-  const [location, setLocation] = useState('');
+  const [locationId, setLocationId] = useState('');
   const [manufacturer, setManufacturer] = useState('');
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
-  const [supplier, setSupplier] = useState('');
   const [description, setDescription] = useState('');
 
   const selectedEquipment = equipmentList.find(e => e.id === selectedId) || equipmentList[0];
@@ -112,40 +115,76 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     return matchesSearch && matchesStatus;
   });
 
+  // Libellé d'un emplacement dans les listes déroulantes (ajoute le type quand
+  // deux emplacements portent le même nom).
+  const sortedLocations = useMemo(
+    () => [...locations].sort((a, b) => a.name.localeCompare(b.name, 'fr')),
+    [locations]
+  );
+  const duplicateLocationNames = useMemo(() => {
+    const seen = new Set<string>();
+    const dup = new Set<string>();
+    locations.forEach(l => (seen.has(l.name) ? dup.add(l.name) : seen.add(l.name)));
+    return dup;
+  }, [locations]);
+  const locationLabel = (l: LocationItem) => (duplicateLocationNames.has(l.name) ? `${l.name} (${l.type})` : l.name);
+
+  // Ouvre « Nouvel équipement » avec un formulaire entièrement remis à zéro
+  // (avant le 20/09/2026, seuls le nom et le code l'étaient : les autres champs
+  // gardaient les valeurs de la dernière modification).
+  const openAdd = () => {
+    setName('');
+    setCode(`EQ-${Math.floor(100 + Math.random() * 900)}`);
+    setStatus('En service');
+    setCriticality('Normal');
+    setLocationId('');
+    setManufacturer('');
+    setModel('');
+    setSerialNumber('');
+    setDescription('');
+    setIsAddModalOpen(true);
+  };
+
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !code.trim()) return;
 
+    // Champs laissés vides = chaînes vides (avant le 20/09/2026, un « — » était
+    // écrit à la place, y compris en base).
+    const loc = locations.find(l => l.id === locationId);
     onAddEquipment({
-      code,
-      name,
+      code: code.trim(),
+      name: name.trim(),
       status,
       criticality,
-      location: location || '—',
-      supplier: supplier || '—',
-      manufacturer: manufacturer || '—',
-      model: model || '—',
-      serialNumber: serialNumber || '—',
-      description: description || '—'
+      location: loc?.name ?? '',
+      ...(loc ? { locationId: loc.id } : {}),
+      supplier: '',
+      manufacturer: manufacturer.trim(),
+      model: model.trim(),
+      serialNumber: serialNumber.trim(),
+      description: description.trim()
     });
 
-    setName('');
-    setCode('');
     setIsAddModalOpen(false);
   };
 
   const openEdit = () => {
     if (!selectedEquipment) return;
+    const clean = (v: string) => (isBlankField(v) ? '' : v);
     setName(selectedEquipment.name);
     setCode(selectedEquipment.code);
     setStatus(selectedEquipment.status);
     setCriticality(selectedEquipment.criticality);
-    setLocation(selectedEquipment.location);
-    setManufacturer(selectedEquipment.manufacturer);
-    setModel(selectedEquipment.model);
-    setSerialNumber(selectedEquipment.serialNumber);
-    setSupplier(selectedEquipment.supplier);
-    setDescription(selectedEquipment.description);
+    setLocationId(
+      selectedEquipment.locationId ??
+        locations.find(l => l.name === selectedEquipment.location)?.id ??
+        ''
+    );
+    setManufacturer(clean(selectedEquipment.manufacturer));
+    setModel(clean(selectedEquipment.model));
+    setSerialNumber(clean(selectedEquipment.serialNumber));
+    setDescription(clean(selectedEquipment.description));
     setIsEditModalOpen(true);
   };
 
@@ -153,19 +192,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     e.preventDefault();
     if (!selectedEquipment) return;
 
-    onEditEquipment(selectedEquipment.id, {
-      name,
-      code,
-      status,
-      criticality,
-      location,
-      manufacturer,
-      model,
-      serialNumber,
-      supplier,
-      description,
-      updatedAt: new Date().toLocaleString('fr-FR')
-    });
+    // Seuls les champs modifiés sont envoyés (le code n'est pas modifiable et le
+    // fournisseur n'est pas encore géré).
+    const patch = buildEquipmentEditPatch(
+      selectedEquipment,
+      { name, status, criticality, manufacturer, model, serialNumber, description, locationId },
+      locations
+    );
+    if (Object.keys(patch).length > 0) {
+      onEditEquipment(selectedEquipment.id, patch);
+    }
 
     setIsEditModalOpen(false);
   };
@@ -214,11 +250,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             )}
 
             <button
-              onClick={() => {
-                setName('');
-                setCode(`EQ-${Math.floor(100 + Math.random() * 900)}`);
-                setIsAddModalOpen(true);
-              }}
+              onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-xs transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -621,13 +653,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Emplacement</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Atelier Principal"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  <select
+                    value={locationId}
+                    onChange={(e) => setLocationId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Non renseigné</option>
+                    {sortedLocations.map(l => (
+                      <option key={l.id} value={l.id}>{locationLabel(l)}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -685,13 +720,12 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Code *</label>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Code (non modifiable)</label>
                   <input
                     type="text"
-                    required
+                    readOnly
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed font-mono"
                   />
                 </div>
               </div>
@@ -759,26 +793,21 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Fournisseur</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Distributeur local"
-                    value={supplier}
-                    onChange={(e) => setSupplier(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Emplacement</label>
+                  <select
+                    value={locationId}
+                    onChange={(e) => setLocationId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {locationId === '' && <option value="">Non renseigné</option>}
+                    {locationId !== '' && !locations.some(l => l.id === locationId) && (
+                      <option value={locationId}>{selectedEquipment?.location || 'Emplacement actuel'}</option>
+                    )}
+                    {sortedLocations.map(l => (
+                      <option key={l.id} value={l.id}>{locationLabel(l)}</option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Emplacement</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Atelier Principal"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
               </div>
 
               <div>
