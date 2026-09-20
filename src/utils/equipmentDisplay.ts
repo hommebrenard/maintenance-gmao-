@@ -1,4 +1,4 @@
-import type { Equipment, OperationalStatus, WorkOrder, WorkOrderStatus } from '../types';
+import type { Equipment, EquipmentCriticality, OperationalStatus, WorkOrder, WorkOrderStatus } from '../types';
 
 // Ajouté le 20/09/2026 — fiche équipement (EquipmentView.tsx) : fonctions pures,
 // sans React, pour pouvoir les tester avec vitest.
@@ -68,4 +68,53 @@ export function formatIsoDate(iso?: string): string {
   if (!iso) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+/** Valeurs du formulaire « Modifier l'équipement » (les champs réellement enregistrés en base). */
+export interface EquipmentEditForm {
+  name: string;
+  status: OperationalStatus;
+  criticality: EquipmentCriticality;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  description: string;
+  /** id de l'emplacement choisi ; '' = aucun choix (l'emplacement actuel est conservé). */
+  locationId: string;
+}
+
+/**
+ * Ne garde de la modification que ce qui a réellement changé (rien n'est envoyé
+ * à la base pour un champ inchangé : ex. un statut « en_panne » n'est pas
+ * réécrit en « hors_service »). Un champ texte vide ou « — » côté actuel vaut
+ * « non renseigné ». L'emplacement n'est envoyé que si un emplacement existant
+ * a été choisi et diffère de l'actuel.
+ */
+export function buildEquipmentEditPatch(
+  current: Equipment,
+  form: EquipmentEditForm,
+  locations: { id: string; name: string }[]
+): Partial<Equipment> {
+  const patch: Partial<Equipment> = {};
+
+  const name = form.name.trim();
+  if (name && name !== current.name.trim()) patch.name = name;
+  if (form.status !== current.status) patch.status = form.status;
+  if (form.criticality !== current.criticality) patch.criticality = form.criticality;
+
+  const textFields = ['manufacturer', 'model', 'serialNumber', 'description'] as const;
+  textFields.forEach(field => {
+    const next = form[field].trim();
+    const before = isBlankField(current[field]) ? '' : current[field].trim();
+    if (next !== before) patch[field] = next;
+  });
+
+  if (form.locationId && form.locationId !== current.locationId) {
+    const loc = locations.find(l => l.id === form.locationId);
+    if (loc) {
+      patch.locationId = loc.id;
+      patch.location = loc.name;
+    }
+  }
+  return patch;
 }
