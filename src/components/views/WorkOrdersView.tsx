@@ -38,6 +38,7 @@ import {
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate } from '../../types';
 import { ImportModal } from './ImportModal';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
+import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
@@ -435,27 +436,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setIntervenantsLogs(prev => prev.filter(item => item.id !== id));
   };
 
-  // Sites List Computation - strictly based on active work orders & custom locations
-  const availableSiteNames = useMemo(() => {
-    // Collect sites present in current active work orders
-    const woSites = workOrders
-      .flatMap(w => [w.location, w.entity])
-      .filter((s): s is string => Boolean(s) && s.trim().length > 0 && s !== 'Tous les sites' && s !== 'all');
-    
-    const uniqueWOSites = Array.from(new Set(woSites)).sort();
-
-    // If active work orders contain sites, return ONLY those active site names
-    if (uniqueWOSites.length > 0) {
-      return uniqueWOSites;
-    }
-
-    // Fallback if work orders have no site info: return user-configured locations
-    if (locations && locations.length > 0) {
-      return Array.from(new Set(locations.map(l => l.name))).filter(Boolean).sort();
-    }
-
-    return [];
-  }, [locations, workOrders]);
+  // Sites proposés dans les listes déroulantes : uniquement des NOMS d'emplacements.
+  // Le champ `entity` (code Zone brut, ex. BAM_KNT_AG) n'est plus listé tel quel : il
+  // sert seulement à retrouver l'emplacement officiel (voir getAvailableSiteNames,
+  // src/utils/siteNormalization.ts). Corrigé le 20/09/2026.
+  const availableSiteNames = useMemo(
+    () => getAvailableSiteNames(workOrders, locations),
+    [locations, workOrders]
+  );
 
   // Available Months Computation (YYYY-MM)
   const availableMonths = useMemo(() => {
@@ -567,7 +555,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
     let matchesLocation = true;
     if (selectedLocationFilter !== 'all') {
-      matchesLocation = wo.location === selectedLocationFilter || wo.entity === selectedLocationFilter;
+      matchesLocation = matchesSiteFilter(wo, selectedLocationFilter, locations);
     }
 
     let matchesMonth = true;
@@ -1832,7 +1820,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     // Filter OTs for this specific month
                     const monthOrders = filteredOrders.filter(o => {
                       const matchesMonth = Boolean(o.dueDate && o.dueDate.startsWith(monthIsoPrefix));
-                      const matchesSite = calendarFilterSite === 'all' || o.location === calendarFilterSite || o.entity === calendarFilterSite;
+                      const matchesSite = matchesSiteFilter(o, calendarFilterSite, locations);
                       const matchesStatus = calendarFilterStatus === 'all' || o.status === calendarFilterStatus;
                       return matchesMonth && matchesSite && matchesStatus;
                     });
@@ -1978,7 +1966,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     const dayIso = formatLocalDate(day);
                     const dayOrders = filteredOrders.filter(o => {
                       const matchesDay = o.dueDate === dayIso;
-                      const matchesSite = calendarFilterSite === 'all' || o.location === calendarFilterSite || o.entity === calendarFilterSite;
+                      const matchesSite = matchesSiteFilter(o, calendarFilterSite, locations);
                       const matchesStatus = calendarFilterStatus === 'all' || o.status === calendarFilterStatus;
                       return matchesDay && matchesSite && matchesStatus;
                     });
@@ -3543,7 +3531,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     Ordres de Travail du {new Date(selectedDayModalDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                   </h3>
                   <p className="text-xs text-gray-500">
-                    {filteredOrders.filter(o => o.dueDate === selectedDayModalDate && (calendarFilterSite === 'all' || o.location === calendarFilterSite || o.entity === calendarFilterSite) && (calendarFilterStatus === 'all' || o.status === calendarFilterStatus)).length} ordre(s) de travail programmé(s)
+                    {filteredOrders.filter(o => o.dueDate === selectedDayModalDate && matchesSiteFilter(o, calendarFilterSite, locations) && (calendarFilterStatus === 'all' || o.status === calendarFilterStatus)).length} ordre(s) de travail programmé(s)
                   </p>
                 </div>
               </div>
@@ -3561,7 +3549,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               {(() => {
                 const dayOrders = filteredOrders.filter(o =>
                   o.dueDate === selectedDayModalDate &&
-                  (calendarFilterSite === 'all' || o.location === calendarFilterSite || o.entity === calendarFilterSite) &&
+                  matchesSiteFilter(o, calendarFilterSite, locations) &&
                   (calendarFilterStatus === 'all' || o.status === calendarFilterStatus)
                 );
 
