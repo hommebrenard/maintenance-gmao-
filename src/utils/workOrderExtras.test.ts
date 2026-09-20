@@ -125,15 +125,18 @@ describe('extrasToRow', () => {
     expect(extrasToRow({ visa: 'OA' })).toEqual({ visa: 'OA' });
   });
 
-  it("transforme '' et les dates invalides en null (une colonne date refuse '')", () => {
-    expect(extrasToRow({ startDate: '', endDate: 'demain', startTime: '', endTime: '  ', visa: ' ' })).toEqual({
-      start_date: null,
-      end_date: null,
-      start_time: null,
-      end_time: null,
-      visa: null,
-    });
+  it("transforme les dates vides/invalides en null (une colonne date refuse '')", () => {
+    expect(extrasToRow({ startDate: '', endDate: 'demain' })).toEqual({ start_date: null, end_date: null });
     expect(extrasToRow({ startDate: '2026-06-11T00:00:00Z' })).toEqual({ start_date: '2026-06-11' });
+  });
+
+  it("visa et heures effacés s'écrivent '' (effacé volontairement), pas NULL (jamais enregistré)", () => {
+    expect(extrasToRow({ startTime: '', endTime: '  ', visa: ' ' })).toEqual({
+      start_time: '',
+      end_time: '',
+      visa: '',
+    });
+    expect(extrasToRow({ visa: '  OA  ' })).toEqual({ visa: 'OA' });
   });
 });
 
@@ -230,6 +233,34 @@ describe('computeLocalBackfillPatch', () => {
     expect(patch).toEqual({});
   });
 
+  it("ne ressuscite pas un visa/des heures effacés (base = '') depuis une ancienne copie locale", () => {
+    const db = makeWO({ visa: '', startTime: '', endTime: '', intervenantsLogs: [{ id: '1', name: '', timeSpent: '00:00' }] });
+    const stale = {
+      visa: 'TEST',
+      startTime: '08:00',
+      endTime: '09:00',
+      startDate: '2026-06-29',
+      endDate: '2026-06-29',
+      intervenantsLogs: [{ id: '1', name: '', timeSpent: '01:00' }],
+    };
+    expect(computeLocalBackfillPatch(db, stale)).toEqual({});
+    // et à l'affichage, la base (même vide) l'emporte sur la copie locale
+    const merged = mergeWorkOrderWithLocalExtras(db, stale);
+    expect(merged.visa).toBe('');
+    expect(merged.startTime).toBe('');
+    expect(merged.endTime).toBe('');
+  });
+
+  it("n'envoie pas les dates seules (sans heures rattrapées dans le même envoi)", () => {
+    const patch = computeLocalBackfillPatch(makeWO({ startTime: '', endTime: '' }), {
+      startTime: '08:00',
+      endTime: '09:00',
+      startDate: '2026-06-29',
+      endDate: '2026-06-29',
+    });
+    expect(patch).toEqual({});
+  });
+
   it('sans extras locaux : rien à pousser', () => {
     expect(computeLocalBackfillPatch(makeWO(), undefined)).toEqual({});
   });
@@ -248,6 +279,11 @@ describe('écriture Supabase (client simulé)', () => {
       start_time: '08:00',
       start_date: null,
     });
+  });
+
+  it("updateWorkOrder : effacer visa et heures écrit '' (pas NULL) pour qu'un autre poste ne les remette pas", async () => {
+    await updateWorkOrder(ROW.id as string, { visa: '', startTime: '', endTime: '' });
+    expect(calls[0].payload).toEqual({ visa: '', start_time: '', end_time: '' });
   });
 
   it("updateWorkOrder d'un simple changement de statut n'efface aucune colonne d'extras", async () => {

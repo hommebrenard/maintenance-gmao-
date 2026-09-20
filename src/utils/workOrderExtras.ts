@@ -47,10 +47,12 @@ function toDateOrNull(value: string | undefined | null): string | null {
   return m ? m[1] : null;
 }
 
-function toTextOrNull(value: string | undefined | null): string | null {
-  if (value === undefined || value === null) return null;
-  const v = value.trim();
-  return v === '' ? null : v;
+// Convention (corrigée le 20/09/2026) : NULL en base = « jamais enregistré » ;
+// '' = « effacé volontairement » (visa, heures). Sans cette distinction, un
+// visa ou des heures effacés dans un navigateur étaient remis en base par le
+// rattrapage d'un autre navigateur resté sur une ancienne copie locale.
+function toTrimmedText(value: string | undefined | null): string {
+  return (value ?? '').trim();
 }
 
 /**
@@ -61,11 +63,11 @@ export function extrasToRow(patch: Partial<WorkOrder>): WorkOrderExtrasWrite {
   const row: WorkOrderExtrasWrite = {};
   if (patch.tasks !== undefined) row.tasks = patch.tasks;
   if (patch.intervenantsLogs !== undefined) row.intervenants_logs = patch.intervenantsLogs;
-  if (patch.visa !== undefined) row.visa = toTextOrNull(patch.visa);
+  if (patch.visa !== undefined) row.visa = toTrimmedText(patch.visa);
   if (patch.startDate !== undefined) row.start_date = toDateOrNull(patch.startDate);
-  if (patch.startTime !== undefined) row.start_time = toTextOrNull(patch.startTime);
+  if (patch.startTime !== undefined) row.start_time = toTrimmedText(patch.startTime);
   if (patch.endDate !== undefined) row.end_date = toDateOrNull(patch.endDate);
-  if (patch.endTime !== undefined) row.end_time = toTextOrNull(patch.endTime);
+  if (patch.endTime !== undefined) row.end_time = toTrimmedText(patch.endTime);
   return row;
 }
 
@@ -132,9 +134,10 @@ export function computeLocalBackfillPatch(db: WorkOrder, local?: Partial<WorkOrd
   const hasEndTime = !!local.endTime?.trim();
   if (db.startTime === undefined && hasStartTime) patch.startTime = local.startTime;
   if (db.endTime === undefined && hasEndTime) patch.endTime = local.endTime;
-  // Les dates n'ont de sens ici que si des heures ont été saisies (sinon ce sont
-  // les dates par défaut du formulaire, égales à l'échéance).
-  if (hasStartTime || hasEndTime) {
+  // Les dates ne sont envoyées qu'AVEC des heures rattrapées dans ce même envoi
+  // (sinon ce sont les dates par défaut du formulaire, égales à l'échéance, ou
+  // des heures déjà effacées en base : on ne les ressuscite pas).
+  if (patch.startTime !== undefined || patch.endTime !== undefined) {
     if (db.startDate === undefined && toDateOrNull(local.startDate)) patch.startDate = local.startDate;
     if (db.endDate === undefined && toDateOrNull(local.endDate)) patch.endDate = local.endDate;
   }
