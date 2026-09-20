@@ -93,6 +93,7 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
     status: statusRowToApp(row.status),
     criticality: (row.criticality ?? 'Normal') as EquipmentCriticality,
     location: row.locations?.name ?? '',
+    locationId: row.location_id ?? undefined,
     supplier: row.suppliers?.name ?? '',
     manufacturer: row.brand ?? '',
     model: row.model ?? '',
@@ -147,7 +148,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   // depuis un code Zone ou un nom, voir handleBulkImportWorkOrders /
   // handleSyncEquipmentFromWorkOrders dans App.tsx). Pas de lecture via ces
   // clés : la lecture continue de passer par `location`/`supplier` (jointure).
-  if (eq.locationId !== undefined) row.location_id = eq.locationId;
+  if (eq.locationId) row.location_id = eq.locationId; // '' ou undefined : rien à écrire
   if (eq.supplierId !== undefined) row.supplier_id = eq.supplierId;
   return row;
 }
@@ -185,7 +186,11 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   return (data as unknown as EquipmentRow[]).map(row => rowToEquipment(row));
 }
 
-/** Met à jour un équipement existant (champs directs uniquement, pas location/supplier). */
+/**
+ * Met à jour un équipement existant : champs directs (nom, description, fabricant→brand,
+ * modèle, n° de série, statut, criticité) + emplacement (`locationId`). Le fournisseur
+ * n'est pas géré (la liste des fournisseurs n'existe pas encore en base côté app).
+ */
 export async function updateEquipment(id: string, patch: Partial<Equipment>): Promise<Equipment> {
   const { data, error } = await supabase
     .from('equipment')
