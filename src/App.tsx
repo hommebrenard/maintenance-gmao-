@@ -676,8 +676,42 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setEquipmentList(prev => prev.filter(e => e.id !== id));
   };
 
+  // Depuis le 20/09/2026, la modification d'un équipement est enregistrée en base
+  // (avant : état local uniquement, perdue au rechargement). Champs directs +
+  // emplacement ; le fournisseur et le code ne sont pas modifiables ici.
   const handleEditEquipment = (id: string, updated: Partial<Equipment>) => {
+    const previous = equipmentList;
     setEquipmentList(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
+
+    // Garde-fou : un équipement encore sans UUID Supabase (création en cours)
+    // ne peut pas être mis à jour côté serveur.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      console.warn(`Équipement ${id} sans UUID Supabase — mise à jour locale uniquement.`);
+      alert("Cet équipement n'a pas encore été enregistré côté serveur. La modification sera perdue au prochain rechargement.");
+      return;
+    }
+
+    const dbPatch: Partial<Equipment> = {};
+    if (updated.name !== undefined) dbPatch.name = updated.name;
+    if (updated.description !== undefined) dbPatch.description = updated.description;
+    if (updated.manufacturer !== undefined) dbPatch.manufacturer = updated.manufacturer;
+    if (updated.model !== undefined) dbPatch.model = updated.model;
+    if (updated.serialNumber !== undefined) dbPatch.serialNumber = updated.serialNumber;
+    if (updated.criticality !== undefined) dbPatch.criticality = updated.criticality;
+    if (updated.status !== undefined) dbPatch.status = updated.status;
+    if (updated.locationId) dbPatch.locationId = updated.locationId;
+    if (Object.keys(dbPatch).length === 0) return;
+
+    updateEquipment(id, dbPatch)
+      .then(saved => {
+        setEquipmentList(prev => prev.map(e => e.id === id ? { ...e, ...saved } : e));
+      })
+      .catch(err => {
+        console.error('Erreur mise à jour équipement:', err);
+        setEquipmentList(previous);
+        alert("La modification de l'équipement n'a pas pu être enregistrée dans Supabase. Vérifie ta connexion ou tes droits.");
+      });
   };
 
   // Handlers - Inventory
@@ -822,6 +856,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           <EquipmentView
             equipmentList={equipmentList}
             workOrders={workOrders}
+            locations={locations}
             onAddEquipment={handleAddEquipment}
             onUpdateStatus={handleUpdateEquipmentStatus}
             onDeleteEquipment={handleDeleteEquipment}
