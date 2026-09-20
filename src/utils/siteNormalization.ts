@@ -53,6 +53,81 @@ export interface SiteLocationItem {
   code?: string;
 }
 
+// Clé de comparaison tolérante : casse, espaces, « _ » et « - » sont équivalents
+// (BAM_KNT_AG = BAM-KNT-AG = bam knt ag).
+function siteKey(value: string): string {
+  return value.trim().toUpperCase().replace(/[\s_-]+/g, '_');
+}
+
+/**
+ * Nom de l'emplacement OFFICIEL (table `locations`) auquel correspond un nom, un
+ * code ou un alias connu de site ; `undefined` si aucun emplacement configuré ne
+ * correspond. Contrairement à `normalizeSiteName`, ne renvoie jamais la valeur
+ * d'origine : sert à ne montrer que de vrais noms d'emplacements dans les listes.
+ */
+// Cache par liste d'emplacements (la liste ne change que quand les emplacements
+// changent) : les filtres par site appellent cette fonction pour chaque OT.
+const masterNameCache = new WeakMap<SiteLocationItem[], Map<string, string | undefined>>();
+
+export function findMasterLocationName(raw?: string, locations?: SiteLocationItem[]): string | undefined {
+  if (!raw || !locations || locations.length === 0) return undefined;
+
+  let cache = masterNameCache.get(locations);
+  if (!cache) {
+    cache = new Map();
+    masterNameCache.set(locations, cache);
+  }
+  if (cache.has(raw)) return cache.get(raw);
+
+  const byKey = (k: string) =>
+    locations.find(l => (l.code && siteKey(l.code) === k) || siteKey(l.name) === k);
+
+  let result: string | undefined;
+  const key = siteKey(raw);
+  if (key) {
+    result = byKey(key)?.name;
+    if (!result) {
+      // Alias connus (KNT, Kénitra, MEKNES…) -> code Zone -> emplacement configuré.
+      const upper = raw.trim().toUpperCase();
+      const known = KNOWN_BAM_SITES[upper] || KNOWN_BAM_SITES[upper.replace(/-/g, '_')];
+      if (known) result = byKey(siteKey(known.code))?.name;
+    }
+  }
+  cache.set(raw, result);
+  return result;
+}
+
+/**
+ * Liste des sites proposés dans les listes déroulantes (filtre « Tous les sites »,
+ * calendrier, répartition multi-sites, import). Uniquement des NOMS d'emplacements :
+ * le champ `entity` (code Zone brut, ex. BAM_KNT_AG, gardé en local) sert à retrouver
+ * l'emplacement officiel mais n'est jamais affiché tel quel. Un `location` qui ne
+ * correspond à aucun emplacement configuré (site pas encore créé) reste listé.
+ * Sans aucun OT exploitable : repli sur les emplacements configurés.
+ */
+export function getAvailableSiteNames(
+  workOrders: { location?: string; entity?: string }[],
+  locations?: SiteLocationItem[]
+): string[] {
+  const names = new Set<string>();
+  const ignored = new Set(['all', 'Tous les sites']);
+
+  workOrders.forEach(w => {
+    const master = findMasterLocationName(w.location, locations) ?? findMasterLocationName(w.entity, locations);
+    if (master) {
+      names.add(master);
+      return;
+    }
+    const raw = w.location?.trim();
+    if (raw && !ignored.has(raw)) names.add(raw);
+  });
+
+  if (names.size === 0 && locations && locations.length > 0) {
+    locations.forEach(l => l.name && names.add(l.name));
+  }
+  return Array.from(names).sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
 /**
  * Normalise un nom ou code de site vers son nom officiel unique.
  * Priorité : 1) les emplacements réellement configurés dans l'app/Supabase
@@ -100,8 +175,8 @@ export function isSameSite(siteA?: string, siteB?: string, locations?: SiteLocat
   if (!siteA || !siteB) return false;
   if (siteA === siteB) return true;
 
-  const normA = normalizeSiteName(siteA, locations);
-  const normB = normalizeSiteName(siteB, locations);
+  const normA = findMasterLocationName(siteA, locations) ?? normalizeSiteName(siteA, locations);
+  const normB = findMasterLocationName(siteB, locations) ?? normalizeSiteName(siteB, locations);
 
   if (normA && normB && normA.toUpperCase() === normB.toUpperCase()) {
     return true;
@@ -119,6 +194,8 @@ export function matchesSiteFilter(wo: WorkOrder, filterValue: string, locations?
   if (!filterValue || filterValue === 'all' || filterValue === 'Tous les sites') {
     return true;
   }
+
+  if (wo.location === filterValue) return true; // cas courant, sans normalisation
 
   const canonicalFilter = normalizeSiteName(filterValue, locations);
 
