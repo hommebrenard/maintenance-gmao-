@@ -17,8 +17,8 @@ import { UsersView } from './components/views/UsersView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
-import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk } from './lib/queries/work_orders';
-import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch } from './utils/workOrderExtras';
+import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from './lib/queries/work_orders';
+import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
 
 
@@ -88,9 +88,10 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
 }
 
 // Stockage local pour les champs de WorkOrder pas encore gérés par Supabase.
-// Depuis le 20/09/2026, checklist/intervenants/visa/dates-heures sont AUSSI en base
-// (la base l'emporte, voir mergeWorkOrderWithLocalExtras) : la copie locale n'est
-// gardée que comme filet de sécurité, à retirer dans un pas de nettoyage ultérieur.
+// Depuis le 20/09/2026, checklist/intervenants/visa/dates-heures sont AUSSI en base,
+// et depuis le 21/09/2026 interventionCode/planNumber/entity aussi (la base
+// l'emporte, voir mergeWorkOrderWithLocalExtras) : la copie locale n'est gardée
+// que comme filet de sécurité, à retirer dans un pas de nettoyage ultérieur.
 // `planner` a été retiré de cette liste le 14/09/2026 : colonne Supabase dédiée
 // désormais lue/écrite directement (voir lib/queries/work_orders.ts), donc plus
 // besoin de le faire transiter par le localStorage du navigateur.
@@ -190,6 +191,31 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
               console.error(`Erreur rattrapage checklist/visa/temps pour l'OT ${wo.code}:`, err);
             }
           }
+        })();
+
+        // Rattrapage ponctuel (21/09/2026) de interventionCode / planNumber / entity :
+        // pour les OT importés avant l'existence des colonnes, la valeur ne vit que
+        // dans le localStorage de CE navigateur. Envoi par lots de 10 (des centaines
+        // d'OT), en arrière-plan, uniquement quand la base est encore vide pour la
+        // colonne (voir backfillWorkOrderIdentity : jamais d'écrasement). Les
+        // valeurs sont déjà dans `merged` (l'écran ne change pas).
+        (async () => {
+          const todo = fetched
+            .map(wo => ({ wo, patch: computeIdentityBackfillPatch(wo, extras[wo.id]) }))
+            .filter(item => Object.keys(item.patch).length > 0);
+          if (todo.length === 0) return;
+          const BATCH = 10;
+          let sent = 0;
+          for (let i = 0; i < todo.length; i += BATCH) {
+            const results = await Promise.allSettled(
+              todo.slice(i, i + BATCH).map(({ wo, patch }) => backfillWorkOrderIdentity(wo.id, patch))
+            );
+            results.forEach((r, idx) => {
+              if (r.status === 'fulfilled') sent += 1;
+              else console.error(`Erreur rattrapage code d'intervention/n° de plan/entité pour l'OT ${todo[i + idx].wo.code}:`, r.reason);
+            });
+          }
+          console.info(`${sent}/${todo.length} OT : code d'intervention / n° de plan / entité envoyés en base.`);
         })();
 
         // Backfill ponctuel (14/09/2026) : avant l'ajout de la colonne Supabase
@@ -458,8 +484,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
     // Champs envoyés à Supabase : champs cœur (voir workOrderToRow) + depuis le
     // 20/09/2026 checklist, intervenants, visa et dates/heures (voir
-    // src/utils/workOrderExtras.ts). `assignee`, planNumber, interventionCode
-    // et entity restent en localStorage pour l'instant.
+    // src/utils/workOrderExtras.ts). `assignee` reste en localStorage pour
+    // l'instant ; interventionCode/planNumber/entity (depuis le 21/09/2026 en
+    // base) ne sont pas modifiables dans le formulaire, donc absents de ce patch.
     const corePatch: Partial<WorkOrder> = {};
     if (updated.title !== undefined) corePatch.title = updated.title;
     if (updated.description !== undefined) corePatch.description = updated.description;
