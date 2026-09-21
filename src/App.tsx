@@ -17,6 +17,7 @@ import { UsersView } from './components/views/UsersView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
+import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
@@ -350,35 +351,19 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         // ET OT à compléter) mais absents de la bibliothèque.
         const allIncomingRows = [...newOrders, ...candidates.map(c => c.row)];
         const existingCodes = new Set(equipmentList.map(e => e.code));
-        const seen = new Map<string, { code: string; name: string; location?: string }>();
-        allIncomingRows.forEach(w => {
-          if (w.equipmentCode && !existingCodes.has(w.equipmentCode) && !seen.has(w.equipmentCode)) {
-            seen.set(w.equipmentCode, { code: w.equipmentCode, name: w.equipmentName || w.equipmentCode, location: w.location });
-          }
-        });
         const now = new Date().toISOString();
-        const newEquipments: Equipment[] = Array.from(seen.values()).map(e => ({
-          id: `eq-${e.code}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          code: e.code,
-          name: e.name,
-          status: 'En service',
-          criticality: 'Normal',
-          location: e.location || '',
-          // `e.location` porte en réalité le code Zone brut du CSV (voir
-          // csvParser.ts : `location = entity`), d'où la résolution via la
-          // même map que pour les OT. Avant le 14/09/2026, ce champ n'était
-          // jamais résolu et les équipements auto-créés restaient avec
-          // `location_id` NULL même quand le site était déjà configuré.
-          locationId: e.location ? locationCodeMap.get(e.location) : undefined,
-          supplier: '',
-          manufacturer: '',
-          model: '',
-          serialNumber: '',
-          createdAt: now,
-          updatedAt: now,
-          description: '',
-          workOrdersCount: 0
-        }));
+        // Correctif du 21/09/2026 : `w.location` est ici le NOM du site (résolu à l'analyse du
+        // fichier) et non le code Zone brut, qui est dans `w.entity`. La résolution passe donc
+        // par le code Zone d'abord, puis par le nom (voir src/utils/importEquipment.ts) ; avant,
+        // les équipements créés par un import restaient sans emplacement.
+        const locationNameToId = new Map(locations.map(l => [l.name, l.id] as [string, string]));
+        const newEquipments: Equipment[] = buildNewEquipmentsFromImport(
+          allIncomingRows,
+          existingCodes,
+          locationCodeMap,
+          locationNameToId,
+          now
+        );
 
         // 2) Créer ces équipements dans Supabase avant les OT, pour pouvoir les lier tout de suite
         let createdEquipments: Equipment[] = [];
