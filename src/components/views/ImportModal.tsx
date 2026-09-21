@@ -4,7 +4,8 @@ import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChec
 import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
-import { fetchExistingWorkOrdersCore } from '../../lib/queries/work_orders';
+import { fetchExistingWorkOrdersCore, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
+import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -342,7 +343,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       // complément CIBLÉ (jamais un écrasement — voir handleBulkImportWorkOrders
       // côté App.tsx). Un OT déjà complet reste ignoré comme avant.
       setIsCheckingDuplicates(true);
-      let existingCore: Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }> = new Map();
+      let existingCore: Map<string, ExistingWorkOrderCore> = new Map();
       try {
         existingCore = await fetchExistingWorkOrdersCore(finalWorkOrders.map(wo => wo.code));
       } catch (err) {
@@ -364,7 +365,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         const canFillEquipment = !existing.equipmentId && !!wo.equipmentCode;
         const canFillLocation = !existing.locationId && !!wo.entity;
         const canFillPlanner = !existing.planner && !!wo.planner;
-        if (canFillEquipment || canFillLocation || canFillPlanner) {
+        // Depuis le 21/09/2026 : code d'intervention / n° de plan / entité, si la
+        // base ne les a pas encore et que le fichier les apporte.
+        const canFillIdentity = Object.keys(computeIdentityBackfillPatch(existing, wo)).length > 0;
+        if (canFillEquipment || canFillLocation || canFillPlanner || canFillIdentity) {
           patchCandidates.push({ existingId: existing.id, existing, row: wo });
         } else {
           ignoredCount++;
@@ -376,8 +380,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         const total = finalWorkOrders.length;
         const allIgnored = newRows.length === 0 && patchCandidates.length === 0;
         const message = allIgnored
-          ? `Les ${total} OT de ce fichier existent déjà en base, et sont déjà complets (équipement/emplacement/planificateur renseignés) — il s'agit probablement d'un réimport du même fichier.\n\nRien à importer. Annuler ?`
-          : `Sur les ${total} OT de ce fichier : ${newRows.length} nouveau(x), ${patchCandidates.length} déjà en base seront complétés (seuls les champs vides — équipement/emplacement/planificateur — seront remplis, aucune donnée existante ne sera écrasée), ${ignoredCount} déjà complet(s) et ignoré(s).\n\nContinuer ?`;
+          ? `Les ${total} OT de ce fichier existent déjà en base, et sont déjà complets (équipement/emplacement/planificateur/code d'intervention renseignés) — il s'agit probablement d'un réimport du même fichier.\n\nRien à importer. Annuler ?`
+          : `Sur les ${total} OT de ce fichier : ${newRows.length} nouveau(x), ${patchCandidates.length} déjà en base seront complétés (seuls les champs vides — équipement/emplacement/planificateur/code d'intervention/n° de plan/entité — seront remplis, aucune donnée existante ne sera écrasée), ${ignoredCount} déjà complet(s) et ignoré(s).\n\nContinuer ?`;
 
         if (allIgnored) {
           window.alert(message);
