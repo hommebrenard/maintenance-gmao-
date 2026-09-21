@@ -1,6 +1,14 @@
 import { supabase } from '../supabaseClient';
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType } from '../../types';
-import { extrasToRow, rowToExtras, type WorkOrderExtrasRow } from '../../utils/workOrderExtras';
+import {
+  extrasToRow,
+  rowToExtras,
+  identityToRow,
+  rowToIdentity,
+  type WorkOrderExtrasRow,
+  type WorkOrderIdentityRow,
+  type WorkOrderIdentityWrite,
+} from '../../utils/workOrderExtras';
 
 // ---------------------------------------------------------------------------
 // Basé sur le schéma RÉEL de `work_orders` (confirmé le 08/09/2026).
@@ -16,9 +24,13 @@ import { extrasToRow, rowToExtras, type WorkOrderExtrasRow } from '../../utils/w
 // L'import en masse (createWorkOrdersBulk) n'écrit PAS ces colonnes : la
 // checklist d'un OT importé se recalcule à l'affichage depuis la Gamme.
 //
-// RESTENT EN localStorage POUR L'INSTANT :
-// - `planNumber`, `interventionCode`, `entity` : aucun équivalent en base
-//   pour l'instant (prochain pas : colonnes dédiées + import).
+// ENREGISTRÉS EN BASE DEPUIS LE 21/09/2026 : `interventionCode`
+// (`intervention_code`), `planNumber` (`plan_number`), `entity` (`entity`), tous
+// en text. Contrairement aux champs ci-dessus, l'import en masse LES écrit
+// (valeurs vides non écrites : NULL = pas de valeur).
+//
+// RESTENT EN localStorage POUR L'INSTANT : rien d'autre que la copie de secours
+// des champs ci-dessus (à retirer dans un pas de nettoyage ultérieur).
 // - `planner` : colonne `text` ajoutée en base le 14/09/2026 — lu/écrit
 //   réellement depuis cette date (n'est plus dépendant du localStorage/du
 //   navigateur, voir WO_EXTRA_FIELDS dans App.tsx).
@@ -46,7 +58,7 @@ type WorkOrderStatusRow = 'ouvert' | 'en_cours' | 'en_attente' | 'termine' | 'an
 type WorkOrderPriorityRow = 'basse' | 'moyenne' | 'haute' | 'urgente';
 type WorkOrderTypeRow = 'corrective' | 'preventive' | 'amelioration' | 'inspection';
 
-interface WorkOrderRow extends WorkOrderExtrasRow {
+interface WorkOrderRow extends WorkOrderExtrasRow, WorkOrderIdentityRow {
   id: string;
   code: string;
   title: string;
@@ -126,6 +138,8 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
     // Checklist, intervenants, visa, dates/heures : NULL en base => absent.
     ...rowToExtras(row),
+    // Code d'intervention, n° de plan, entité : NULL en base => absent.
+    ...rowToIdentity(row),
   };
 }
 
@@ -235,7 +249,7 @@ export async function fetchExistingWorkOrdersCore(
 // Écritures — champs cœur uniquement (voir note en tête de fichier).
 // ---------------------------------------------------------------------------
 
-interface WorkOrderWritableRow {
+interface WorkOrderWritableRow extends WorkOrderIdentityWrite {
   code?: string;
   title?: string;
   description?: string;
@@ -260,13 +274,15 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
   if (wo.locationId !== undefined) row.location_id = wo.locationId;
   if (wo.planner !== undefined) row.planner = wo.planner;
   if (wo.dueDate !== undefined) row.due_date = wo.dueDate;
-  return row;
+  // Code d'intervention / n° de plan / entité (depuis le 21/09/2026) : écrits
+  // aussi par l'import en masse ; les valeurs vides ne sont pas écrites.
+  return { ...row, ...identityToRow(wo) };
 }
 
 /**
- * Crée un nouvel OT (champs cœur + checklist/intervenants/visa/dates-heures
- * s'ils sont fournis ; planNumber/interventionCode/entity restent en
- * `localStorage`). `code` doit être fourni par l'appelant.
+ * Crée un nouvel OT (champs cœur + code d'intervention/n° de plan/entité +
+ * checklist/intervenants/visa/dates-heures s'ils sont fournis). `code` doit être
+ * fourni par l'appelant.
  */
 export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; title: string; dueDate: string }, createdBy: string): Promise<WorkOrder> {
   const { data, error } = await supabase
@@ -281,9 +297,10 @@ export async function createWorkOrder(wo: Partial<WorkOrder> & { code: string; t
 
 /**
  * Crée plusieurs OT en une seule requête (utilisé par l'import CSV en masse
- * d'un planning). Champs cœur uniquement : on n'écrit volontairement PAS la
- * checklist (`tasks`) copiée de la Gamme à l'import, qui se recalcule à
- * l'affichage et figerait sinon des rattachements « à vérifier ».
+ * d'un planning). Champs cœur + code d'intervention/n° de plan/entité : on
+ * n'écrit volontairement PAS la checklist (`tasks`) copiée de la Gamme à
+ * l'import, qui se recalcule à l'affichage et figerait sinon des rattachements
+ * « à vérifier ».
  */
 export async function createWorkOrdersBulk(items: (Partial<WorkOrder> & { code: string; title: string; dueDate: string })[], createdBy: string): Promise<WorkOrder[]> {
   if (items.length === 0) return [];
@@ -313,6 +330,28 @@ export async function updateWorkOrder(id: string, patch: Partial<WorkOrder>): Pr
 
   if (error) throw error;
   return rowToWorkOrder(data as unknown as WorkOrderRow);
+}
+
+/**
+ * Rattrapage ponctuel (21/09/2026) de `intervention_code`, `plan_number` et
+ * `entity` pour un OT importé avant l'existence de ces colonnes : la valeur ne
+ * vit que dans le localStorage d'un navigateur. Volontairement léger (pas de
+ * jointures en retour) car appelé pour des centaines d'OT, et JAMAIS en
+ * écrasement : chaque colonne envoyée doit encore être NULL en base au moment
+ * de l'écriture (`.is(col, null)`) — si un autre poste l'a renseignée entre-temps,
+ * la ligne est laissée telle quelle. Renvoie false s'il n'y avait rien à envoyer.
+ */
+export async function backfillWorkOrderIdentity(id: string, patch: Partial<WorkOrder>): Promise<boolean> {
+  const row = identityToRow(patch);
+  const columns = Object.keys(row);
+  if (columns.length === 0) return false;
+
+  let query = supabase.from('work_orders').update(row).eq('id', id);
+  for (const column of columns) query = query.is(column, null);
+
+  const { error } = await query;
+  if (error) throw error;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
