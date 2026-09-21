@@ -57,6 +57,30 @@ describe('parsePlanningCSV — détection des colonnes', () => {
   });
 });
 
+describe('parsePlanningCSV — code d\'intervention, n° de plan, entité (colonnes écrites en base depuis le 21/09/2026)', () => {
+  it('lit le vrai n° de plan (colonne « N° de plan »), pas le nom du planificateur', () => {
+    const csv = [
+      HEADER,
+      buildRow({ zone: 'BAM_KNT_AG', planner: 'AMARA OMAR', intervention: 'PS-TD-1T-01', planNo: '4521', otNum: '101785' })
+    ].join('\n');
+    const [wo] = parsePlanningCSV(csv);
+    expect(wo.planNumber).toBe('4521');
+    expect(wo.planner).toBe('AMARA OMAR');
+    expect(wo.interventionCode).toBe('PS-TD-1T-01');
+    expect(wo.entity).toBe('BAM_KNT_AG');
+  });
+
+  it("sans colonne de n° de plan : planNumber vide (jamais le planificateur)", () => {
+    const csv = [
+      'Zone;Équipement;Planificateur;Intervention;Date échéancier;N° d\'OT',
+      'BAM_KNT_AG;BAM-KNT_AG-TD-01;AMARA OMAR;PS-TD-1T-01;01/06/2026;101'
+    ].join('\n');
+    const [wo] = parsePlanningCSV(csv);
+    expect(wo.planNumber).toBe('');
+    expect(wo.planner).toBe('AMARA OMAR');
+  });
+});
+
 describe('parsePlanningCSV — génération des codes', () => {
   it('utilise le vrai numéro d\'OT quand il existe', () => {
     const csv = [HEADER, buildRow({ otNum: '101785' })].join('\n');

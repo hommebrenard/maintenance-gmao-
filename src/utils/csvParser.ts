@@ -521,7 +521,19 @@ export function parsePlanningCSV(
   const idxIntDesc = getIndex(['description de l intervention', 'description intervention', 'libelle']);
   const idxPriority = getIndex(['priorite', 'priority']);
   const idxEntity = getIndex(['entite', 'entity', 'zone', 'site', 'emplacement', 'lieu', 'batiment', 'atelier', 'projet']);
-   const idxPlanNo = getIndex(['plan', 'n de plan', 'no plan']);
+  // Corrigé le 21/09/2026 : l'ancienne détection (`includes('plan')`) tombait sur la
+  // colonne « Planificateur » (placée avant « N° de plan » dans les vrais fichiers) :
+  // `planNumber` contenait donc le nom du planificateur. Le n° de plan est désormais
+  // écrit en base (colonne `plan_number`) : on ne retient qu'une colonne dont l'en-tête
+  // dit clairement « n° de plan » (ou exactement « plan »), jamais « Planificateur ».
+  const idxPlanNo = headers.findIndex(h =>
+    h === 'plan' ||
+    h.includes('n de plan') ||
+    h.includes('no plan') ||
+    h.includes('num plan') ||
+    h.includes('numero de plan') ||
+    h.includes('numero plan')
+  );
 
   // Garde-fou : un vrai fichier Planning a toujours une colonne date d'échéance
   // et/ou un planificateur. Un fichier Gamme (Équipement;Description
