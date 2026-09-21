@@ -215,12 +215,25 @@ export async function fetchExistingWorkOrderCodes(codes: string[]): Promise<Set<
  * permettre un complément CIBLÉ : ne combler que ce qui est vide, ne
  * jamais toucher un champ déjà renseigné (import précédent OU édition
  * manuelle via le formulaire — voir handleEditWorkOrder).
+ * Depuis le 21/09/2026 elle lit aussi intervention_code / plan_number / entity,
+ * complétables de la même façon (réimport d'un fichier pour les OT importés
+ * avant l'existence de ces colonnes).
  */
+export interface ExistingWorkOrderCore {
+  id: string;
+  equipmentId?: string;
+  locationId?: string;
+  planner?: string;
+  interventionCode?: string;
+  planNumber?: string;
+  entity?: string;
+}
+
 export async function fetchExistingWorkOrdersCore(
   codes: string[]
-): Promise<Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }>> {
+): Promise<Map<string, ExistingWorkOrderCore>> {
   const uniqueCodes = Array.from(new Set(codes.filter((c): c is string => Boolean(c && c.trim()))));
-  const result = new Map<string, { id: string; equipmentId?: string; locationId?: string; planner?: string }>();
+  const result = new Map<string, ExistingWorkOrderCore>();
   if (uniqueCodes.length === 0) return result;
 
   const CHUNK_SIZE = 200;
@@ -228,16 +241,18 @@ export async function fetchExistingWorkOrdersCore(
     const chunk = uniqueCodes.slice(i, i + CHUNK_SIZE);
     const { data, error } = await supabase
       .from('work_orders')
-      .select('id, code, equipment_id, location_id, planner')
+      .select('id, code, equipment_id, location_id, planner, intervention_code, plan_number, entity')
       .in('code', chunk);
 
     if (error) throw error;
-    (data as { id: string; code: string; equipment_id: string | null; location_id: string | null; planner: string | null }[] | null)?.forEach(row => {
+    (data as (WorkOrderIdentityRow & { id: string; code: string; equipment_id: string | null; location_id: string | null; planner: string | null })[] | null)?.forEach(row => {
       result.set(row.code, {
         id: row.id,
         equipmentId: row.equipment_id ?? undefined,
         locationId: row.location_id ?? undefined,
-        planner: row.planner ?? undefined
+        planner: row.planner ?? undefined,
+        // NULL (ou vide) en base => absent : ces 3 champs peuvent être complétés.
+        ...rowToIdentity(row)
       });
     });
   }
