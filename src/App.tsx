@@ -432,6 +432,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             if (!c.existing.equipmentId && resolvedRow.equipmentId) patch.equipmentId = resolvedRow.equipmentId;
             if (!c.existing.locationId && resolvedRow.locationId) patch.locationId = resolvedRow.locationId;
             if (!c.existing.planner && resolvedRow.planner) patch.planner = resolvedRow.planner;
+            // Depuis le 21/09/2026 : code d'intervention / n° de plan / entité,
+            // uniquement s'ils sont encore vides en base (même règle, jamais d'écrasement).
+            Object.assign(patch, computeIdentityBackfillPatch(c.existing, resolvedRow));
             if (Object.keys(patch).length === 0) return;
             try {
               await updateWorkOrder(c.existingId, patch);
