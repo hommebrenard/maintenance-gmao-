@@ -191,6 +191,80 @@ describe('findMatchingGammePlanDetailed — statuts de confiance (Phase 1 aperç
     expect(res.conflictPlan?.planCode).toBe('GAM-MTC-01');
   });
 
+  // --- Plan type (ajouté le 21/09/2026) ---------------------------------------------------
+  const tdTasks = [
+    { id: 'a', actionCode: 'ACT1', label: 'Vérifier le serrage des connexions' },
+    { id: 'b', actionCode: 'ACT2', label: 'Contrôler les disjoncteurs' },
+  ];
+  const tdPlan = (eq: string, tasks = tdTasks) =>
+    buildGammePlan({ id: `p-${eq}`, equipmentCode: eq, planCode: 'PS-TD-1T-01', interventionTitle: 'PREVENTIF SYSTEMATIQUE TRIMESTRIEL TD', tasks });
+
+  it('plan type : le même code existe sur 2 autres sites avec les mêmes actions => \"plan_type\" (et non conflit)', () => {
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01')];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', 'PREVENTIF SYSTEMATIQUE TRIMESTRIEL TD', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('plan_type');
+    expect(res.plan?.tasks).toHaveLength(2);
+    expect(res.method).toContain('plan type');
+  });
+
+  it("plan type : un plan présent sur UN SEUL autre site n'est jamais un standard (garde-fou mkn/bml conservé)", () => {
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-KNT_AG-TD-02')];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', 'PREVENTIF SYSTEMATIQUE TRIMESTRIEL TD', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('conflit');
+    expect(res.plan).toBeUndefined();
+  });
+
+  it('plan type : un seul contenu divergent suffit à refuser (conflit visible, jamais de choix silencieux)', () => {
+    const divergent = [{ id: 'a', actionCode: 'ACT1', label: 'Vérifier le serrage des connexions' }, { id: 'b', actionCode: 'ACT2', label: 'Nettoyer le coffret' }];
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01'), tdPlan('BAM-BML_AG-TD-01', divergent)];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', 'PREVENTIF SYSTEMATIQUE TRIMESTRIEL TD', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('conflit');
+    expect(res.plan).toBeUndefined();
+  });
+
+  it('plan type : accents, majuscules et espaces insécables ne créent pas de fausse divergence', () => {
+    const variant = [{ id: 'a', actionCode: 'ACT1', label: 'VÉRIFIER  le serrage\u00a0des connexions' }, { id: 'b', actionCode: 'ACT2', label: 'Contrôler les disjoncteurs ' }];
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01', variant)];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', '', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('plan_type');
+  });
+
+  it("plan type : l'ordre des actions compte (permutation = contenu différent)", () => {
+    const permuted = [tdTasks[1], tdTasks[0]];
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01', permuted)];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', '', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('conflit');
+  });
+
+  it("plan type : le plan du site lui-même garde la priorité (statut exact, pas plan_type)", () => {
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01'), tdPlan('BAM-FEZ_AG-TD-05')];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', '', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('exact');
+    expect(res.plan?.equipmentCode).toBe('BAM-FEZ_AG-TD-05');
+  });
+
+  it("plan type : prime sur un rattachement approximatif (autre périodicité de la même famille)", () => {
+    const own = buildGammePlan({ id: 'own', equipmentCode: 'BAM-FEZ_AG-TD-05', planCode: 'PS-TD-1A-01', interventionTitle: 'ANNUEL TD', tasks: [{ id: 'z', actionCode: 'Z', label: 'Autre procédure annuelle' }] });
+    const plans = [own, tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01')];
+    const res = findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', 'PREVENTIF SYSTEMATIQUE TRIMESTRIEL TD', plans, 'Succursale régionale Type A FES');
+    expect(res.status).toBe('plan_type');
+    expect(res.plan?.planCode).toBe('PS-TD-1T-01');
+  });
+
+  it("plan type : les lignes de gamme sans action sont ignorées et un code absent partout reste non trouvé", () => {
+    const empty = buildGammePlan({ id: 'e', equipmentCode: 'BAM-FEZ_AG-TD-09', planCode: 'PS-TD-1T-01', tasks: [] });
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01'), empty];
+    expect(findMatchingGammePlanDetailed('BAM-FEZ_AG-TD-05', 'PS-TD-1T-01', '', plans, 'Succursale régionale Type A FES').status).toBe('plan_type');
+    expect(findMatchingGammePlanDetailed('BAM-FEZ_AG-XX-01', 'PS-INCONNU-9Z-99', 'Titre sans rapport', plans, 'Succursale régionale Type A FES').status).toBe('non_trouve');
+  });
+
+  it('plan type : parsePlanningCSV le propage sur les OT générés (fichier Fès, plans de Kénitra et Meknès)', () => {
+    const plans = [tdPlan('BAM-KNT_AG-TD-01'), tdPlan('BAM-MKN_AG-TD-01')];
+    const csv = [HEADER, buildRow({ zone: 'BAM_FEZ_AG', eq: 'BAM-FEZ_AG-TD-05', intervention: 'PS-TD-1T-01', otNum: '102001' })].join('\n');
+    const result = parsePlanningCSV(csv, plans, [], [{ name: 'Succursale régionale Type A FES', code: 'BAM_FEZ_AG' }] as any);
+    expect(result[0].gammeMatchStatus).toBe('plan_type');
+  });
+
   it('parsePlanningCSV attache bien le statut de confiance sur chaque WorkOrder généré', () => {
     const plans: GammePlan[] = [buildGammePlan({ equipmentCode: 'BAM-KNT_AG-PMP-09', planCode: 'INT-1' })];
     const csv = [

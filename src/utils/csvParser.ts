@@ -220,7 +220,83 @@ export function parseGammeCSV(csvContent: string): GammePlan[] {
 // de 'non_trouve' : un plan aurait matché par code/titre mais appartient à
 // un autre site (même mécanisme que le bug mkn/bml corrigé le 15/09) — on ne
 // l'écarte plus en silence, on le signale.
-export type GammeMatchStatus = 'exact' | 'approximatif' | 'non_trouve' | 'conflit';
+// 'plan_type' (ajouté le 21/09/2026) : le plan du site n'existe pas pour cet OT, mais le MÊME
+// code de plan existe sur au moins MIN_SITES_FOR_STANDARD_PLAN sites avec des actions
+// strictement identiques (libellés normalisés, même ordre). C'est une procédure standard
+// DÉDUITE — jamais présentée comme 'exact' — mais non bloquante, à la différence de 'conflit'.
+export type GammeMatchStatus = 'exact' | 'plan_type' | 'approximatif' | 'non_trouve' | 'conflit';
+
+// Nombre minimal de sites distincts portant le même code de plan, avec un contenu identique,
+// pour qu'il soit traité comme procédure standard. 2 (et non 1) volontairement : un plan présent
+// sur UN SEUL autre site n'est pas une preuve de standard (c'est le bug mkn/bml du 15/09).
+export const MIN_SITES_FOR_STANDARD_PLAN = 2;
+
+// Sites connus (jetons cherchés dans le code équipement, la description ou le titre).
+const KNOWN_SITES = [
+  { key: 'knt', names: ['knt', 'kenitra', 'kénitra'] },
+  { key: 'cas', names: ['cas', 'casa', 'casablanca'] },
+  { key: 'rab', names: ['rab', 'rabat'] },
+  { key: 'tng', names: ['tng', 'tanger'] },
+  { key: 'mar', names: ['mar', 'marrakech'] },
+  { key: 'fez', names: ['fez', 'fes', 'fès'] },
+  { key: 'agd', names: ['agd', 'agadir'] },
+  { key: 'mkn', names: ['mkn', 'meknes', 'meknès'] },
+  { key: 'bml', names: ['bml', 'beni mellal', 'béni mellal', 'benimellal'] },
+];
+
+// Empreinte d'un plan : libellés d'actions normalisés (minuscules, sans accents, espaces
+// — y compris insécables — réduits), dans l'ordre. Mise en cache par plan.
+const planSignatureCache = new WeakMap<GammePlan, string>();
+function planContentSignature(plan: GammePlan): string {
+  const cached = planSignatureCache.get(plan);
+  if (cached !== undefined) return cached;
+  const sig = (plan.tasks || [])
+    .map(t => (t.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s\u00a0]+/g, ' ').trim())
+    .join('\u0001');
+  planSignatureCache.set(plan, sig);
+  return sig;
+}
+
+interface StandardPlanInfo { plan: GammePlan; planCount: number; siteCount: number }
+const standardPlanCache = new WeakMap<GammePlan[], Map<string, StandardPlanInfo | null>>();
+
+// Cherche une procédure standard pour un code de plan. Renvoie undefined si :
+// le code est trop court, aucun plan (avec actions) ne le porte, les contenus DIVERGENT
+// (un seul contenu différent suffit à refuser), ou moins de MIN_SITES_FOR_STANDARD_PLAN sites.
+function findStandardPlanByCode(gammePlans: GammePlan[], rawCode: string): StandardPlanInfo | undefined {
+  const code = (rawCode || '').trim();
+  if (code.length < 3) return undefined;
+
+  let perList = standardPlanCache.get(gammePlans);
+  if (!perList) { perList = new Map(); standardPlanCache.set(gammePlans, perList); }
+  if (perList.has(code)) return perList.get(code) || undefined;
+
+  const hasToken = (str: string, token: string): boolean => {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i').test(str);
+  };
+  const siteKeyOfPlan = (p: GammePlan): string | undefined => {
+    const pEq = (p.equipmentCode || '').toLowerCase();
+    const pDesc = (p.equipmentDescription || '').toLowerCase();
+    const pTitle = (p.interventionTitle || '').toLowerCase();
+    return KNOWN_SITES.find(s => s.names.some(n => hasToken(pEq, n) || hasToken(pDesc, n) || hasToken(pTitle, n)))?.key;
+  };
+
+  let info: StandardPlanInfo | null = null;
+  const sameCode = gammePlans.filter(p => p.tasks && p.tasks.length > 0 && (p.planCode || '').trim() === code);
+  if (sameCode.length > 0) {
+    const sig = planContentSignature(sameCode[0]);
+    if (sameCode.every(p => planContentSignature(p) === sig)) {
+      const sites = new Set<string>();
+      sameCode.forEach(p => { const k = siteKeyOfPlan(p); if (k) sites.add(k); });
+      if (sites.size >= MIN_SITES_FOR_STANDARD_PLAN) {
+        info = { plan: sameCode[0], planCount: sameCode.length, siteCount: sites.size };
+      }
+    }
+  }
+  perList.set(code, info);
+  return info || undefined;
+}
 
 export interface GammeMatchResult {
   plan?: GammePlan;
@@ -273,17 +349,7 @@ export function findMatchingGammePlanDetailed(
     const pDesc = (plan.equipmentDescription || '').toLowerCase();
     const pTitle = (plan.interventionTitle || '').toLowerCase();
     
-       const knownSites = [
-      { key: 'knt', names: ['knt', 'kenitra', 'kénitra'] },
-      { key: 'cas', names: ['cas', 'casa', 'casablanca'] },
-      { key: 'rab', names: ['rab', 'rabat'] },
-      { key: 'tng', names: ['tng', 'tanger'] },
-      { key: 'mar', names: ['mar', 'marrakech'] },
-      { key: 'fez', names: ['fez', 'fes', 'fès'] },
-      { key: 'agd', names: ['agd', 'agadir'] },
-      { key: 'mkn', names: ['mkn', 'meknes', 'meknès'] },
-      { key: 'bml', names: ['bml', 'beni mellal', 'béni mellal', 'benimellal'] },
-    ];
+       const knownSites = KNOWN_SITES;
 
     const otSiteKey = knownSites.find(s => 
       s.names.some(n => hasSiteToken(cleanSite, n) || hasSiteToken(cleanEq, n) || hasSiteToken(cleanTitle, n))
@@ -397,15 +463,33 @@ export function findMatchingGammePlanDetailed(
   };
 
   const result = runPasses(eligiblePlans);
+  // 'exact' seulement pour les 4 premières passes (code/titre EXACT) ;
+  // toutes les passes par famille/mots-clés/sous-chaîne restent
+  // 'approximatif' même si un match a été trouvé — point non-négociable
+  // identifié à la consolidation du 16/09/2026 (une valeur devinée par
+  // mot-clé ne doit jamais avoir le même statut qu'une correspondance
+  // exacte).
+  const isExact = !!result && result.method.includes('(exact');
+  if (result && isExact) {
+    return { plan: result.plan, status: 'exact', method: result.method };
+  }
+
+  // Ajouté le 21/09/2026 — « plan type » : rien d'exact pour ce site, mais le même code de
+  // plan existe sur plusieurs sites avec exactement les mêmes actions => procédure standard.
+  // Passe AVANT le rattachement approximatif et AVANT le constat de conflit. Un match exact
+  // (plan du site lui-même) garde toujours la priorité, et un contenu divergent ou un code
+  // présent sur un seul site n'est jamais traité comme standard.
+  const standard = findStandardPlanByCode(gammePlans, interventionCode);
+  if (standard) {
+    return {
+      plan: standard.plan,
+      status: 'plan_type',
+      method: `plan type — code « ${(interventionCode || '').trim()} » identique sur ${standard.planCount} plan(s) de ${standard.siteCount} sites`
+    };
+  }
+
   if (result) {
-    // 'exact' seulement pour les 4 premières passes (code/titre EXACT) ;
-    // toutes les passes par famille/mots-clés/sous-chaîne restent
-    // 'approximatif' même si un match a été trouvé — point non-négociable
-    // identifié à la consolidation du 16/09/2026 (une valeur devinée par
-    // mot-clé ne doit jamais avoir le même statut qu'une correspondance
-    // exacte).
-    const isExact = result.method.includes('(exact');
-    return { plan: result.plan, status: isExact ? 'exact' : 'approximatif', method: result.method };
+    return { plan: result.plan, status: 'approximatif', method: result.method };
   }
 
   // Rien trouvé dans le pool éligible : vérifie si un plan aurait matché
