@@ -101,7 +101,15 @@ export interface WorkOrder {
 // une valeur déjà présente (import précédent OU édition manuelle).
 export interface WorkOrderPatchCandidate {
   existingId: string;
-  existing: { equipmentId?: string; locationId?: string; planner?: string };
+  existing: {
+    equipmentId?: string;
+    locationId?: string;
+    planner?: string;
+    // Ajoutés le 21/09/2026 : colonnes intervention_code / plan_number / entity.
+    interventionCode?: string;
+    planNumber?: string;
+    entity?: string;
+  };
   row: WorkOrder;
 }
 
