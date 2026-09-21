@@ -3,7 +3,7 @@ import type { WorkOrder, WorkOrderTask } from '../types';
 
 // Faux client Supabase : capture les charges utiles envoyées, sans réseau.
 const { calls, ROW } = vi.hoisted(() => ({
-  calls: [] as { op: 'insert' | 'update'; payload: any }[],
+  calls: [] as { op: 'insert' | 'update'; payload: any; guards: [string, unknown][] }[],
   ROW: {
     id: '11111111-1111-1111-1111-111111111111',
     code: 'OT-1',
@@ -28,14 +28,21 @@ const { calls, ROW } = vi.hoisted(() => ({
     start_time: null,
     end_date: null,
     end_time: null,
+    intervention_code: null,
+    plan_number: null,
+    entity: null,
   } as Record<string, unknown>,
 }));
 
 vi.mock('../lib/supabaseClient', () => {
-  const chainFor = (bulk: boolean) => {
+  const chainFor = (bulk: boolean, guards: [string, unknown][] = []) => {
     const result = { data: bulk ? [ROW] : ROW, error: null };
     const chain: any = {
       eq: () => chain,
+      is: (column: string, value: unknown) => {
+        guards.push([column, value]);
+        return chain;
+      },
       select: () => chain,
       single: () => Promise.resolve(result),
       then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
@@ -46,12 +53,13 @@ vi.mock('../lib/supabaseClient', () => {
     supabase: {
       from: () => ({
         insert: (payload: any) => {
-          calls.push({ op: 'insert', payload });
+          calls.push({ op: 'insert', payload, guards: [] });
           return chainFor(Array.isArray(payload));
         },
         update: (payload: any) => {
-          calls.push({ op: 'update', payload });
-          return chainFor(false);
+          const guards: [string, unknown][] = [];
+          calls.push({ op: 'update', payload, guards });
+          return chainFor(false, guards);
         },
       }),
     },
@@ -65,8 +73,11 @@ import {
   computeLocalBackfillPatch,
   hasTaskWork,
   hasIntervenantWork,
+  identityToRow,
+  rowToIdentity,
+  computeIdentityBackfillPatch,
 } from './workOrderExtras';
-import { updateWorkOrder, createWorkOrder, createWorkOrdersBulk } from '../lib/queries/work_orders';
+import { updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from '../lib/queries/work_orders';
 
 function makeWO(partial: Partial<WorkOrder> = {}): WorkOrder {
   return {
@@ -93,6 +104,9 @@ const task = (over: Partial<WorkOrderTask> = {}): WorkOrderTask => ({
 
 beforeEach(() => {
   calls.length = 0;
+  ROW.intervention_code = null;
+  ROW.plan_number = null;
+  ROW.entity = null;
 });
 
 describe('extrasToRow', () => {
@@ -266,6 +280,61 @@ describe('computeLocalBackfillPatch', () => {
   });
 });
 
+describe('identityToRow / rowToIdentity (code d\'intervention, n° de plan, entité)', () => {
+  it('convertit les 3 champs vers les colonnes Supabase (texte nettoyé)', () => {
+    expect(identityToRow({ interventionCode: ' PS-TD-1T-01 ', planNumber: '123', entity: 'BAM_KNT_AG' })).toEqual({
+      intervention_code: 'PS-TD-1T-01',
+      plan_number: '123',
+      entity: 'BAM_KNT_AG',
+    });
+  });
+
+  it("n'écrit jamais un champ absent ni vide (NULL = pas de valeur)", () => {
+    expect(identityToRow({})).toEqual({});
+    expect(identityToRow({ interventionCode: '', planNumber: '   ', entity: undefined })).toEqual({});
+    expect(identityToRow({ entity: 'BAM_MKN_AG' })).toEqual({ entity: 'BAM_MKN_AG' });
+  });
+
+  it('lecture : NULL (ou vide) en base => champ absent ; valeurs présentes reprises', () => {
+    expect(rowToIdentity({ intervention_code: null, plan_number: null, entity: null })).toEqual({});
+    expect(rowToIdentity({ intervention_code: '', plan_number: '', entity: '' })).toEqual({});
+    expect(rowToIdentity({ intervention_code: 'PS-ASC-1A-01', plan_number: '7', entity: 'BAM_FEZ_AG' })).toEqual({
+      interventionCode: 'PS-ASC-1A-01',
+      planNumber: '7',
+      entity: 'BAM_FEZ_AG',
+    });
+  });
+
+  it("fusion : la valeur de la base l'emporte sur la valeur locale ; sinon la locale est gardée", () => {
+    const db = makeWO({ interventionCode: 'BASE-01' });
+    const merged = mergeWorkOrderWithLocalExtras(db, { interventionCode: 'LOCAL-01', entity: 'BAM_KNT_AG', planNumber: '9' });
+    expect(merged.interventionCode).toBe('BASE-01');
+    expect(merged.entity).toBe('BAM_KNT_AG');
+    expect(merged.planNumber).toBe('9');
+  });
+});
+
+describe('computeIdentityBackfillPatch', () => {
+  it('pousse les valeurs locales quand la base est vide', () => {
+    const patch = computeIdentityBackfillPatch(makeWO(), { interventionCode: 'PS-TD-1T-01', planNumber: '12', entity: 'BAM_KNT_AG' });
+    expect(patch).toEqual({ interventionCode: 'PS-TD-1T-01', planNumber: '12', entity: 'BAM_KNT_AG' });
+  });
+
+  it("n'écrase jamais une valeur déjà en base (champ par champ)", () => {
+    const db = makeWO({ interventionCode: 'BASE-01' });
+    const patch = computeIdentityBackfillPatch(db, { interventionCode: 'LOCAL-01', planNumber: '12', entity: 'BAM_KNT_AG' });
+    expect(patch).toEqual({ planNumber: '12', entity: 'BAM_KNT_AG' });
+  });
+
+  it("n'envoie jamais une valeur locale vide", () => {
+    expect(computeIdentityBackfillPatch(makeWO(), { interventionCode: '', planNumber: '  ', entity: undefined })).toEqual({});
+  });
+
+  it('sans extras locaux : rien à pousser', () => {
+    expect(computeIdentityBackfillPatch(makeWO(), undefined)).toEqual({});
+  });
+});
+
 describe('écriture Supabase (client simulé)', () => {
   it('updateWorkOrder envoie checklist/visa/temps avec les champs cœur', async () => {
     const tasks = [task({ completed: true })];
@@ -324,5 +393,63 @@ describe('écriture Supabase (client simulé)', () => {
     expect(wo2.visa).toBe('OA');
     expect(wo2.tasks?.[0].completed).toBe(true);
     expect(wo2.startDate).toBe('2026-06-11');
+  });
+
+  it("createWorkOrdersBulk (import) écrit code d'intervention, n° de plan et entité (valeurs vides ignorées)", async () => {
+    await createWorkOrdersBulk(
+      [
+        makeWO({ interventionCode: 'PS-TD-1T-01', planNumber: '12', entity: 'BAM_KNT_AG' }),
+        makeWO({ code: 'OT-2', interventionCode: '', planNumber: '', entity: '' }),
+      ],
+      'user-1'
+    );
+    const [full, empty] = calls[0].payload;
+    expect(full.intervention_code).toBe('PS-TD-1T-01');
+    expect(full.plan_number).toBe('12');
+    expect(full.entity).toBe('BAM_KNT_AG');
+    expect(empty).not.toHaveProperty('intervention_code');
+    expect(empty).not.toHaveProperty('plan_number');
+    expect(empty).not.toHaveProperty('entity');
+  });
+
+  it('createWorkOrder envoie aussi ces 3 champs (ex. copie vers un autre site)', async () => {
+    await createWorkOrder(makeWO({ interventionCode: 'PS-ASC-1A-01', entity: 'AG Type A MEKNES' }), 'user-1');
+    expect(calls[0].payload.intervention_code).toBe('PS-ASC-1A-01');
+    expect(calls[0].payload.entity).toBe('AG Type A MEKNES');
+  });
+
+  it("updateWorkOrder d'un simple changement de statut n'écrit aucune de ces colonnes", async () => {
+    await updateWorkOrder(ROW.id as string, { status: 'En cours' });
+    expect(calls[0].payload).toEqual({ status: 'en_cours' });
+  });
+
+  it("l'OT renvoyé par la base expose ces 3 champs (NULL => absent)", async () => {
+    const wo = await updateWorkOrder(ROW.id as string, { visa: 'OA' });
+    expect(wo.interventionCode).toBeUndefined();
+    expect(wo.entity).toBeUndefined();
+    ROW.intervention_code = 'PS-TD-1T-01';
+    ROW.plan_number = '12';
+    ROW.entity = 'BAM_KNT_AG';
+    const wo2 = await updateWorkOrder(ROW.id as string, { visa: 'OA' });
+    expect(wo2.interventionCode).toBe('PS-TD-1T-01');
+    expect(wo2.planNumber).toBe('12');
+    expect(wo2.entity).toBe('BAM_KNT_AG');
+  });
+
+  it("backfillWorkOrderIdentity n'écrit que ces colonnes, et seulement si elles sont encore NULL en base", async () => {
+    const sent = await backfillWorkOrderIdentity(ROW.id as string, { interventionCode: 'PS-TD-1T-01', entity: 'BAM_KNT_AG', visa: 'X' });
+    expect(sent).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].op).toBe('update');
+    expect(calls[0].payload).toEqual({ intervention_code: 'PS-TD-1T-01', entity: 'BAM_KNT_AG' });
+    expect(calls[0].guards).toEqual([
+      ['intervention_code', null],
+      ['entity', null],
+    ]);
+  });
+
+  it("backfillWorkOrderIdentity n'appelle pas la base quand il n'y a rien à envoyer", async () => {
+    expect(await backfillWorkOrderIdentity(ROW.id as string, { interventionCode: '', visa: 'X' })).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 });
