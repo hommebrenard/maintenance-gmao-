@@ -139,10 +139,15 @@ export function rowToIdentity(row: WorkOrderIdentityRow): Partial<WorkOrder> {
 
 /**
  * Rattrapage (une fois par OT) : `interventionCode`, `planNumber` et `entity`
- * connus de CE navigateur mais absents de la base. Une valeur déjà en base n'est
- * jamais écrasée, et une valeur locale vide n'est jamais envoyée.
+ * connus de CE navigateur (ou d'une ligne de fichier réimportée) mais absents de
+ * la base. Une valeur déjà en base n'est jamais écrasée, et une valeur locale
+ * vide n'est jamais envoyée. `db` peut être un OT complet ou seulement les
+ * champs lus en base (cas du complément à l'import).
  */
-export function computeIdentityBackfillPatch(db: WorkOrder, local?: Partial<WorkOrder>): Partial<WorkOrder> {
+export function computeIdentityBackfillPatch(
+  db: Partial<Pick<WorkOrder, DbIdentityField>>,
+  local?: Partial<WorkOrder>
+): Partial<WorkOrder> {
   const patch: Partial<WorkOrder> = {};
   if (!local) return patch;
   DB_IDENTITY_FIELDS.forEach(field => {

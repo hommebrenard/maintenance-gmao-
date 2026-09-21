@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WorkOrder, WorkOrderTask } from '../types';
 
 // Faux client Supabase : capture les charges utiles envoyées, sans réseau.
-const { calls, ROW } = vi.hoisted(() => ({
+const { calls, ROW, selectCalls, EXISTING_ROWS } = vi.hoisted(() => ({
+  selectCalls: [] as string[],
+  EXISTING_ROWS: [] as Record<string, unknown>[],
   calls: [] as { op: 'insert' | 'update'; payload: any; guards: [string, unknown][] }[],
   ROW: {
     id: '11111111-1111-1111-1111-111111111111',
@@ -52,6 +54,10 @@ vi.mock('../lib/supabaseClient', () => {
   return {
     supabase: {
       from: () => ({
+        select: (columns: string) => {
+          selectCalls.push(columns);
+          return { in: () => Promise.resolve({ data: EXISTING_ROWS, error: null }) };
+        },
         insert: (payload: any) => {
           calls.push({ op: 'insert', payload, guards: [] });
           return chainFor(Array.isArray(payload));
@@ -77,7 +83,7 @@ import {
   rowToIdentity,
   computeIdentityBackfillPatch,
 } from './workOrderExtras';
-import { updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from '../lib/queries/work_orders';
+import { updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, fetchExistingWorkOrdersCore } from '../lib/queries/work_orders';
 
 function makeWO(partial: Partial<WorkOrder> = {}): WorkOrder {
   return {
@@ -104,6 +110,8 @@ const task = (over: Partial<WorkOrderTask> = {}): WorkOrderTask => ({
 
 beforeEach(() => {
   calls.length = 0;
+  selectCalls.length = 0;
+  EXISTING_ROWS.length = 0;
   ROW.intervention_code = null;
   ROW.plan_number = null;
   ROW.entity = null;
@@ -333,6 +341,18 @@ describe('computeIdentityBackfillPatch', () => {
   it('sans extras locaux : rien à pousser', () => {
     expect(computeIdentityBackfillPatch(makeWO(), undefined)).toEqual({});
   });
+
+  it("complément à l'import : fonctionne avec l'OT existant partiel (champs lus en base) et une ligne de fichier", () => {
+    const existing = { planNumber: '3' }; // code et entité encore NULL en base
+    const row = makeWO({ interventionCode: 'PS-TD-1T-01', planNumber: '99', entity: 'BAM_KNT_AG' });
+    expect(computeIdentityBackfillPatch(existing, row)).toEqual({ interventionCode: 'PS-TD-1T-01', entity: 'BAM_KNT_AG' });
+  });
+
+  it("complément à l'import : rien à compléter quand la base a déjà tout ou que le fichier n'apporte rien", () => {
+    const full = { interventionCode: 'A', planNumber: '1', entity: 'E' };
+    expect(computeIdentityBackfillPatch(full, makeWO({ interventionCode: 'B', planNumber: '2', entity: 'F' }))).toEqual({});
+    expect(computeIdentityBackfillPatch({}, makeWO({ interventionCode: '', planNumber: '', entity: '' }))).toEqual({});
+  });
 });
 
 describe('écriture Supabase (client simulé)', () => {
@@ -451,5 +471,21 @@ describe('écriture Supabase (client simulé)', () => {
   it("backfillWorkOrderIdentity n'appelle pas la base quand il n'y a rien à envoyer", async () => {
     expect(await backfillWorkOrderIdentity(ROW.id as string, { interventionCode: '', visa: 'X' })).toBe(false);
     expect(calls).toHaveLength(0);
+  });
+
+  it("fetchExistingWorkOrdersCore lit aussi code d'intervention / n° de plan / entité (NULL ou vide => absent)", async () => {
+    EXISTING_ROWS.push(
+      { id: 'a', code: 'OT-1', equipment_id: 'e1', location_id: 'l1', planner: 'P', intervention_code: null, plan_number: '', entity: null },
+      { id: 'b', code: 'OT-2', equipment_id: null, location_id: null, planner: null, intervention_code: 'PS-TD-1T-01', plan_number: '7', entity: 'BAM_KNT_AG' }
+    );
+    const map = await fetchExistingWorkOrdersCore(['OT-1', 'OT-2']);
+    expect(selectCalls[0]).toContain('intervention_code');
+    expect(selectCalls[0]).toContain('plan_number');
+    expect(selectCalls[0]).toContain('entity');
+    expect(map.get('OT-1')).toEqual({ id: 'a', equipmentId: 'e1', locationId: 'l1', planner: 'P' });
+    expect(map.get('OT-2')).toEqual({
+      id: 'b', equipmentId: undefined, locationId: undefined, planner: undefined,
+      interventionCode: 'PS-TD-1T-01', planNumber: '7', entity: 'BAM_KNT_AG',
+    });
   });
 });
