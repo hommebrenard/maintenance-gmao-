@@ -4,6 +4,11 @@ import type { IntervenantLog, WorkOrder, WorkOrderTask } from '../types';
 // intervenants et des temps d'un OT (colonnes `tasks`, `intervenants_logs`,
 // `visa`, `start_date`, `start_time`, `end_date`, `end_time` de `work_orders`).
 // Fonctions pures, sans Supabase ni React, pour pouvoir les tester.
+//
+// Ajouté le 21/09/2026 — même principe pour `interventionCode`, `planNumber` et
+// `entity` (colonnes `intervention_code`, `plan_number`, `entity` de `work_orders`) :
+// `interventionCode` sert à rattacher l'OT à sa Gamme ; stocké seulement dans le
+// navigateur qui avait fait l'import, il manquait sur les autres postes.
 
 /** Champs d'OT désormais portés par Supabase (avant : localStorage uniquement). */
 export const DB_EXTRA_FIELDS = [
@@ -27,6 +32,25 @@ export interface WorkOrderExtrasRow {
   start_time?: string | null;
   end_date?: string | null;
   end_time?: string | null;
+}
+
+/** Champs d'identification d'OT désormais portés par Supabase (avant : localStorage uniquement). */
+export const DB_IDENTITY_FIELDS = ['interventionCode', 'planNumber', 'entity'] as const;
+
+export type DbIdentityField = (typeof DB_IDENTITY_FIELDS)[number];
+
+/** Colonnes Supabase correspondantes (lecture d'une ligne `work_orders`). */
+export interface WorkOrderIdentityRow {
+  intervention_code?: string | null;
+  plan_number?: string | null;
+  entity?: string | null;
+}
+
+/** Colonnes Supabase à écrire (uniquement celles présentes et non vides dans le patch). */
+export interface WorkOrderIdentityWrite {
+  intervention_code?: string;
+  plan_number?: string;
+  entity?: string;
 }
 
 /** Colonnes Supabase à écrire (uniquement celles présentes dans le patch). */
@@ -84,17 +108,64 @@ export function rowToExtras(row: WorkOrderExtrasRow): Partial<WorkOrder> {
   return extras;
 }
 
+// Convention pour ces 3 champs : renseignés uniquement à l'import (ou à la copie
+// vers un autre site), jamais modifiables à la main. Un texte vide n'est donc
+// jamais écrit : NULL en base = « pas de valeur », pas de distinction « effacé ».
+function toNonEmptyText(value: string | undefined | null): string | undefined {
+  const t = (value ?? '').trim();
+  return t === '' ? undefined : t;
+}
+
+/** Colonnes à écrire pour un patch d'OT : uniquement les champs présents ET non vides. */
+export function identityToRow(patch: Partial<WorkOrder>): WorkOrderIdentityWrite {
+  const row: WorkOrderIdentityWrite = {};
+  const interventionCode = toNonEmptyText(patch.interventionCode);
+  if (interventionCode !== undefined) row.intervention_code = interventionCode;
+  const planNumber = toNonEmptyText(patch.planNumber);
+  if (planNumber !== undefined) row.plan_number = planNumber;
+  const entity = toNonEmptyText(patch.entity);
+  if (entity !== undefined) row.entity = entity;
+  return row;
+}
+
+/** Lecture : une colonne NULL (ou vide) en base devient `undefined`. */
+export function rowToIdentity(row: WorkOrderIdentityRow): Partial<WorkOrder> {
+  const identity: Partial<WorkOrder> = {};
+  if (row.intervention_code) identity.interventionCode = row.intervention_code;
+  if (row.plan_number) identity.planNumber = row.plan_number;
+  if (row.entity) identity.entity = row.entity;
+  return identity;
+}
+
+/**
+ * Rattrapage (une fois par OT) : `interventionCode`, `planNumber` et `entity`
+ * connus de CE navigateur mais absents de la base. Une valeur déjà en base n'est
+ * jamais écrasée, et une valeur locale vide n'est jamais envoyée.
+ */
+export function computeIdentityBackfillPatch(db: WorkOrder, local?: Partial<WorkOrder>): Partial<WorkOrder> {
+  const patch: Partial<WorkOrder> = {};
+  if (!local) return patch;
+  DB_IDENTITY_FIELDS.forEach(field => {
+    const localValue = toNonEmptyText(local[field]);
+    if (db[field] === undefined && localValue !== undefined) patch[field] = localValue;
+  });
+  return patch;
+}
+
 /**
  * Fusionne un OT lu en base avec les champs encore stockés dans le navigateur.
- * Pour les 7 champs portés par Supabase, la valeur de la base l'emporte dès
+ * Pour les champs portés par Supabase (les 7 du 20/09 + interventionCode,
+ * planNumber et entity depuis le 21/09), la valeur de la base l'emporte dès
  * qu'elle existe ; sinon on garde la valeur locale (rien n'est perdu). Les
- * autres champs locaux (planNumber, interventionCode, entity…) sont repris
- * comme avant.
+ * autres champs locaux sont repris comme avant.
  */
 export function mergeWorkOrderWithLocalExtras(db: WorkOrder, local?: Partial<WorkOrder>): WorkOrder {
   const merged: WorkOrder = { ...db, ...(local || {}) };
   const target = merged as unknown as Record<string, unknown>;
   DB_EXTRA_FIELDS.forEach(field => {
+    if (db[field] !== undefined) target[field] = db[field];
+  });
+  DB_IDENTITY_FIELDS.forEach(field => {
     if (db[field] !== undefined) target[field] = db[field];
   });
   return merged;
