@@ -2958,6 +2958,13 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               label: 'Gamme certaine',
                               detail: gammeMatch.method
                             };
+                          case 'plan_type':
+                            return {
+                              wrapper: 'bg-blue-50 border-blue-200 text-blue-800',
+                              Icon: CheckCircle2,
+                              label: 'Gamme type (standard)',
+                              detail: `${gammeMatch.method} — checklist standard, sans version propre à ce site`
+                            };
                           case 'approximatif':
                             return {
                               wrapper: 'bg-orange-50 border-orange-200 text-orange-800',

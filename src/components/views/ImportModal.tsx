@@ -67,7 +67,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // (viendra dans une étape suivante une fois l'affichage confirmé fiable).
   const gammeMatchSummary = React.useMemo(() => {
     if (activeTab !== 'planning' || parsedPreviewWorkOrders.length === 0) return null;
-    const counts = { exact: 0, approximatif: 0, non_trouve: 0, conflit: 0 };
+    const counts = { exact: 0, plan_type: 0, approximatif: 0, non_trouve: 0, conflit: 0 };
     parsedPreviewWorkOrders.forEach(wo => {
       const status = wo.gammeMatchStatus || 'non_trouve';
       counts[status] = (counts[status] || 0) + 1;
@@ -83,6 +83,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       return (
         <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
           <CheckCircle2 size={11} /> Certain
+        </span>
+      );
+    }
+    if (status === 'plan_type') {
+      return (
+        <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
+          <CheckCircle2 size={11} /> Plan type
         </span>
       );
     }
@@ -795,6 +802,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
                     <CheckCircle2 size={12} /> {gammeMatchSummary.exact} certaine(s)
                   </span>
+                  {gammeMatchSummary.plan_type > 0 && (
+                    <span
+                      title="Le plan de ce site n'existe pas, mais le même code de plan a exactement les mêmes actions sur plusieurs autres sites : checklist standard, non bloquante"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 font-medium"
+                    >
+                      <CheckCircle2 size={12} /> {gammeMatchSummary.plan_type} plan(s) type
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium">
                     <AlertTriangle size={12} /> {gammeMatchSummary.approximatif} à vérifier
                   </span>
