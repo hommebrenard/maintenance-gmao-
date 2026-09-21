@@ -443,7 +443,10 @@ const FRENCH_MONTH_ABBREV: Record<string, string> = {
   'mars': 'MAR',
   'avril': 'AVR',
   'mai': 'MAI',
-  'juin': 'JUN',
+  // Corrigé le 21/09/2026 : 'JUIN' (et non 'JUN') pour rester cohérent avec les codes NC déjà
+  // en base (ex. NC-AG Type A MEKNES-JUIN2026-001). Avec 'JUN', un réimport du fichier de juin
+  // ne reconnaissait pas ces codes et créait des doublons.
+  'juin': 'JUIN',
   'juillet': 'JUL',
   'aout': 'AOU',
   'août': 'AOU',

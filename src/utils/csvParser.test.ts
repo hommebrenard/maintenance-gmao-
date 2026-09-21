@@ -106,6 +106,24 @@ describe('parsePlanningCSV — génération des codes', () => {
     expect(result[3].code).toBe('NC-AG Type A KENITRA-AVR2026-003'); // suite, pas de reset après la ligne OT-101785
   });
 
+  it('mois de juin : le code NC utilise JUIN2026 (et non JUN2026), comme les codes déjà en base', () => {
+    const csv = [
+      HEADER,
+      buildRow({ otNum: 'NC', eq: 'BAM-MKN_AG-OND-01' }),
+      buildRow({ otNum: 'NC', eq: 'BAM-MKN_AG-OND-02' }),
+    ].join('\n');
+    const fileName = 'PMP AG Type A MEKNES Juin 2026.xlsx';
+    const result = parsePlanningCSV(csv, [], [fileName, fileName]);
+    expect(result[0].code).toBe('NC-AG Type A MEKNES-JUIN2026-001');
+    expect(result[1].code).toBe('NC-AG Type A MEKNES-JUIN2026-002');
+  });
+
+  it("les autres mois gardent leur abréviation (mai = MAI, juillet = JUL)", () => {
+    const csv = [HEADER, buildRow({ otNum: 'NC', eq: 'BAM-KNT_AG-PMP-09' })].join('\n');
+    expect(parsePlanningCSV(csv, [], ['PMP AG Type A KENITRA Mai 2026.csv'])[0].code).toBe('NC-AG Type A KENITRA-MAI2026-001');
+    expect(parsePlanningCSV(csv, [], ['PMP AG Type A KENITRA Juillet 2026.csv'])[0].code).toBe('NC-AG Type A KENITRA-JUL2026-001');
+  });
+
   it('ne confond pas "NC" avec un vrai numéro (0 et N/C traités comme absents aussi)', () => {
     const csv = [
       HEADER,
