@@ -53,6 +53,7 @@ import {
   getWorkOrderStatusBadgeClass,
   formatIsoDate,
   buildEquipmentEditPatch,
+  extractBrandFromDescription,
   type EquipmentEditForm,
 } from './equipmentDisplay';
 import { updateEquipment, createEquipment } from '../lib/queries/equipment';
@@ -316,5 +317,60 @@ describe('écriture équipement Supabase (client simulé)', () => {
     expect(Object.values(p)).not.toContain('—');
     expect(p.location_id).toBe('loc-2');
     expect(p.created_by).toBe('user-1');
+  });
+
+  it('§22/09 chantier carnet de santé : écrit qr_code/photo_url/manual_url/notes/purchase_date/purchase_price/warranty_end_date', async () => {
+    await updateEquipment(EQ_ROW.id as string, {
+      qrCode: 'QR-EQ-123',
+      photoUrl: 'https://exemple/photo.jpg',
+      manualUrl: 'https://exemple/manuel.pdf',
+      notes: 'RAS',
+      purchaseDate: '2022-01-15',
+      purchasePrice: 45000,
+      warrantyEndDate: '2025-01-15',
+    });
+    expect(calls[0].payload).toEqual({
+      qr_code: 'QR-EQ-123',
+      photo_url: 'https://exemple/photo.jpg',
+      manual_url: 'https://exemple/manuel.pdf',
+      notes: 'RAS',
+      purchase_date: '2022-01-15',
+      purchase_price: 45000,
+      warranty_end_date: '2025-01-15',
+    });
+  });
+
+  it('§22/09 chantier carnet de santé : lit qr_code/photo_url/manual_url/notes/purchase_date/purchase_price/warranty_end_date (défaut chaîne vide si NULL)', async () => {
+    const saved = await updateEquipment(EQ_ROW.id as string, { model: 'X' });
+    expect(saved.qrCode).toBe('');
+    expect(saved.photoUrl).toBe('');
+    expect(saved.category).toBe('');
+    expect(saved.purchasePrice).toBeUndefined();
+  });
+});
+
+describe('extractBrandFromDescription', () => {
+  it('extrait la marque jusqu\'à la virgule suivante (exemples réels du 21/09)', () => {
+    expect(extractBrandFromDescription('VENTILO CONVECTEUR N10 MARQUE: TRANE , PUISSANCE: 32000 BTU , FREON: R407C')).toBe('TRANE');
+    expect(extractBrandFromDescription('MONTE CHARGE N1 MARQUE: OTIS , POID: 1000KG')).toBe('OTIS');
+  });
+
+  it('la marque peut contenir plusieurs mots', () => {
+    expect(extractBrandFromDescription('ONDULEUR N3 MARQUE: FADESOL UPS SYSTEMS, PUISSANCE: 20KVA')).toBe('FADESOL UPS SYSTEMS');
+  });
+
+  it("marque en fin de chaîne (pas de virgule après)", () => {
+    expect(extractBrandFromDescription('VENTILO CONVECTEUR N10 MARQUE: TRANE')).toBe('TRANE');
+  });
+
+  it('insensible à la casse', () => {
+    expect(extractBrandFromDescription('pompe marque: grundfos')).toBe('grundfos');
+  });
+
+  it("absence de « MARQUE » : chaîne vide", () => {
+    expect(extractBrandFromDescription('TABLEAUX DISTRIBUTION')).toBe('');
+    expect(extractBrandFromDescription('')).toBe('');
+    expect(extractBrandFromDescription(undefined)).toBe('');
+    expect(extractBrandFromDescription(null)).toBe('');
   });
 });

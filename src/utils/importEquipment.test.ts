@@ -66,4 +66,16 @@ describe('buildNewEquipmentsFromImport', () => {
     expect(eq.code).toBe('BAM-FEZ_AG-VTL-10');
     expect(eq.locationId).toBe('loc-fez');
   });
+
+  it("§4.2 point 6 : le fabricant est préremplit depuis « MARQUE: » du nom importé, sans modifier le nom", () => {
+    const rows = [
+      wo({ equipmentCode: 'BAM-FEZ_AG-VTL-10', equipmentName: 'VENTILO CONVECTEUR N10 MARQUE: TRANE , PUISSANCE: 32000 BTU', location: 'Succursale régionale Type A FES', entity: 'BAM_FEZ_AG' }),
+      wo({ code: 'OT-2', equipmentCode: 'BAM-KNT_AG-PMP-01', equipmentName: 'POMPE SANS MARQUE CONNUE', location: 'AG Type A KENITRA', entity: 'BAM_KNT_AG' }),
+    ];
+    const result = buildNewEquipmentsFromImport(rows, new Set(), codeToId, nameToId);
+    const vtl = result.find(e => e.code === 'BAM-FEZ_AG-VTL-10');
+    expect(vtl?.manufacturer).toBe('TRANE');
+    expect(vtl?.name).toBe('VENTILO CONVECTEUR N10 MARQUE: TRANE , PUISSANCE: 32000 BTU');
+    expect(result.find(e => e.code === 'BAM-KNT_AG-PMP-01')?.manufacturer).toBe('');
+  });
 });
