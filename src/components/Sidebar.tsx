@@ -20,7 +20,8 @@ import {
   HelpCircle, 
   ChevronDown, 
   ChevronRight,
-  Settings
+  Settings,
+  HeartPulse
 } from 'lucide-react';
 import { NavigationItem } from '../types';
 
@@ -170,6 +171,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-3">
                 <Layers className={`w-4 h-4 ${isActive('equipment') ? 'text-blue-600' : 'text-gray-500'}`} />
                 <span>Équipements</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => onSelectTab('health-records')}
+              className={getItemClass('health-records')}
+            >
+              <div className="flex items-center gap-3">
+                <HeartPulse className={`w-4 h-4 ${isActive('health-records') ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span>Carnets de santé</span>
               </div>
             </button>
 
