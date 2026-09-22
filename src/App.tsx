@@ -7,6 +7,7 @@ import { ReportsView } from './components/views/ReportsView';
 import { AutomationsView } from './components/views/AutomationsView';
 import { MetersView } from './components/views/MetersView';
 import { EquipmentView } from './components/views/EquipmentView';
+import { HealthRecordsView } from './components/views/HealthRecordsView';
 import { InventoryView } from './components/views/InventoryView';
 import { PreventiveView } from './components/views/PreventiveView';
 import { TemplatesView } from './components/views/TemplatesView';
@@ -879,6 +880,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onSyncFromWorkOrders={handleSyncEquipmentFromWorkOrders}
           />
         );
+      case 'health-records':
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} />;
       case 'inventory':
         return (
           <InventoryView
