@@ -7,6 +7,7 @@
 // NOM dans une table indexée par CODE : elle ne trouvait rien, et chaque équipement créé par un
 // import restait « sans emplacement » (`location_id` NULL).
 import { Equipment, WorkOrder } from '../types';
+import { extractBrandFromDescription } from './equipmentDisplay';
 
 /**
  * Retrouve l'id d'emplacement d'une ligne d'import : code Zone brut (`entity`) d'abord, puis
@@ -59,7 +60,10 @@ export function buildNewEquipmentsFromImport(
     location: w.location || '',
     locationId: resolveImportLocationId(w, codeToLocationId, nameToLocationId),
     supplier: '',
-    manufacturer: '',
+    // §4.2 point 6 (22/09/2026) : le nom importé contient parfois « MARQUE: XXX »
+    // (ex. « VENTILO CONVECTEUR N10 MARQUE: TRANE ») — préremplissage automatique
+    // du fabricant à la création, jamais une réécriture du nom lui-même.
+    manufacturer: extractBrandFromDescription(w.equipmentName),
     model: '',
     serialNumber: '',
     createdAt: now,
