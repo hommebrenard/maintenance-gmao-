@@ -118,3 +118,18 @@ export function buildEquipmentEditPatch(
   }
   return patch;
 }
+
+/**
+ * §4.2 point 6 (22/09/2026) : le nom/description d'un équipement importé
+ * contient parfois « MARQUE: XXX » (ex. « VENTILO CONVECTEUR N10 MARQUE:
+ * TRANE , PUISSANCE: 32000 BTU »), copié tel quel depuis le fichier Planning
+ * faute de colonne dédiée. On en extrait la marque pour préremplir le champ
+ * fabricant (`manufacturer`, colonne `brand` en base) — sans jamais modifier
+ * le nom lui-même. Insensible à la casse ; s'arrête à la virgule suivante ou
+ * à la fin de la chaîne ; renvoie '' si « MARQUE » n'apparaît pas.
+ */
+export function extractBrandFromDescription(description?: string | null): string {
+  if (!description) return '';
+  const match = description.match(/MARQUE\s*:\s*([^,]+)/i);
+  return match ? match[1].trim() : '';
+}
