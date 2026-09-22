@@ -55,6 +55,16 @@ interface EquipmentRow {
   criticality: string | null;
   created_at: string;
   updated_at: string;
+  // Ajoutés le 22/09/2026 (chantier carnet de santé) : colonnes confirmées
+  // présentes en base via le schema visualizer, jusqu'ici absentes de ce
+  // type (donc jamais lues, malgré le `select('*')` ci-dessous).
+  qr_code: string | null;
+  photo_url: string | null;
+  manual_url: string | null;
+  notes: string | null;
+  purchase_date: string | null;
+  purchase_price: number | null;
+  warranty_end_date: string | null;
   locations: { name: string } | null;
   suppliers: { name: string } | null;
 }
@@ -102,6 +112,15 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
     description: row.description ?? '',
     workOrdersCount,
+    // Ajoutés le 22/09/2026 (chantier carnet de santé) — voir note sur EquipmentRow.
+    category: row.category ?? '',
+    qrCode: row.qr_code ?? '',
+    photoUrl: row.photo_url ?? '',
+    manualUrl: row.manual_url ?? '',
+    notes: row.notes ?? '',
+    purchaseDate: row.purchase_date ?? '',
+    purchasePrice: row.purchase_price ?? undefined,
+    warrantyEndDate: row.warranty_end_date ?? '',
   };
 }
 
@@ -125,6 +144,7 @@ interface EquipmentWritableRow {
   code?: string;
   name?: string;
   description?: string;
+  category?: string;
   brand?: string;
   model?: string;
   serial_number?: string;
@@ -132,6 +152,14 @@ interface EquipmentWritableRow {
   criticality?: string;
   location_id?: string;
   supplier_id?: string;
+  // Ajoutés le 22/09/2026 (chantier carnet de santé).
+  qr_code?: string;
+  photo_url?: string;
+  manual_url?: string;
+  notes?: string;
+  purchase_date?: string;
+  purchase_price?: number;
+  warranty_end_date?: string;
 }
 
 function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
@@ -139,6 +167,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   if (eq.code !== undefined) row.code = eq.code;
   if (eq.name !== undefined) row.name = eq.name;
   if (eq.description !== undefined) row.description = eq.description;
+  if (eq.category !== undefined) row.category = eq.category;
   if (eq.manufacturer !== undefined) row.brand = eq.manufacturer;
   if (eq.model !== undefined) row.model = eq.model;
   if (eq.serialNumber !== undefined) row.serial_number = eq.serialNumber;
@@ -150,6 +179,13 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   // clés : la lecture continue de passer par `location`/`supplier` (jointure).
   if (eq.locationId) row.location_id = eq.locationId; // '' ou undefined : rien à écrire
   if (eq.supplierId !== undefined) row.supplier_id = eq.supplierId;
+  if (eq.qrCode !== undefined) row.qr_code = eq.qrCode;
+  if (eq.photoUrl !== undefined) row.photo_url = eq.photoUrl;
+  if (eq.manualUrl !== undefined) row.manual_url = eq.manualUrl;
+  if (eq.notes !== undefined) row.notes = eq.notes;
+  if (eq.purchaseDate !== undefined) row.purchase_date = eq.purchaseDate;
+  if (eq.purchasePrice !== undefined) row.purchase_price = eq.purchasePrice;
+  if (eq.warrantyEndDate !== undefined) row.warranty_end_date = eq.warrantyEndDate;
   return row;
 }
 
