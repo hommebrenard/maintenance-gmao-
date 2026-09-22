@@ -6,6 +6,7 @@ export type NavigationItem =
   | 'automations'
   | 'meters'
   | 'equipment'
+  | 'health-records'
   | 'inventory'
   | 'preventive'
   | 'templates'
@@ -167,6 +168,30 @@ export interface Equipment {
   updatedAt: string;
   description: string;
   workOrdersCount: number;
+  // Ajoutés le 22/09/2026 (chantier carnet de santé) : colonnes déjà présentes
+  // en base (confirmées via le schema visualizer) mais jamais lues/écrites
+  // par l'app jusqu'ici. Optionnels pour ne rien casser côté appelants
+  // existants (fiche équipement, import, etc.).
+  category?: string;
+  qrCode?: string;
+  photoUrl?: string;
+  manualUrl?: string;
+  notes?: string;
+  purchaseDate?: string;
+  purchasePrice?: number;
+  warrantyEndDate?: string;
+}
+
+export interface HealthRecordEntry {
+  id: string;
+  equipmentId: string;
+  eventDate: string;
+  eventType: string;
+  description: string;
+  status: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface InventoryItem {
