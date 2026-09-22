@@ -303,21 +303,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
-  // Ajouté le 16/09/2026 (Phase 1 — étape 4) : import volontairement partiel,
-  // qui exclut les OT en statut "conflit" (site incompatible avec le plan
-  // Gamme trouvé). Bouton séparé, toujours disponible même quand le bouton
-  // principal est bloqué — pour ne pas transformer un vrai conflit en
-  // blocage total de l'import (voir consolidation multi-IA du 16/09/2026).
-  const handleImportWithoutConflicts = async () => {
+  // Ajouté le 16/09/2026 (Phase 1 — étape 4), revu le 22/09/2026 (§4.1
+  // étape 2) : un OT en statut "conflit" ou "non_trouve" n'affiche jamais
+  // de checklist (elle ne se calcule que si un plan Gamme est trouvé) et
+  // l'import n'enregistre pas la checklist. Exclure ces OT ne protégeait
+  // donc rien — ça les faisait juste disparaître de la base. Le bouton
+  // importe maintenant TOUS les OT prévisualisés, y compris ceux en
+  // conflit de site (ils resteront simplement sans checklist tant qu'ils
+  // n'ont pas de plan). Bouton séparé, toujours disponible même quand le
+  // bouton principal est bloqué.
+  const handleImportAnyway = async () => {
     if (activeTab !== 'planning' || parsedPreviewWorkOrders.length === 0) return;
-    const safeWorkOrders = parsedPreviewWorkOrders.filter(wo => wo.gammeMatchStatus !== 'conflit');
-    await runPlanningImport(safeWorkOrders, true);
+    await runPlanningImport(parsedPreviewWorkOrders, true);
   };
 
   // Extrait le 16/09/2026 du corps de handleConfirmImport (comportement
   // identique à avant) pour être appelable aussi bien depuis le bouton
   // principal que depuis l'import partiel ci-dessus.
-  const runPlanningImport = async (workOrdersToImport: WorkOrder[], excludedConflicts = false) => {
+  const runPlanningImport = async (workOrdersToImport: WorkOrder[], importedWithConflicts = false) => {
       let finalWorkOrders: WorkOrder[] = [];
       
       if (useMultiSiteOverride && selectedImportSites.length > 0) {
@@ -405,7 +408,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       const actionLabel = importBehavior === 'replace' ? 'Remplacement effectué' : 'Ajout effectué';
       const patchedNote = patchCandidates.length > 0 ? ` (${patchCandidates.length} OT existant(s) complété(s))` : '';
       const skippedNote = ignoredCount > 0 ? ` (${ignoredCount} déjà complet(s) ignoré(s))` : '';
-      const conflictNote = excludedConflicts ? ` (OT en conflit de site exclus)` : '';
+      const conflictNote = importedWithConflicts ? ` (les OT en conflit de site restent sans checklist tant qu'un plan n'est pas trouvé)` : '';
       setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${patchedNote}${skippedNote}${conflictNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
       setParsedPreviewWorkOrders([]);
       setPastedText('');
@@ -900,21 +903,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
          {/* Modal Footer */}
         <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-200 flex flex-col items-end gap-2">
-          {/* Ajouté le 16/09/2026 (Phase 1 — étape 4) : message + bouton
-              d'import partiel, visibles uniquement quand des conflits de
-              site existent sur le fichier Planning en cours. */}
+          {/* Ajouté le 16/09/2026 (Phase 1 — étape 4), libellé et comportement
+              revus le 22/09/2026 (§4.1 étape 2) : message + bouton visibles
+              uniquement quand des conflits de site existent sur le fichier
+              Planning en cours. Le bouton importe désormais tous les OT
+              (aucun n'est plus exclu) : ceux en conflit n'ont simplement pas
+              de checklist tant qu'un plan Gamme ne leur est pas rattaché. */}
           {activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0 && (
             <div className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">
               <span className="flex items-center gap-1.5">
                 <ShieldAlert size={13} />
-                {gammeMatchSummary!.conflit} OT en conflit de site bloquent la validation complète — le plan Gamme trouvé appartient à un autre site.
+                {gammeMatchSummary!.conflit} OT en conflit de site bloquent la validation complète — le plan Gamme trouvé appartient à un autre site. Ils resteront sans checklist tant qu'un plan n'est pas trouvé.
               </span>
               <button
-                onClick={handleImportWithoutConflicts}
+                onClick={handleImportAnyway}
                 disabled={isCheckingDuplicates}
                 className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-white border border-red-300 rounded hover:bg-red-100 disabled:opacity-50"
               >
-                Importer sans les {gammeMatchSummary!.conflit} en conflit
+                Importer quand même (sans checklist)
               </button>
             </div>
           )}

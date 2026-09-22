@@ -469,6 +469,42 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     return `${monthNames[monthIdx] || parts[1]} ${year}`;
   };
 
+  // Ajouté le 22/09/2026 (§4.1 étape 3) : même dérivation de checklist que
+  // partout ailleurs dans ce fichier (tasks en base sinon plan Gamme
+  // rattaché), centralisée pour handleCompleteWorkOrder ci-dessous.
+  const computeActiveTasksForWorkOrder = (wo: WorkOrder): WorkOrderTask[] => {
+    if (wo.tasks && wo.tasks.length > 0) return wo.tasks;
+    const matchedPlan = findMatchingGammePlan(
+      wo.equipmentCode || '',
+      wo.interventionCode || '',
+      wo.title || '',
+      gammesList,
+      wo.location || wo.entity || ''
+    );
+    return matchedPlan?.tasks.map((t, idx) => ({
+      id: `task-auto-${idx}`,
+      code: formatActionCode(t.actionCode, idx),
+      label: t.label,
+      completed: false
+    })) || [];
+  };
+
+  // Ajouté le 22/09/2026 (§4.1 étape 3) : à la clôture d'un OT, on fige la
+  // checklist affichée dans `tasks` si elle n'a encore jamais été
+  // enregistrée (NULL/vide). Sans ça, modifier une Gamme plus tard change
+  // rétroactivement l'affichage d'OT déjà terminés (risque d'audit). On
+  // n'écrase jamais un `tasks` déjà présent — voir §3 (NULL = jamais
+  // enregistré).
+  const handleCompleteWorkOrder = (wo: WorkOrder) => {
+    if ((!wo.tasks || wo.tasks.length === 0) && onEditWorkOrder) {
+      const activeTasks = computeActiveTasksForWorkOrder(wo);
+      if (activeTasks.length > 0) {
+        onEditWorkOrder(wo.id, { tasks: activeTasks });
+      }
+    }
+    onUpdateStatus(wo.id, 'Terminé');
+  };
+
   // Multi-site Dispatch Handler
   const handleConfirmMultiSiteDispatch = () => {
     if (!dispatchWO || selectedTargetSites.length === 0) return;
@@ -1562,7 +1598,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onUpdateStatus(order.id, 'Terminé');
+                              handleCompleteWorkOrder(order);
                             }}
                             className="mt-2 w-full py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-md flex items-center justify-center gap-1 transition-colors"
                           >
@@ -1630,7 +1666,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <select
                           value={order.status}
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => onUpdateStatus(order.id, e.target.value as WorkOrderStatus)}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as WorkOrderStatus;
+                            if (newStatus === 'Terminé') { handleCompleteWorkOrder(order); } else { onUpdateStatus(order.id, newStatus); }
+                          }}
                           className={`text-xs font-semibold px-2.5 py-1 rounded-full border focus:outline-none cursor-pointer ${getStatusBadgeClass(order.status)}`}
                         >
                           <option value="Ouvert">Ouvert</option>
@@ -2717,8 +2756,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       value={selectedWorkOrder.status}
                       onChange={(e) => {
                         const newStatus = e.target.value as WorkOrderStatus;
-                        onUpdateStatus(selectedWorkOrder.id, newStatus);
-                        setSelectedWorkOrder({ ...selectedWorkOrder, status: newStatus });
+                        if (newStatus === 'Terminé') {
+                          const frozenTasks = (!selectedWorkOrder.tasks || selectedWorkOrder.tasks.length === 0)
+                            ? computeActiveTasksForWorkOrder(selectedWorkOrder)
+                            : selectedWorkOrder.tasks;
+                          handleCompleteWorkOrder(selectedWorkOrder);
+                          setSelectedWorkOrder({ ...selectedWorkOrder, status: newStatus, tasks: frozenTasks });
+                        } else {
+                          onUpdateStatus(selectedWorkOrder.id, newStatus);
+                          setSelectedWorkOrder({ ...selectedWorkOrder, status: newStatus });
+                        }
                       }}
                       className={`text-xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${getStatusBadgeClass(selectedWorkOrder.status)}`}
                     >
@@ -3342,8 +3389,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     {selectedWorkOrder.status !== 'Terminé' && (
                       <button
                         onClick={() => {
-                          onUpdateStatus(selectedWorkOrder.id, 'Terminé');
-                          setSelectedWorkOrder({ ...selectedWorkOrder, status: 'Terminé' });
+                          const frozenTasks = (!selectedWorkOrder.tasks || selectedWorkOrder.tasks.length === 0)
+                            ? computeActiveTasksForWorkOrder(selectedWorkOrder)
+                            : selectedWorkOrder.tasks;
+                          handleCompleteWorkOrder(selectedWorkOrder);
+                          setSelectedWorkOrder({ ...selectedWorkOrder, status: 'Terminé', tasks: frozenTasks });
                         }}
                         className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-2xs"
                       >
@@ -3678,7 +3728,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              onUpdateStatus(wo.id, 'Terminé');
+                              handleCompleteWorkOrder(wo);
                             }}
                             className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-2xs"
                           >
