@@ -119,7 +119,19 @@ interface AppProps {
 }
 
 export default function App({ session, onSignOut }: AppProps) {
-  const [currentTab, setCurrentTab] = useState<NavigationItem>('work-orders');
+  // Support du lien profond depuis le QR code de la fiche équipement :
+  // ?carnet=<code> ouvre directement l'onglet Carnet de santé sur cet
+  // équipement. Lu une seule fois au chargement.
+  const [initialCarnetCode] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('carnet');
+    } catch {
+      return null;
+    }
+  });
+  const [currentTab, setCurrentTab] = useState<NavigationItem>(
+    initialCarnetCode ? 'health-records' : 'work-orders'
+  );
 
   // App Centralized State with localStorage persistence
  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -881,7 +893,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentCode={initialCarnetCode} />;
       case 'inventory':
         return (
           <InventoryView
