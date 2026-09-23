@@ -89,7 +89,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     const value = selected.qrCode || selected.code;
     const deepLink = `${APP_BASE_URL}?carnet=${encodeURIComponent(value)}`;
     let cancelled = false;
-    QRCode.toDataURL(deepLink, { width: 96, margin: 1 })
+    QRCode.toDataURL(deepLink, { width: 300, margin: 2, errorCorrectionLevel: 'M' })
       .then(url => {
         if (!cancelled) setQrDataUrl(url);
       })
@@ -246,7 +246,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   </p>
                 </div>
                 <div className="shrink-0 flex items-center gap-3">
-                  <div className="w-16 h-16 bg-white border border-gray-300 rounded flex flex-col items-center justify-center p-1 text-center">
+                  <div className="w-28 h-28 bg-white border border-gray-300 rounded flex flex-col items-center justify-center p-1 text-center">
                     {qrDataUrl ? (
                       <img src={qrDataUrl} alt={`QR code ${selected.code}`} className="w-full h-full object-contain" />
                     ) : (
