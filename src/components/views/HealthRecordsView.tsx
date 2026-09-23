@@ -63,6 +63,19 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     [selected, workOrders]
   );
 
+  // 1-3 « Dernière intervention de maintenance » : la plus récente des OT
+  // réellement clôturés ("Terminé") pour cet équipement — jamais une valeur
+  // inventée. Absence d'OT clôturé => affiché "Non renseigné" à l'écran.
+  const lastCompletedWorkOrder = useMemo(() => {
+    const completed = linkedWorkOrders.filter(wo => wo.status === 'Terminé');
+    if (completed.length === 0) return null;
+    return [...completed].sort((a, b) => {
+      const dateA = a.endDate || a.updatedAt || '';
+      const dateB = b.endDate || b.updatedAt || '';
+      return dateB.localeCompare(dateA);
+    })[0];
+  }, [linkedWorkOrders]);
+
   useEffect(() => {
     if (!selected) return;
     setIsLoadingEntries(true);
@@ -200,6 +213,45 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 </div>
               </div>
 
+              {/* Section 1 : Synthèse de santé & Conformité réglementaire.
+                  1-1 et 1-2 n'ont aucune donnée réelle derrière aujourd'hui
+                  (pas de formule de fiabilité, pas de suivi réglementaire en
+                  base) : affichées honnêtement "Non renseigné", à reprendre
+                  dans une prochaine étape plutôt que d'inventer un chiffre. */}
+              <div className="mb-4">
+                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2.5">
+                  1. Synthèse de santé & Conformité réglementaire
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                    <span className="text-[10px] font-semibold text-gray-500 block">Indice de Fiabilité Globale</span>
+                    <span className="text-sm font-bold text-gray-400">Non renseigné</span>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                    <span className="text-[10px] font-semibold text-gray-500 block">Contrôle réglementaire</span>
+                    <span className="text-sm font-bold text-gray-400">Non renseigné</span>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                    <span className="text-[10px] font-semibold text-gray-500 block">Dernière intervention de maintenance</span>
+                    {lastCompletedWorkOrder ? (
+                      <>
+                        <span className="text-sm font-bold text-gray-800">
+                          {formatIsoDate(lastCompletedWorkOrder.endDate || lastCompletedWorkOrder.updatedAt)}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          Effectué par : {lastCompletedWorkOrder.assignee || 'Non renseigné'}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-gray-400">Non renseigné</span>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Effectué par : Non renseigné</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
             <div className="grid grid-cols-3 gap-4 mb-4">
               {/* Photo */}
               <div className="col-span-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
@@ -241,7 +293,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
             <div className="border border-gray-200 rounded-lg">
               <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5">
                 <ClipboardList className="w-4 h-4 text-gray-500" />
-                <h3 className="text-sm font-bold text-gray-900">Registre chronologique des interventions ({linkedWorkOrders.length})</h3>
+                <h3 className="text-sm font-bold text-gray-900">2. Registre chronologique d'entretien & dépannages ({linkedWorkOrders.length})</h3>
               </div>
               {linkedWorkOrders.length === 0 ? (
                 <div className="p-4 text-xs text-gray-400">Aucune intervention enregistrée pour cet équipement.</div>
