@@ -39,6 +39,10 @@
     padding: 0 !important;
   }
 
+  .print\:bg-white {
+    background-color: #ffffff !important;
+  }
+
   /* Force background colors to print */
   * {
     -webkit-print-color-adjust: exact !important;
