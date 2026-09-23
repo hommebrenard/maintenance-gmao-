@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, HeartPulse, QrCode, Image as ImageIcon, Printer, ClipboardList, Plus, Loader2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, HeartPulse, QrCode, Image as ImageIcon, Printer, Download, ClipboardList, Plus, Loader2, ShieldCheck } from 'lucide-react';
 import { Equipment, WorkOrder, HealthRecordEntry } from '../../types';
 import {
   getLinkedWorkOrders,
@@ -8,6 +8,7 @@ import {
   formatIsoDate,
 } from '../../utils/equipmentDisplay';
 import { fetchHealthRecords, createHealthRecord } from '../../lib/queries/healthRecords';
+import { exportElementToPdf } from '../../utils/pdfExport';
 
 const NotSet: React.FC = () => <span className="text-gray-400">Non renseigné</span>;
 
@@ -39,6 +40,9 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [newEventType, setNewEventType] = useState('Maintenance préventive');
   const [newDescription, setNewDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const printableRef = useRef<HTMLDivElement>(null);
 
   const filteredList = useMemo(
     () =>
@@ -88,6 +92,21 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!printableRef.current || !selected) return;
+    setIsExportingPdf(true);
+    setPdfError(null);
+    try {
+      const result = await exportElementToPdf(
+        printableRef.current,
+        `Carnet_Sante_${selected.code}_${new Date().toISOString().slice(0, 10)}`
+      );
+      if (!result.success) setPdfError(result.error || 'Erreur lors de la génération du PDF');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="flex h-full">
       {/* Liste */}
@@ -133,23 +152,53 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
           <div className="text-sm text-gray-400">Sélectionnez un équipement.</div>
         ) : (
           <div className="max-w-4xl">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-bold text-gray-900">{selected.name}</h1>
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded">{selected.code}</span>
-                </div>
-                <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded-full ${getOperationalStatusBadgeClass(selected.status)}`}>
-                  {selected.status}
-                </span>
-              </div>
+            <div className="flex items-center justify-end gap-2 mb-3" data-pdf-exclude="true">
+              {pdfError && <span className="text-xs text-red-600 mr-auto">{pdfError}</span>}
               <button
                 onClick={() => window.print()}
                 className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Printer className="w-3.5 h-3.5" /> Imprimer
               </button>
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isExportingPdf}
+                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+              >
+                {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Télécharger PDF
+              </button>
             </div>
+
+            <div ref={printableRef} className="bg-white">
+              {/* En-tête fiche d'identité, façon passeport machine */}
+              <div className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-gray-800 text-white font-mono px-2 py-0.5 rounded text-xs font-bold">{selected.code}</span>
+                    <h1 className="text-base font-bold text-gray-900">{selected.name}</h1>
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getOperationalStatusBadgeClass(selected.status)}`}>
+                      {selected.status}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 text-xs mt-1">
+                    {selected.manufacturer || <NotSet />}
+                    {selected.model ? ` — ${selected.model}` : ''}
+                  </p>
+                  <p className="text-gray-500 text-[11px] font-mono mt-0.5">
+                    N° série : {selected.serialNumber || 'Non renseigné'} | Emplacement : {selected.location || 'Non renseigné'}
+                  </p>
+                </div>
+                <div className="text-right shrink-0 flex items-center gap-2 text-emerald-700">
+                  <ShieldCheck className="w-5 h-5" />
+                  <div>
+                    <span className="block text-gray-400 text-[10px]">Date d'émission :</span>
+                    <span className="font-semibold text-gray-800 text-xs">
+                      {new Date().toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
             <div className="grid grid-cols-3 gap-4 mb-4">
               {/* Photo */}
@@ -231,6 +280,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 </div>
                 <button
                   onClick={() => setIsAdding(v => !v)}
+                  data-pdf-exclude="true"
                   className="print:hidden flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md"
                 >
                   <Plus className="w-3.5 h-3.5" /> Ajouter une entrée
@@ -238,7 +288,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               </div>
 
               {isAdding && (
-                <form onSubmit={handleAddEntry} className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
+                <form onSubmit={handleAddEntry} data-pdf-exclude="true" className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
                   <div className="flex gap-2">
                     <select
                       value={newEventType}
@@ -290,6 +340,21 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   ))}
                 </ul>
               )}
+            </div>
+
+              {/* Visas */}
+              <div className="mt-4 pt-4 border-t-2 border-gray-200 grid grid-cols-2 gap-6 text-[11px]">
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <span className="font-bold text-gray-700 block mb-1">Visa Responsable Maintenance :</span>
+                  <p className="text-gray-500 text-[10px] italic">Signature & cachet :</p>
+                  <div className="h-10 mt-2 border-b border-dashed border-gray-300" />
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <span className="font-bold text-gray-700 block mb-1">Visa Contrôle Qualité / HSE :</span>
+                  <p className="text-gray-500 text-[10px] italic">Signature & cachet :</p>
+                  <div className="h-10 mt-2 border-b border-dashed border-gray-300" />
+                </div>
+              </div>
             </div>
           </div>
         )}
