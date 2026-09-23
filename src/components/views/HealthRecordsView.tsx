@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, HeartPulse, QrCode, Image as ImageIcon, Printer, Download, ClipboardList, Plus, Loader2, ShieldCheck } from 'lucide-react';
+import { Search, HeartPulse, QrCode, Image as ImageIcon, Printer, Download, ClipboardList, Plus, Loader2 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Equipment, WorkOrder, HealthRecordEntry } from '../../types';
 import {
   getLinkedWorkOrders,
@@ -43,6 +44,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const printableRef = useRef<HTMLDivElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const filteredList = useMemo(
     () =>
@@ -57,6 +59,29 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   );
 
   const selected = filteredList.find(e => e.id === selectedId) || filteredList[0];
+
+  // QR code affiché sur la fiche : encode le code équipement (colonne
+  // `qr_code` si renseignée manuellement, sinon le code équipement lui-même
+  // — texte brut, pas de lien vers l'app : évite d'avoir à ajouter une
+  // navigation par URL qui n'existe pas encore).
+  useEffect(() => {
+    if (!selected) {
+      setQrDataUrl(null);
+      return;
+    }
+    const value = selected.qrCode || selected.code;
+    let cancelled = false;
+    QRCode.toDataURL(value, { width: 96, margin: 1 })
+      .then(url => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, selected?.qrCode, selected?.code]);
 
   const linkedWorkOrders = useMemo(
     () => (selected ? getLinkedWorkOrders(selected, workOrders) : []),
@@ -202,9 +227,15 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                     N° série : {selected.serialNumber || 'Non renseigné'} | Emplacement : {selected.location || 'Non renseigné'}
                   </p>
                 </div>
-                <div className="text-right shrink-0 flex items-center gap-2 text-emerald-700">
-                  <ShieldCheck className="w-5 h-5" />
-                  <div>
+                <div className="shrink-0 flex items-center gap-3">
+                  <div className="w-16 h-16 bg-white border border-gray-300 rounded flex flex-col items-center justify-center p-1 text-center">
+                    {qrDataUrl ? (
+                      <img src={qrDataUrl} alt={`QR code ${selected.code}`} className="w-full h-full object-contain" />
+                    ) : (
+                      <QrCode className="w-8 h-8 text-gray-300" />
+                    )}
+                  </div>
+                  <div className="text-right">
                     <span className="block text-gray-400 text-[10px]">Date d'émission :</span>
                     <span className="font-semibold text-gray-800 text-xs">
                       {new Date().toLocaleDateString('fr-FR')}
@@ -284,7 +315,10 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   <span className="w-32 shrink-0 text-gray-500 flex items-center gap-1">
                     <QrCode className="w-3.5 h-3.5" /> QR code :
                   </span>
-                  <span className="text-gray-900">{selected.qrCode ? selected.qrCode : <NotSet />}</span>
+                  <span className="text-gray-900">
+                    {selected.qrCode || selected.code}
+                    {!selected.qrCode && <span className="text-gray-400 text-xs ml-1">(= code équipement)</span>}
+                  </span>
                 </div>
               </div>
             </div>
