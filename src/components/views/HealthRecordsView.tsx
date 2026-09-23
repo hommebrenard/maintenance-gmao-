@@ -91,7 +91,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   return (
     <div className="flex h-full">
       {/* Liste */}
-      <div className="w-80 shrink-0 border-r border-gray-200 bg-white flex flex-col">
+      <div className="print:hidden w-80 shrink-0 border-r border-gray-200 bg-white flex flex-col">
         <div className="p-3 border-b border-gray-100">
           <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
             <HeartPulse className="w-4 h-4 text-emerald-600" />
@@ -145,7 +145,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               </div>
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Printer className="w-3.5 h-3.5" /> Imprimer
               </button>
@@ -231,14 +231,14 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 </div>
                 <button
                   onClick={() => setIsAdding(v => !v)}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md"
+                  className="print:hidden flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md"
                 >
                   <Plus className="w-3.5 h-3.5" /> Ajouter une entrée
                 </button>
               </div>
 
               {isAdding && (
-                <form onSubmit={handleAddEntry} className="p-3 border-b border-gray-100 bg-gray-50 space-y-2">
+                <form onSubmit={handleAddEntry} className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
                   <div className="flex gap-2">
                     <select
                       value={newEventType}
