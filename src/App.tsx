@@ -962,7 +962,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 font-sans text-gray-900 overflow-hidden antialiased">
+    <div className="print:bg-white flex flex-col h-screen bg-gray-100 font-sans text-gray-900 overflow-hidden antialiased">
       {/* Bandeau utilisateur connecté */}
       <div className="print:hidden flex items-center justify-between bg-white border-b border-gray-200 px-4 py-1.5 text-xs shrink-0">
         <span className="text-gray-500">
