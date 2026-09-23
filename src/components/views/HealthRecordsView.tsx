@@ -17,6 +17,8 @@ interface HealthRecordsViewProps {
   equipmentList: Equipment[];
   workOrders: WorkOrder[];
   currentUserId: string;
+  /** Code équipement à présélectionner (lien profond depuis le QR code de la fiche). */
+  initialEquipmentCode?: string | null;
 }
 
 // Chantier « carnet de santé » (22/09/2026) : vue dédiée listant tous les
@@ -27,9 +29,21 @@ interface HealthRecordsViewProps {
 // Volontairement PAS de section « Synthèse de santé / conformité
 // réglementaire » avec des chiffres inventés (indice de fiabilité, DESP...) :
 // aucune donnée réelle ne les alimente aujourd'hui (voir échange du 22/09).
-export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId }) => {
+export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentCode }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Présélection depuis le lien profond du QR code (?carnet=<code>), une
+  // seule fois, dès que la liste des équipements est disponible.
+  const didApplyDeepLink = useRef(false);
+  useEffect(() => {
+    if (didApplyDeepLink.current || !initialEquipmentCode || equipmentList.length === 0) return;
+    const match = equipmentList.find(e => e.code === initialEquipmentCode);
+    if (match) {
+      setSelectedId(match.id);
+      didApplyDeepLink.current = true;
+    }
+  }, [initialEquipmentCode, equipmentList]);
 
   // Entrées du carnet de santé (table `carnets_sante`) de l'équipement
   // sélectionné — chargées à la demande, pas dans l'état global de App.tsx
@@ -62,16 +76,20 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
 
   // QR code affiché sur la fiche : encode le code équipement (colonne
   // `qr_code` si renseignée manuellement, sinon le code équipement lui-même
-  // — texte brut, pas de lien vers l'app : évite d'avoir à ajouter une
-  // navigation par URL qui n'existe pas encore).
+  // — encodé comme lien profond vers l'app (`?carnet=<code>`), déjà géré au
+  // chargement par App.tsx / HealthRecordsView (voir initialEquipmentCode) :
+  // scanner le QR ouvre directement la fiche de cet équipement.
+  const APP_BASE_URL = 'https://hommebrenard.github.io/maintenance-gmao-/';
+
   useEffect(() => {
     if (!selected) {
       setQrDataUrl(null);
       return;
     }
     const value = selected.qrCode || selected.code;
+    const deepLink = `${APP_BASE_URL}?carnet=${encodeURIComponent(value)}`;
     let cancelled = false;
-    QRCode.toDataURL(value, { width: 96, margin: 1 })
+    QRCode.toDataURL(deepLink, { width: 96, margin: 1 })
       .then(url => {
         if (!cancelled) setQrDataUrl(url);
       })
