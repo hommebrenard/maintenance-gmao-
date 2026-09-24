@@ -17,8 +17,8 @@ interface HealthRecordsViewProps {
   equipmentList: Equipment[];
   workOrders: WorkOrder[];
   currentUserId: string;
-  /** Code équipement à présélectionner (lien profond depuis le QR code de la fiche). */
-  initialEquipmentCode?: string | null;
+  /** Id équipement à présélectionner (lien profond depuis le QR code, format #health-records/<id>). */
+  initialEquipmentId?: string | null;
 }
 
 // Chantier « carnet de santé » (22/09/2026) : vue dédiée listant tous les
@@ -29,21 +29,30 @@ interface HealthRecordsViewProps {
 // Volontairement PAS de section « Synthèse de santé / conformité
 // réglementaire » avec des chiffres inventés (indice de fiabilité, DESP...) :
 // aucune donnée réelle ne les alimente aujourd'hui (voir échange du 22/09).
-export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentCode }) => {
+export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deepLinkNotFound, setDeepLinkNotFound] = useState<string | null>(null);
 
-  // Présélection depuis le lien profond du QR code (?carnet=<code>), une
-  // seule fois, dès que la liste des équipements est disponible.
-  const didApplyDeepLink = useRef(false);
+  // Présélection depuis le lien profond du QR code (#health-records/<id>).
+  // Réappliqué à chaque fois que l'id demandé change (pas seulement au
+  // montage) pour que la navigation directe par URL fonctionne aussi quand
+  // l'app est déjà ouverte (écoute hashchange côté App.tsx). Si l'équipement
+  // n'existe pas ou n'est pas accessible (règles Supabase), on affiche un
+  // message clair au lieu de rediriger silencieusement.
+  const lastAppliedDeepLinkId = useRef<string | null>(null);
   useEffect(() => {
-    if (didApplyDeepLink.current || !initialEquipmentCode || equipmentList.length === 0) return;
-    const match = equipmentList.find(e => e.code === initialEquipmentCode);
+    if (!initialEquipmentId || initialEquipmentId === lastAppliedDeepLinkId.current) return;
+    if (equipmentList.length === 0) return; // liste pas encore chargée, on retente au prochain rendu
+    const match = equipmentList.find(e => e.id === initialEquipmentId);
+    lastAppliedDeepLinkId.current = initialEquipmentId;
     if (match) {
       setSelectedId(match.id);
-      didApplyDeepLink.current = true;
+      setDeepLinkNotFound(null);
+    } else {
+      setDeepLinkNotFound(initialEquipmentId);
     }
-  }, [initialEquipmentCode, equipmentList]);
+  }, [initialEquipmentId, equipmentList]);
 
   // Entrées du carnet de santé (table `carnets_sante`) de l'équipement
   // sélectionné — chargées à la demande, pas dans l'état global de App.tsx
@@ -72,22 +81,23 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     [equipmentList, searchQuery]
   );
 
-  const selected = filteredList.find(e => e.id === selectedId) || filteredList[0];
+  const selected = selectedId
+    ? filteredList.find(e => e.id === selectedId)
+    : deepLinkNotFound
+      ? undefined // lien profond résolu vers un id absent/inaccessible : pas de repli silencieux sur le premier équipement
+      : filteredList[0];
 
-  // QR code affiché sur la fiche : encode le code équipement (colonne
-  // `qr_code` si renseignée manuellement, sinon le code équipement lui-même
-  // — encodé comme lien profond vers l'app (`?carnet=<code>`), déjà géré au
-  // chargement par App.tsx / HealthRecordsView (voir initialEquipmentCode) :
-  // scanner le QR ouvre directement la fiche de cet équipement.
-  const APP_BASE_URL = 'https://hommebrenard.github.io/maintenance-gmao-/';
-
+  // QR code affiché sur la fiche : lien profond en hash vers cette même vue,
+  // par id équipement (même standard que le QR de la fiche Équipement,
+  // consommé par App.tsx via #health-records/<id> — voir initialEquipmentId).
   useEffect(() => {
     if (!selected) {
       setQrDataUrl(null);
       return;
     }
-    const value = selected.qrCode || selected.code;
-    const deepLink = `${APP_BASE_URL}?carnet=${encodeURIComponent(value)}`;
+    const url = new URL(window.location.href);
+    url.hash = `health-records/${encodeURIComponent(selected.id)}`;
+    const deepLink = url.toString();
     let cancelled = false;
     QRCode.toDataURL(deepLink, { width: 300, margin: 2, errorCorrectionLevel: 'M' })
       .then(url => {
@@ -187,7 +197,10 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
           {filteredList.map(eq => (
             <button
               key={eq.id}
-              onClick={() => setSelectedId(eq.id)}
+              onClick={() => {
+                setSelectedId(eq.id);
+                setDeepLinkNotFound(null);
+              }}
               className={`w-full text-left px-3 py-2.5 border-b border-gray-50 hover:bg-gray-50 ${
                 selected?.id === eq.id ? 'bg-emerald-50 border-l-2 border-l-emerald-600' : ''
               }`}
@@ -205,7 +218,15 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
       {/* Fiche */}
       <div className="flex-1 overflow-y-auto p-6">
         {!selected ? (
-          <div className="text-sm text-gray-400">Sélectionnez un équipement.</div>
+          <div className="text-sm text-gray-400">
+            {deepLinkNotFound ? (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-4 max-w-lg">
+                <span className="font-semibold">Équipement introuvable ou non accessible.</span>
+              </div>
+            ) : (
+              'Sélectionnez un équipement.'
+            )}
+          </div>
         ) : (
           <div className="max-w-4xl">
             <div className="flex items-center justify-end gap-2 mb-3" data-pdf-exclude="true">

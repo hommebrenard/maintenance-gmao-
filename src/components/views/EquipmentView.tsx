@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { 
   Plus, 
   Search, 
@@ -79,6 +80,8 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string>('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
@@ -94,6 +97,30 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [description, setDescription] = useState('');
 
   const selectedEquipment = equipmentList.find(e => e.id === selectedId) || equipmentList[0];
+
+  // QR code de la fiche équipement : lien profond en hash (pas de React
+  // Router dans l'app) vers le Carnet de santé de cet équipement, précis par
+  // id. Généré localement via `qrcode` (déjà utilisé par HealthRecordsView) —
+  // remplace l'ancien appel à api.qrserver.com qui encodait un texte
+  // ("GMAO-EQUIPMENT-<code>") ne pointant vers rien.
+  useEffect(() => {
+    if (!isQrModalOpen || !selectedEquipment) return;
+    const url = new URL(window.location.href);
+    url.hash = `health-records/${encodeURIComponent(selectedEquipment.id)}`;
+    const fullUrl = url.toString();
+    setQrUrl(fullUrl);
+    let cancelled = false;
+    QRCode.toDataURL(fullUrl, { width: 300, margin: 2, errorCorrectionLevel: 'M' })
+      .then(dataUrl => {
+        if (!cancelled) setQrDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isQrModalOpen, selectedEquipment?.id]);
 
   // Vrais OT rattachés à l'équipement sélectionné (le compteur `workOrdersCount`
   // de l'équipement n'est pas fiable : il vaut 0 partout, voir App.tsx).
@@ -563,13 +590,15 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
           <div className="bg-white rounded-xl shadow-xl max-w-xs w-full p-6 text-center space-y-4">
             <h3 className="text-lg font-bold text-gray-900">Code QR Équipement</h3>
             <div className="w-48 h-48 mx-auto bg-gray-100 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center p-2">
-              {/* Generated QR Placeholder visualization */}
-              <div className="w-36 h-36 bg-contain bg-center bg-no-repeat" style={{
-                backgroundImage: `url('https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=GMAO-EQUIPMENT-${selectedEquipment.code}')`
-              }} />
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt={`QR code ${selectedEquipment.code}`} className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-xs text-gray-400">Génération…</span>
+              )}
             </div>
             <div className="text-xs font-mono font-bold text-gray-800">{selectedEquipment.code}</div>
-            <p className="text-xs text-gray-500">Scannez ce QR code pour accéder directement à la fiche technique ou signaler une panne.</p>
+            <p className="text-xs text-gray-500">Scannez ce QR code pour ouvrir directement le Carnet de santé de cet équipement.</p>
+            <p className="text-[10px] font-mono text-gray-400 break-all">{qrUrl}</p>
             <button
               onClick={() => setIsQrModalOpen(false)}
               className="w-full py-2 bg-blue-600 text-white font-medium text-sm rounded-lg"
