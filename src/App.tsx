@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { WorkOrdersView } from './components/views/WorkOrdersView';
 import { RequestsView } from './components/views/RequestsView';
@@ -120,18 +120,38 @@ interface AppProps {
 
 export default function App({ session, onSignOut }: AppProps) {
   // Support du lien profond depuis le QR code de la fiche équipement :
-  // ?carnet=<code> ouvre directement l'onglet Carnet de santé sur cet
-  // équipement. Lu une seule fois au chargement.
-  const [initialCarnetCode] = useState<string | null>(() => {
+  // #health-records/<equipmentId> ouvre directement l'onglet Carnet de santé
+  // sur cet équipement. Pas de React Router dans l'app : on lit le hash
+  // directement (au chargement + à chaque changement, pour qu'un lien ouvert
+  // dans un onglet déjà chargé fonctionne aussi).
+  const parseHealthRecordsHash = (hash: string): string | null => {
+    const match = hash.match(/^#health-records\/(.+)$/);
+    if (!match) return null;
     try {
-      return new URLSearchParams(window.location.search).get('carnet');
+      return decodeURIComponent(match[1]);
     } catch {
-      return null;
+      return match[1];
     }
-  });
-  const [currentTab, setCurrentTab] = useState<NavigationItem>(
-    initialCarnetCode ? 'health-records' : 'work-orders'
+  };
+
+  const [deepLinkEquipmentId, setDeepLinkEquipmentId] = useState<string | null>(() =>
+    parseHealthRecordsHash(window.location.hash)
   );
+  const [currentTab, setCurrentTab] = useState<NavigationItem>(
+    deepLinkEquipmentId ? 'health-records' : 'work-orders'
+  );
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const id = parseHealthRecordsHash(window.location.hash);
+      if (id) {
+        setDeepLinkEquipmentId(id);
+        setCurrentTab('health-records');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // App Centralized State with localStorage persistence
  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -893,7 +913,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentCode={initialCarnetCode} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentId={deepLinkEquipmentId} />;
       case 'inventory':
         return (
           <InventoryView
