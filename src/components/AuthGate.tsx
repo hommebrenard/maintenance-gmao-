@@ -11,12 +11,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -36,7 +34,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    setInfoMsg(null);
 
     if (password.length < 6) {
       setErrorMsg('Le mot de passe doit contenir au moins 6 caractères.');
@@ -45,24 +42,16 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
     setSubmitting(true);
     try {
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          if (error.message.toLowerCase().includes('email not confirmed')) {
-            setErrorMsg("Votre email n'a pas encore été confirmé. Vérifiez votre boîte de réception.");
-          } else if (error.message.toLowerCase().includes('invalid login credentials')) {
-            setErrorMsg('Email ou mot de passe incorrect.');
-          } else {
-            setErrorMsg(error.message);
-          }
-        }
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) {
-          setErrorMsg(error.message);
+      // Pas d'inscription publique : les comptes sont créés par le responsable
+      // (Supabase > Authentication > Users). Connexion uniquement.
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          setErrorMsg("Votre email n'a pas encore été confirmé. Contactez votre responsable.");
+        } else if (error.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMsg('Email ou mot de passe incorrect.');
         } else {
-          setInfoMsg('Compte créé. Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.');
-          setMode('login');
+          setErrorMsg(error.message);
         }
       }
     } finally {
@@ -91,7 +80,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
           <div className="flex items-center gap-2 mb-6">
             <span className="text-2xl">🔒</span>
             <h1 className="text-xl font-semibold text-slate-800">
-              {mode === 'login' ? 'Connexion GMAO' : 'Inscription GMAO'}
+              Connexion GMAO
             </h1>
           </div>
 
@@ -113,7 +102,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe</label>
               <input
                 type="password"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -127,11 +116,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
                 {errorMsg}
               </div>
             )}
-            {infoMsg && (
-              <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                {infoMsg}
-              </div>
-            )}
 
             <button
               type="submit"
@@ -139,20 +123,13 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:opacity-90 text-white text-sm font-medium py-2.5 rounded-lg transition-opacity disabled:opacity-60"
             >
               {submitting && <Loader2 className="animate-spin" size={16} />}
-              {mode === 'login' ? 'Se connecter' : "S'inscrire"}
+              Se connecter
             </button>
           </form>
 
-          <button
-            onClick={() => {
-              setMode(mode === 'login' ? 'signup' : 'login');
-              setErrorMsg(null);
-              setInfoMsg(null);
-            }}
-            className="w-full text-center text-sm text-indigo-600 hover:text-indigo-700 mt-4"
-          >
-            {mode === 'login' ? "Pas encore de compte ? S'inscrire →" : 'Déjà un compte ? Se connecter →'}
-          </button>
+          <p className="text-center text-sm text-slate-500 mt-4">
+            Pas de compte ? Contactez votre responsable pour en obtenir un.
+          </p>
         </div>
       </div>
     );
