@@ -77,8 +77,9 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [isLoadingEntries, setIsLoadingEntries] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const [newEventType, setNewEventType] = useState('Maintenance préventive');
+  const [newEventType, setNewEventType] = useState('Ronde');
   const [newDescription, setNewDescription] = useState('');
+  const [descriptionError, setDescriptionError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -175,14 +176,26 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected || !newEventType.trim()) return;
+    if (newEventType === 'Anomalie' && !newDescription.trim()) {
+      setDescriptionError(true);
+      descriptionInputRef.current?.focus();
+      return;
+    }
+    setDescriptionError(false);
     setIsSaving(true);
     try {
       const created = await createHealthRecord(
-        { equipmentId: selected.id, eventType: newEventType.trim(), description: newDescription.trim() },
+        {
+          equipmentId: selected.id,
+          eventType: newEventType.trim(),
+          description: newDescription.trim(),
+          status: newEventType === 'Anomalie' ? 'Ouvert' : 'Terminé',
+        },
         currentUserId
       );
       setEntries(prev => [created, ...prev]);
       setNewDescription('');
+      setNewEventType('Ronde');
       setIsAdding(false);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Erreur d\'enregistrement');
@@ -467,25 +480,51 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               {isAdding && (
                 <form onSubmit={handleAddEntry} data-pdf-exclude="true" className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={newEventType}
-                      onChange={e => setNewEventType(e.target.value)}
-                      className="text-xs border border-gray-200 rounded-md px-2 py-1.5 w-full sm:w-auto"
-                    >
-                      <option>Maintenance préventive</option>
-                      <option>Réparation</option>
-                      <option>Inspection</option>
-                      <option>Contrôle réglementaire</option>
-                      <option>Anomalie</option>
-                    </select>
-                    <input
-                      ref={descriptionInputRef}
-                      type="text"
-                      placeholder="Description..."
-                      value={newDescription}
-                      onChange={e => setNewDescription(e.target.value)}
-                      className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5 w-full sm:w-auto"
-                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setNewEventType('Ronde'); setDescriptionError(false); }}
+                        aria-pressed={newEventType !== 'Anomalie'}
+                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md border ${
+                          newEventType === 'Anomalie'
+                            ? 'text-gray-500 bg-white border-gray-200 hover:bg-gray-50'
+                            : 'text-emerald-700 bg-emerald-50 border-emerald-600'
+                        }`}
+                      >
+                        ✓ RAS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewEventType('Anomalie')}
+                        aria-pressed={newEventType === 'Anomalie'}
+                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md border ${
+                          newEventType === 'Anomalie'
+                            ? 'text-red-700 bg-red-50 border-red-600'
+                            : 'text-gray-500 bg-white border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        ⚠ Anomalie
+                      </button>
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        ref={descriptionInputRef}
+                        type="text"
+                        placeholder={newEventType === 'Anomalie' ? 'Décrire l\u2019anomalie...' : 'Note (optionnel)...'}
+                        value={newDescription}
+                        onChange={e => {
+                          setNewDescription(e.target.value);
+                          if (descriptionError) setDescriptionError(false);
+                        }}
+                        aria-invalid={descriptionError}
+                        className={`w-full text-xs border rounded-md px-2 py-1.5 ${
+                          descriptionError ? 'border-red-500 focus:outline-red-500' : 'border-gray-200'
+                        }`}
+                      />
+                      {descriptionError && (
+                        <p className="text-[11px] text-red-600 mt-1">Merci de décrire l'anomalie avant d'enregistrer.</p>
+                      )}
+                    </div>
                     <button
                       type="submit"
                       disabled={isSaving}
@@ -510,7 +549,12 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   {entries.map(entry => (
                     <li key={entry.id} className="px-3 py-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-gray-900">{entry.eventType}</span>
+                        <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                          {entry.eventType === 'Anomalie' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" aria-hidden="true" />
+                          )}
+                          {entry.eventType}
+                        </span>
                         <span className="text-gray-400">{formatIsoDate(entry.eventDate)}</span>
                       </div>
                       {entry.description && <div className="text-gray-600 mt-0.5">{entry.description}</div>}
