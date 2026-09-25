@@ -31,6 +31,11 @@ interface SidebarProps {
   onOpenHelp: () => void;
   unreadMessagesCount?: number;
   pendingRequestsCount?: number;
+  /** Tiroir mobile (étape 2 bis, 25/09) : masqué par défaut sous `md`, ouvert
+   *  via le bouton ☰ du bandeau (App.tsx). Ignoré à partir de `md` (≥768px),
+   *  où le menu reste affiché en permanence comme avant. */
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,11 +43,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   onOpenHelp,
   unreadMessagesCount = 0,
-  pendingRequestsCount = 0
+  pendingRequestsCount = 0,
+  isOpen,
+  onClose
 }) => {
   const [libraryOpen, setLibraryOpen] = useState(true);
 
   const isActive = (tab: NavigationItem) => currentTab === tab;
+
+  // Choisir un onglet referme le tiroir sur mobile (inutile à partir de `md`,
+  // où le menu est de toute façon toujours visible).
+  const selectAndClose = (tab: NavigationItem) => {
+    onSelectTab(tab);
+    onClose();
+  };
 
   const getItemClass = (tab: NavigationItem) => {
     return `w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors duration-150 ${
@@ -53,13 +67,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col justify-between h-screen sticky top-0 shrink-0 select-none text-gray-800">
+    <>
+      {/* Fond d'estompage mobile : visible seulement quand le tiroir est ouvert, sous md */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 h-screen bg-white border-r border-gray-200 flex flex-col justify-between select-none text-gray-800 shadow-xl transform transition-transform duration-200 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:translate-x-0 md:sticky md:top-0 md:inset-auto md:z-auto md:shrink-0 md:shadow-none`}
+      >
       <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-thin scrollbar-thumb-gray-200">
         
         {/* Top Header - Configuration Center */}
         <div className="mb-4 pb-2 border-b border-gray-100">
           <button 
-            onClick={() => onSelectTab('work-orders')}
+            onClick={() => selectAndClose('work-orders')}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 rounded-lg text-left"
           >
             <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center text-white shadow-xs">
@@ -79,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <nav className="space-y-0.5">
             <button
-              onClick={() => onSelectTab('work-orders')}
+              onClick={() => selectAndClose('work-orders')}
               className={getItemClass('work-orders')}
             >
               <div className="flex items-center gap-3">
@@ -89,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('requests')}
+              onClick={() => selectAndClose('requests')}
               className={getItemClass('requests')}
             >
               <div className="flex items-center gap-3">
@@ -104,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('messages')}
+              onClick={() => selectAndClose('messages')}
               className={getItemClass('messages')}
             >
               <div className="flex items-center gap-3">
@@ -127,7 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <nav className="space-y-0.5">
             <button
-              onClick={() => onSelectTab('reports')}
+              onClick={() => selectAndClose('reports')}
               className={getItemClass('reports')}
             >
               <div className="flex items-center gap-3">
@@ -137,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('automations')}
+              onClick={() => selectAndClose('automations')}
               className={getItemClass('automations')}
             >
               <div className="flex items-center gap-3">
@@ -147,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('meters')}
+              onClick={() => selectAndClose('meters')}
               className={getItemClass('meters')}
             >
               <div className="flex items-center gap-3">
@@ -165,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <nav className="space-y-0.5">
             <button
-              onClick={() => onSelectTab('equipment')}
+              onClick={() => selectAndClose('equipment')}
               className={getItemClass('equipment')}
             >
               <div className="flex items-center gap-3">
@@ -175,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('health-records')}
+              onClick={() => selectAndClose('health-records')}
               className={getItemClass('health-records')}
             >
               <div className="flex items-center gap-3">
@@ -185,7 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('inventory')}
+              onClick={() => selectAndClose('inventory')}
               className={getItemClass('inventory')}
             >
               <div className="flex items-center gap-3">
@@ -195,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('preventive')}
+              onClick={() => selectAndClose('preventive')}
               className={getItemClass('preventive')}
             >
               <div className="flex items-center gap-3">
@@ -224,7 +250,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {libraryOpen && (
                 <div className="ml-4 pl-3 border-l border-gray-200 mt-1 space-y-0.5">
                   <button
-                    onClick={() => onSelectTab('templates')}
+                    onClick={() => selectAndClose('templates')}
                     className={getItemClass('templates')}
                   >
                     <div className="flex items-center gap-2.5">
@@ -234,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
 
                   <button
-                    onClick={() => onSelectTab('procedures')}
+                    onClick={() => selectAndClose('procedures')}
                     className={getItemClass('procedures')}
                   >
                     <div className="flex items-center gap-2.5">
@@ -247,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <button
-              onClick={() => onSelectTab('tags')}
+              onClick={() => selectAndClose('tags')}
               className={getItemClass('tags')}
             >
               <div className="flex items-center gap-3">
@@ -257,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('locations')}
+              onClick={() => selectAndClose('locations')}
               className={getItemClass('locations')}
             >
               <div className="flex items-center gap-3">
@@ -267,7 +293,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('users')}
+              onClick={() => selectAndClose('users')}
               className={getItemClass('users')}
             >
               <div className="flex items-center gap-3">
@@ -277,7 +303,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('suppliers')}
+              onClick={() => selectAndClose('suppliers')}
               className={getItemClass('suppliers')}
             >
               <div className="flex items-center gap-3">
@@ -287,7 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectTab('clients')}
+              onClick={() => selectAndClose('clients')}
               className={getItemClass('clients')}
             >
               <div className="flex items-center gap-3">
@@ -322,6 +348,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
