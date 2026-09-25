@@ -8,6 +8,7 @@ import { AutomationsView } from './components/views/AutomationsView';
 import { MetersView } from './components/views/MetersView';
 import { EquipmentView } from './components/views/EquipmentView';
 import { HealthRecordsView } from './components/views/HealthRecordsView';
+import { parseHealthRecordsHash } from './utils/deepLink';
 import { InventoryView } from './components/views/InventoryView';
 import { PreventiveView } from './components/views/PreventiveView';
 import { TemplatesView } from './components/views/TemplatesView';
@@ -119,33 +120,26 @@ interface AppProps {
 }
 
 export default function App({ session, onSignOut }: AppProps) {
-  // Support du lien profond depuis le QR code de la fiche équipement :
-  // #health-records/<equipmentId> ouvre directement l'onglet Carnet de santé
-  // sur cet équipement. Pas de React Router dans l'app : on lit le hash
-  // directement (au chargement + à chaque changement, pour qu'un lien ouvert
-  // dans un onglet déjà chargé fonctionne aussi).
-  const parseHealthRecordsHash = (hash: string): string | null => {
-    const match = hash.match(/^#health-records\/(.+)$/);
-    if (!match) return null;
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
-    }
-  };
-
-  const [deepLinkEquipmentId, setDeepLinkEquipmentId] = useState<string | null>(() =>
-    parseHealthRecordsHash(window.location.hash)
-  );
+  // Support du lien profond depuis le QR code (format et règles : utils/deepLink.ts) :
+  //   #health-records/<equipmentId>                  -> fiche du Carnet de santé
+  //   #health-records/<equipmentId>/nouvelle-entree  -> idem, formulaire d'ajout déplié
+  // Pas de React Router dans l'app : on lit le hash au chargement et à chaque
+  // changement (un lien ouvert dans un onglet déjà chargé fonctionne aussi).
+  // `key` change à chaque lien reçu pour que la vue le réapplique même si
+  // l'équipement demandé est le même.
+  const [deepLink, setDeepLink] = useState<{ equipmentId: string; openAddForm: boolean; key: number } | null>(() => {
+    const parsed = parseHealthRecordsHash(window.location.hash);
+    return parsed ? { ...parsed, key: 0 } : null;
+  });
   const [currentTab, setCurrentTab] = useState<NavigationItem>(
-    deepLinkEquipmentId ? 'health-records' : 'work-orders'
+    deepLink ? 'health-records' : 'work-orders'
   );
 
   useEffect(() => {
     const handleHashChange = () => {
-      const id = parseHealthRecordsHash(window.location.hash);
-      if (id) {
-        setDeepLinkEquipmentId(id);
+      const parsed = parseHealthRecordsHash(window.location.hash);
+      if (parsed) {
+        setDeepLink(prev => ({ ...parsed, key: (prev?.key ?? 0) + 1 }));
         setCurrentTab('health-records');
       }
     };
@@ -913,7 +907,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentId={deepLinkEquipmentId} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
       case 'inventory':
         return (
           <InventoryView
