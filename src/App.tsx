@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { WorkOrdersView } from './components/views/WorkOrdersView';
 import { RequestsView } from './components/views/RequestsView';
@@ -134,6 +135,10 @@ export default function App({ session, onSignOut }: AppProps) {
   const [currentTab, setCurrentTab] = useState<NavigationItem>(
     deepLink ? 'health-records' : 'work-orders'
   );
+  // Tiroir mobile du menu (étape 2 bis, 25/09) : masqué par défaut sous `md`,
+  // ouvert via le bouton ☰ ci-dessous ; ignoré à partir de `md` (menu toujours
+  // visible, comme avant).
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -991,9 +996,19 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     <div className="print:bg-white flex flex-col h-screen bg-gray-100 font-sans text-gray-900 overflow-hidden antialiased">
       {/* Bandeau utilisateur connecté */}
       <div className="print:hidden flex items-center justify-between bg-white border-b border-gray-200 px-4 py-1.5 text-xs shrink-0">
-        <span className="text-gray-500">
-          Connecté en tant que : <span className="font-medium text-gray-700">{session.user.email}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            aria-label="Ouvrir le menu"
+            className="md:hidden p-1 -ml-1 text-gray-600 hover:text-gray-900"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="text-gray-500">
+            Connecté en tant que : <span className="font-medium text-gray-700">{session.user.email}</span>
+          </span>
+        </div>
         <button
           type="button"
           onClick={onSignOut}
@@ -1011,6 +1026,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           onSelectTab={setCurrentTab}
           onOpenHelp={() => setIsHelpModalOpen(true)}
           pendingRequestsCount={requests.filter(r => r.status === 'En attente').length}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
         />
         </div>
 
