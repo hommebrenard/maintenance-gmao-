@@ -19,6 +19,10 @@ interface HealthRecordsViewProps {
   currentUserId: string;
   /** Id équipement à présélectionner (lien profond depuis le QR code, format #health-records/<id>). */
   initialEquipmentId?: string | null;
+  /** Lien #health-records/<id>/nouvelle-entree : déplie le formulaire d'ajout et place le curseur dessus. */
+  initialOpenAddForm?: boolean;
+  /** Change à chaque lien profond reçu, pour réappliquer même un lien identique au précédent. */
+  deepLinkKey?: number;
 }
 
 // Chantier « carnet de santé » (22/09/2026) : vue dédiée listant tous les
@@ -29,7 +33,7 @@ interface HealthRecordsViewProps {
 // Volontairement PAS de section « Synthèse de santé / conformité
 // réglementaire » avec des chiffres inventés (indice de fiabilité, DESP...) :
 // aucune donnée réelle ne les alimente aujourd'hui (voir échange du 22/09).
-export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentId }) => {
+export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentId, initialOpenAddForm, deepLinkKey }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deepLinkNotFound, setDeepLinkNotFound] = useState<string | null>(null);
@@ -40,19 +44,26 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   // l'app est déjà ouverte (écoute hashchange côté App.tsx). Si l'équipement
   // n'existe pas ou n'est pas accessible (règles Supabase), on affiche un
   // message clair au lieu de rediriger silencieusement.
-  const lastAppliedDeepLinkId = useRef<string | null>(null);
+  const lastAppliedDeepLink = useRef<string | null>(null);
+  const pendingFormFocus = useRef(false);
   useEffect(() => {
-    if (!initialEquipmentId || initialEquipmentId === lastAppliedDeepLinkId.current) return;
+    if (!initialEquipmentId) return;
+    const signature = `${initialEquipmentId}|${initialOpenAddForm ? 1 : 0}|${deepLinkKey ?? 0}`;
+    if (signature === lastAppliedDeepLink.current) return;
     if (equipmentList.length === 0) return; // liste pas encore chargée, on retente au prochain rendu
     const match = equipmentList.find(e => e.id === initialEquipmentId);
-    lastAppliedDeepLinkId.current = initialEquipmentId;
+    lastAppliedDeepLink.current = signature;
     if (match) {
       setSelectedId(match.id);
       setDeepLinkNotFound(null);
+      if (initialOpenAddForm) {
+        pendingFormFocus.current = true;
+        setIsAdding(true);
+      }
     } else {
       setDeepLinkNotFound(initialEquipmentId);
     }
-  }, [initialEquipmentId, equipmentList]);
+  }, [initialEquipmentId, initialOpenAddForm, deepLinkKey, equipmentList]);
 
   // Entrées du carnet de santé (table `carnets_sante`) de l'équipement
   // sélectionné — chargées à la demande, pas dans l'état global de App.tsx
@@ -67,6 +78,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const printableRef = useRef<HTMLDivElement>(null);
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const filteredList = useMemo(
@@ -110,6 +122,17 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
       cancelled = true;
     };
   }, [selected?.id, selected?.qrCode, selected?.code]);
+
+  // Lien « nouvelle-entree » : une fois le formulaire affiché, on le fait défiler
+  // dans la vue et on place le curseur sur la description (saisie immédiate).
+  useEffect(() => {
+    if (!isAdding || !pendingFormFocus.current) return;
+    const input = descriptionInputRef.current;
+    if (!input) return;
+    pendingFormFocus.current = false;
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus({ preventScroll: true });
+  }, [isAdding, selected?.id, isLoadingEntries]);
 
   const linkedWorkOrders = useMemo(
     () => (selected ? getLinkedWorkOrders(selected, workOrders) : []),
@@ -427,6 +450,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                       <option>Anomalie</option>
                     </select>
                     <input
+                      ref={descriptionInputRef}
                       type="text"
                       placeholder="Description..."
                       value={newDescription}
