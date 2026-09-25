@@ -37,6 +37,10 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deepLinkNotFound, setDeepLinkNotFound] = useState<string | null>(null);
+  // Disposition mobile (étape 2, 25/09) : un seul panneau visible à la fois
+  // sur petit écran (liste OU fiche), avec bouton retour ; à partir de `md`
+  // (≥768px) les deux restent côte à côte comme avant, cet état est ignoré.
+  const [mobileShowFiche, setMobileShowFiche] = useState(false);
 
   // Présélection depuis le lien profond du QR code (#health-records/<id>).
   // Réappliqué à chaque fois que l'id demandé change (pas seulement au
@@ -53,6 +57,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     if (equipmentList.length === 0) return; // liste pas encore chargée, on retente au prochain rendu
     const match = equipmentList.find(e => e.id === initialEquipmentId);
     lastAppliedDeepLink.current = signature;
+    setMobileShowFiche(true);
     if (match) {
       setSelectedId(match.id);
       setDeepLinkNotFound(null);
@@ -99,16 +104,21 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
       ? undefined // lien profond résolu vers un id absent/inaccessible : pas de repli silencieux sur le premier équipement
       : filteredList[0];
 
-  // QR code affiché sur la fiche : lien profond en hash vers cette même vue,
-  // par id équipement (même standard que le QR de la fiche Équipement,
-  // consommé par App.tsx via #health-records/<id> — voir initialEquipmentId).
+  // QR code affiché sur la fiche : lien profond en hash vers le formulaire de
+  // saisie de cette même fiche (même standard que le QR de la fiche Équipement,
+  // consommé par App.tsx via #health-records/<id>/nouvelle-entree — voir
+  // initialEquipmentId/initialOpenAddForm). Décision du 25/09 : un seul QR,
+  // qui ouvre directement le formulaire ; le lien de lecture simple
+  // (#health-records/<id> sans le segment) reste géré par le code mais n'est
+  // plus imprimé sur aucun QR — la fiche en lecture reste accessible en
+  // cliquant sur l'équipement depuis la liste.
   useEffect(() => {
     if (!selected) {
       setQrDataUrl(null);
       return;
     }
     const url = new URL(window.location.href);
-    url.hash = `health-records/${encodeURIComponent(selected.id)}`;
+    url.hash = `health-records/${encodeURIComponent(selected.id)}/nouvelle-entree`;
     const deepLink = url.toString();
     let cancelled = false;
     QRCode.toDataURL(deepLink, { width: 300, margin: 2, errorCorrectionLevel: 'M' })
@@ -198,8 +208,13 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
 
   return (
     <div className="flex h-full">
-      {/* Liste */}
-      <div className="print:hidden w-80 shrink-0 border-r border-gray-200 bg-white flex flex-col">
+      {/* Liste — pleine largeur sur mobile, masquée quand la fiche est affichée ;
+          disposition côte à côte inchangée à partir de md (≥768px). */}
+      <div
+        className={`print:hidden w-full md:w-80 md:shrink-0 border-r border-gray-200 bg-white flex-col ${
+          mobileShowFiche ? 'hidden md:flex' : 'flex'
+        }`}
+      >
         <div className="p-3 border-b border-gray-100">
           <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-2">
             <HeartPulse className="w-4 h-4 text-emerald-600" />
@@ -223,6 +238,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               onClick={() => {
                 setSelectedId(eq.id);
                 setDeepLinkNotFound(null);
+                setMobileShowFiche(true);
               }}
               className={`w-full text-left px-3 py-2.5 border-b border-gray-50 hover:bg-gray-50 ${
                 selected?.id === eq.id ? 'bg-emerald-50 border-l-2 border-l-emerald-600' : ''
@@ -238,8 +254,11 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
         </div>
       </div>
 
-      {/* Fiche */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Fiche — visible sur mobile seulement quand un équipement est ouvert
+          (bouton retour ci-dessous), toujours visible à partir de md. */}
+      <div
+        className={`flex-1 overflow-y-auto p-4 md:p-6 ${mobileShowFiche ? 'block' : 'hidden md:block'}`}
+      >
         {!selected ? (
           <div className="text-sm text-gray-400">
             {deepLinkNotFound ? (
@@ -252,27 +271,35 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
           </div>
         ) : (
           <div className="max-w-4xl">
-            <div className="flex items-center justify-end gap-2 mb-3" data-pdf-exclude="true">
-              {pdfError && <span className="text-xs text-red-600 mr-auto">{pdfError}</span>}
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3" data-pdf-exclude="true">
               <button
-                onClick={() => window.print()}
-                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                onClick={() => setMobileShowFiche(false)}
+                className="print:hidden md:hidden flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
               >
-                <Printer className="w-3.5 h-3.5" /> Imprimer
+                ← Liste des équipements
               </button>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={isExportingPdf}
-                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
-              >
-                {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                Télécharger PDF
-              </button>
+              <div className="flex items-center gap-2 flex-wrap ml-auto">
+                {pdfError && <span className="text-xs text-red-600">{pdfError}</span>}
+                <button
+                  onClick={() => window.print()}
+                  className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimer
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={isExportingPdf}
+                  className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+                >
+                  {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  Télécharger PDF
+                </button>
+              </div>
             </div>
 
             <div ref={printableRef} className="bg-white">
               {/* En-tête fiche d'identité, façon passeport machine */}
-              <div className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex items-center justify-between gap-4 mb-4">
+              <div className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="bg-gray-800 text-white font-mono px-2 py-0.5 rounded text-xs font-bold">{selected.code}</span>
@@ -315,7 +342,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2.5">
                   1. Synthèse de santé & Conformité réglementaire
                 </h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="border border-gray-200 rounded-lg p-3 bg-white">
                     <span className="text-[10px] font-semibold text-gray-500 block">Indice de Fiabilité Globale</span>
                     <span className="text-sm font-bold text-gray-400">Non renseigné</span>
@@ -345,7 +372,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 </div>
               </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               {/* Photo */}
               <div className="col-span-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
                 {selected.photoUrl ? (
@@ -394,28 +421,30 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               {linkedWorkOrders.length === 0 ? (
                 <div className="p-4 text-xs text-gray-400">Aucune intervention enregistrée pour cet équipement.</div>
               ) : (
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="text-left px-3 py-1.5 font-medium">OT</th>
-                      <th className="text-left px-3 py-1.5 font-medium">Intitulé</th>
-                      <th className="text-left px-3 py-1.5 font-medium">Échéance</th>
-                      <th className="text-left px-3 py-1.5 font-medium">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {linkedWorkOrders.map(wo => (
-                      <tr key={wo.id}>
-                        <td className="px-3 py-1.5 font-medium text-gray-900">{wo.code}</td>
-                        <td className="px-3 py-1.5 text-gray-700">{wo.title}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{formatIsoDate(wo.dueDate)}</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`px-1.5 py-0.5 rounded-full font-semibold ${getWorkOrderStatusBadgeClass(wo.status)}`}>{wo.status}</span>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 font-medium">OT</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Intitulé</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Échéance</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Statut</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {linkedWorkOrders.map(wo => (
+                        <tr key={wo.id}>
+                          <td className="px-3 py-1.5 font-medium text-gray-900">{wo.code}</td>
+                          <td className="px-3 py-1.5 text-gray-700">{wo.title}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{formatIsoDate(wo.dueDate)}</td>
+                          <td className="px-3 py-1.5">
+                            <span className={`px-1.5 py-0.5 rounded-full font-semibold ${getWorkOrderStatusBadgeClass(wo.status)}`}>{wo.status}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -437,11 +466,11 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
 
               {isAdding && (
                 <form onSubmit={handleAddEntry} data-pdf-exclude="true" className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <select
                       value={newEventType}
                       onChange={e => setNewEventType(e.target.value)}
-                      className="text-xs border border-gray-200 rounded-md px-2 py-1.5"
+                      className="text-xs border border-gray-200 rounded-md px-2 py-1.5 w-full sm:w-auto"
                     >
                       <option>Maintenance préventive</option>
                       <option>Réparation</option>
@@ -455,12 +484,12 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                       placeholder="Description..."
                       value={newDescription}
                       onChange={e => setNewDescription(e.target.value)}
-                      className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5"
+                      className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5 w-full sm:w-auto"
                     />
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50"
+                      className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 w-full sm:w-auto"
                     >
                       {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Enregistrer'}
                     </button>
@@ -492,7 +521,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
             </div>
 
               {/* Visas */}
-              <div className="mt-4 pt-4 border-t-2 border-gray-200 grid grid-cols-2 gap-6 text-[11px]">
+              <div className="mt-4 pt-4 border-t-2 border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 text-[11px]">
                 <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                   <span className="font-bold text-gray-700 block mb-1">Visa Responsable Maintenance :</span>
                   <p className="text-gray-500 text-[10px] italic">Signature & cachet :</p>

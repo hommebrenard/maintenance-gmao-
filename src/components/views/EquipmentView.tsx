@@ -99,14 +99,17 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const selectedEquipment = equipmentList.find(e => e.id === selectedId) || equipmentList[0];
 
   // QR code de la fiche équipement : lien profond en hash (pas de React
-  // Router dans l'app) vers le Carnet de santé de cet équipement, précis par
-  // id. Généré localement via `qrcode` (déjà utilisé par HealthRecordsView) —
-  // remplace l'ancien appel à api.qrserver.com qui encodait un texte
-  // ("GMAO-EQUIPMENT-<code>") ne pointant vers rien.
+  // Router dans l'app) vers le formulaire de saisie du Carnet de santé de cet
+  // équipement, précis par id. Généré localement via `qrcode` (déjà utilisé
+  // par HealthRecordsView) — remplace l'ancien appel à api.qrserver.com qui
+  // encodait un texte ("GMAO-EQUIPMENT-<code>") ne pointant vers rien.
+  // Décision du 25/09 : un seul QR, qui ouvre directement le formulaire
+  // (segment /nouvelle-entree) ; la fiche en lecture simple reste accessible
+  // en cliquant sur l'équipement depuis la liste du Carnet de santé.
   useEffect(() => {
     if (!isQrModalOpen || !selectedEquipment) return;
     const url = new URL(window.location.href);
-    url.hash = `health-records/${encodeURIComponent(selectedEquipment.id)}`;
+    url.hash = `health-records/${encodeURIComponent(selectedEquipment.id)}/nouvelle-entree`;
     const fullUrl = url.toString();
     setQrUrl(fullUrl);
     let cancelled = false;
