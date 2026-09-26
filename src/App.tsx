@@ -528,6 +528,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     if (updated.dueDate !== undefined) corePatch.dueDate = updated.dueDate;
     if (updated.equipmentId !== undefined) corePatch.equipmentId = updated.equipmentId;
     if (updated.planner !== undefined) corePatch.planner = updated.planner;
+    // Ajouté le 26/09/2026 — oubli initial : `assignedToId` (vrai uuid technicien)
+    // n'était pas dans cette liste blanche, donc jamais envoyé à Supabase malgré
+    // le nouveau sélecteur dans WorkOrdersView (mise à jour locale seulement,
+    // silencieusement perdue au rechargement — bug corrigé ici).
+    if (updated.assignedToId !== undefined) corePatch.assignedToId = updated.assignedToId;
     if (updated.tasks !== undefined) corePatch.tasks = updated.tasks;
     if (updated.intervenantsLogs !== undefined) corePatch.intervenantsLogs = updated.intervenantsLogs;
     if (updated.visa !== undefined) corePatch.visa = updated.visa;
