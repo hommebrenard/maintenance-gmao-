@@ -35,7 +35,7 @@ import {
   ShieldAlert,
   XCircle
 } from 'lucide-react';
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate } from '../../types';
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile } from '../../types';
 import { ImportModal } from './ImportModal';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
@@ -47,6 +47,11 @@ interface WorkOrdersViewProps {
   workOrders: WorkOrder[];
   equipmentList: Equipment[];
   locations?: LocationItem[];
+  // Ajouté le 26/09/2026 — sélecteur d'assignation réel de technicien.
+  // `profiles` = tous les profils (techniciens + responsables), pour peupler
+  // le sélecteur et savoir si l'utilisateur connecté est manager.
+  profiles?: Profile[];
+  currentUserId?: string;
   onAddWorkOrder: (wo: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateStatus: (id: string, status: WorkOrderStatus) => void;
   onDeleteWorkOrder?: (id: string) => void;
@@ -280,6 +285,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   workOrders,
   equipmentList,
   locations = [],
+  profiles = [],
+  currentUserId,
   onAddWorkOrder,
   onUpdateStatus,
   onDeleteWorkOrder,
@@ -287,6 +294,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   onBulkImportWorkOrders,
     onClearAllWorkOrders,
 }) => {
+  // Ajouté le 26/09/2026 — technicien(s) disponibles pour le sélecteur
+  // d'assignation, et rôle de l'utilisateur connecté (seul un manager peut
+  // assigner/réassigner un OT ; un technicien voit son assignation en lecture
+  // seule). `currentProfile` peut être introuvable un court instant pendant
+  // le chargement initial des profils : isManager reste alors `false` (le
+  // formulaire s'affiche en lecture seule, jamais en écriture par défaut).
+  const technicians = useMemo(() => profiles.filter(p => p.role === 'technicien'), [profiles]);
+  const currentProfile = useMemo(() => profiles.find(p => p.id === currentUserId), [profiles, currentUserId]);
+  const isManager = currentProfile?.role === 'responsable';
   const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload'>('todo');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string | null>(null);
@@ -383,6 +399,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
   const [location, setLocation] = useState('');
   const [assignee, setAssignee] = useState('');
+  // Ajouté le 26/09/2026 — vrai uuid technicien (colonne assigned_to), distinct
+  // de `assignee` (texte, jamais réellement écrit en base). '' = non assigné.
+  const [assignedToId, setAssignedToId] = useState<string>('');
   const [planner, setPlanner] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
@@ -613,6 +632,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setSelectedEquipmentId('');
     setLocation('');
     setAssignee('');
+    setAssignedToId('');
     setPlanner('');
     const todayFormatted = formatLocalDate(new Date());
     setDueDate(todayFormatted);
@@ -701,6 +721,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setEquipmentCodeInput(getEquipmentCodeOnly(wo, equipmentList));
     setLocation(wo.location || '');
     setAssignee(wo.assignee);
+    setAssignedToId(wo.assignedToId ?? '');
     setPlanner(wo.planner || '');
     setDueDate(wo.dueDate);
     setStartDate(wo.startDate || wo.dueDate || '');
@@ -729,6 +750,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       equipmentName: eq ? `${eq.name} (${eq.code})` : undefined,
       location: location || (eq ? eq.location : 'Atelier Principal'),
       assignee,
+      assignedToId: assignedToId || null,
       dueDate,
       startDate: startDate || dueDate,
       startTime: startTime || '',
@@ -761,6 +783,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       equipmentCode: finalEqCode,
       
       assignee,
+      assignedToId: assignedToId || null,
       planner,
       dueDate,
       startDate,
@@ -2285,13 +2308,23 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Assigné à</label>
-                  <input
-                    type="text"
-                    value={assignee}
-                    onChange={(e) => setAssignee(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Assigné à (technicien)</label>
+                  {isManager ? (
+                    <select
+                      value={assignedToId}
+                      onChange={(e) => setAssignedToId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Non assigné</option>
+                      {technicians.map(t => (
+                        <option key={t.id} value={t.id}>{t.fullName}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full px-3 py-2 text-sm border border-gray-200 bg-gray-50 rounded-lg text-gray-500">
+                      {technicians.find(t => t.id === assignedToId)?.fullName || 'Non assigné'}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2524,13 +2557,23 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
                                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Assigné à / Responsable</label>
-                    <input
-                      type="text"
-                      value={assignee}
-                      onChange={(e) => setAssignee(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Assigné à (technicien)</label>
+                    {isManager ? (
+                      <select
+                        value={assignedToId}
+                        onChange={(e) => setAssignedToId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                      >
+                        <option value="">Non assigné</option>
+                        {technicians.map(t => (
+                          <option key={t.id} value={t.id}>{t.fullName}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="w-full px-3 py-2 text-sm border border-gray-200 bg-gray-50 rounded-lg text-gray-500">
+                        {technicians.find(t => t.id === assignedToId)?.fullName || 'Non assigné'}
+                      </div>
+                    )}
                   </div>
 
                   <div>
