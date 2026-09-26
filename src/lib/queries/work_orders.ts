@@ -72,6 +72,7 @@ interface WorkOrderRow extends WorkOrderExtrasRow, WorkOrderIdentityRow {
   due_date: string;
   created_at: string;
   updated_at: string;
+  assigned_to: string | null;
   equipment: { code: string; name: string } | null;
   locations: { name: string } | null;
   profiles: { full_name: string } | null; // via hint !assigned_to
@@ -132,6 +133,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     equipmentName: row.equipment?.name,
     location: row.locations?.name ?? '',
     assignee: row.profiles?.full_name ?? '',
+    assignedToId: row.assigned_to ?? null,
     planner: row.planner ?? undefined,
     dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
         createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
@@ -275,6 +277,7 @@ interface WorkOrderWritableRow extends WorkOrderIdentityWrite {
   location_id?: string;
   planner?: string;
   due_date?: string;
+  assigned_to?: string | null;
 }
 
 function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
@@ -289,6 +292,9 @@ function workOrderToRow(wo: Partial<WorkOrder>): WorkOrderWritableRow {
   if (wo.locationId !== undefined) row.location_id = wo.locationId;
   if (wo.planner !== undefined) row.planner = wo.planner;
   if (wo.dueDate !== undefined) row.due_date = wo.dueDate;
+  // undefined = champ non touché par ce patch ; null = désassignation explicite
+  // (voir même convention que visa : NULL réel vs absence du champ).
+  if (wo.assignedToId !== undefined) row.assigned_to = wo.assignedToId;
   // Code d'intervention / n° de plan / entité (depuis le 21/09/2026) : écrits
   // aussi par l'import en masse ; les valeurs vides ne sont pas écrites.
   return { ...row, ...identityToRow(wo) };
