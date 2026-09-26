@@ -62,8 +62,10 @@ import {
   ClientItem,
   WorkOrderStatus,
   OperationalStatus,
-  WorkOrderPatchCandidate
+  WorkOrderPatchCandidate,
+  Profile
 } from './types';
+import { fetchProfiles } from './lib/queries/profiles';
 
 // Helper for localStorage state persistence
 function getInitialState<T extends { id: string }>(key: string, demoData: T[]): T[] {
@@ -166,6 +168,10 @@ const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(true);
   );
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
 const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
+  // Ajouté le 26/09/2026 — profils réels (table `profiles`), pour le
+  // sélecteur d'assignation d'OT et savoir si l'utilisateur connecté est
+  // manager (rôle 'responsable') ou technicien.
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>(() =>
     getInitialState('gmao_inventory', INITIAL_INVENTORY)
   );
@@ -296,6 +302,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     .catch(err => console.error('Erreur chargement équipements:', err))
     .finally(() => setIsLoadingEquipment(false));
 }, []);
+
+  React.useEffect(() => {
+    fetchProfiles()
+      .then(setProfiles)
+      .catch(err => console.error('Erreur chargement profils:', err));
+  }, []);
 
   React.useEffect(() => {
     fetchLocations()
@@ -848,6 +860,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             workOrders={workOrders}
             equipmentList={equipmentList}
             locations={locations}
+            profiles={profiles}
+            currentUserId={session.user.id}
             onAddWorkOrder={handleCreateWorkOrder}
             onUpdateStatus={handleUpdateWOStatus}
             onDeleteWorkOrder={handleDeleteWorkOrder}
@@ -981,6 +995,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             workOrders={workOrders}
             equipmentList={equipmentList}
             locations={locations}
+            profiles={profiles}
+            currentUserId={session.user.id}
             onAddWorkOrder={handleCreateWorkOrder}
             onUpdateStatus={handleUpdateWOStatus}
             onDeleteWorkOrder={handleDeleteWorkOrder}
