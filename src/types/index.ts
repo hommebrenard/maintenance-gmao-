@@ -54,6 +54,15 @@ export interface GammeItem {
   equipmentDescription?: string;
 }
 
+// Ajouté le 26/09/2026 — profil réel (table `profiles`), pour le sélecteur
+// d'assignation d'OT (distinct de `UserItem`, écran « Centre de configuration »
+// non relié à Supabase). `role` tel qu'en base : 'technicien' | 'responsable'.
+export interface Profile {
+  id: string;
+  fullName: string;
+  role: string;
+}
+
 export interface IntervenantLog {
   id: string;
   name: string;
@@ -74,6 +83,11 @@ export interface WorkOrder {
   location?: string;
   locationId?: string;
   assignee?: string;
+  /** uuid réel vers `profiles.id` (colonne `assigned_to`, celle que lit la RLS
+   * `wo_update_assigned_or_manager`). Distinct de `assignee` (nom affiché,
+   * dérivé de ce même champ via jointure) et de `planner` (texte libre importé,
+   * sans lien avec un compte). null = non assigné. Ajouté le 26/09/2026. */
+  assignedToId?: string | null;
   dueDate: string;
   createdAt: string;
   updatedAt: string;
