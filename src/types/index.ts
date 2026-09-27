@@ -63,6 +63,17 @@ export interface Profile {
   role: string;
 }
 
+// Ajouté le 27/09/2026 — table `techniciens` (chantier B, distinct de
+// `profiles`) : un technicien de terrain réel (nom, zone Nord/Sud), pas
+// forcément rattaché à un compte de connexion (`profileId` nullable).
+export interface Technicien {
+  id: string;
+  nom: string;
+  zone: 'Nord' | 'Sud';
+  actif: boolean;
+  profileId?: string | null;
+}
+
 export interface IntervenantLog {
   id: string;
   name: string;
