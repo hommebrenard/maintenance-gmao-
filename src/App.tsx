@@ -17,6 +17,7 @@ import { ProceduresView } from './components/views/ProceduresView';
 import { TagsView } from './components/views/TagsView';
 import { LocationsView } from './components/views/LocationsView';
 import { UsersView } from './components/views/UsersView';
+import { TechniciensView } from './components/views/TechniciensView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
@@ -1016,6 +1017,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           <UsersView
             users={users}
             onAddUser={handleAddUser}
+          />
+        );
+      case 'techniciens':
+        return (
+          <TechniciensView
             techniciens={techniciens}
             onAddTechnicien={handleAddTechnicien}
             onUpdateTechnicien={handleUpdateTechnicien}
