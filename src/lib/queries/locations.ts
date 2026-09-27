@@ -22,6 +22,7 @@ interface LocationRow {
   code: string | null;
   type: string | null;
   parent_id: string | null;
+  zone: string | null;
 }
 
 function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
@@ -31,6 +32,7 @@ function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
     code: row.code ?? undefined,
     type: (row.type as LocationItem['type']) || 'Site',
     equipmentCount,
+    zone: (row.zone as LocationItem['zone']) ?? null,
   };
 }
 
@@ -38,7 +40,7 @@ function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
 export async function fetchLocations(): Promise<LocationItem[]> {
   const { data, error } = await supabase
     .from('locations')
-    .select('id, name, code, type, parent_id')
+    .select('id, name, code, type, parent_id, zone')
     .order('name');
 
   if (error) throw error;
@@ -50,25 +52,29 @@ export async function createLocation(loc: { name: string; code?: string; type?: 
   const { data, error } = await supabase
     .from('locations')
     .insert({ name: loc.name, code: loc.code || null, type: loc.type || 'Site' })
-    .select('id, name, code, type, parent_id')
+    .select('id, name, code, type, parent_id, zone')
     .single();
 
   if (error) throw error;
   return rowToLocation(data as LocationRow);
 }
 
-/** Met à jour un site/emplacement existant. */
-export async function updateLocation(id: string, patch: { name?: string; code?: string; type?: string }): Promise<LocationItem> {
-  const row: { name?: string; code?: string | null; type?: string } = {};
+/** Met à jour un site/emplacement existant (dont la zone Nord/Sud). */
+export async function updateLocation(
+  id: string,
+  patch: { name?: string; code?: string; type?: string; zone?: 'Nord' | 'Sud' | null }
+): Promise<LocationItem> {
+  const row: { name?: string; code?: string | null; type?: string; zone?: string | null } = {};
   if (patch.name !== undefined) row.name = patch.name;
   if (patch.code !== undefined) row.code = patch.code || null;
   if (patch.type !== undefined) row.type = patch.type;
+  if (patch.zone !== undefined) row.zone = patch.zone;
 
   const { data, error } = await supabase
     .from('locations')
     .update(row)
     .eq('id', id)
-    .select('id, name, code, type, parent_id')
+    .select('id, name, code, type, parent_id, zone')
     .single();
 
   if (error) throw error;
