@@ -210,6 +210,21 @@ function getWorkOrderIntervenants(wo?: WorkOrder | null): IntervenantLog[] {
   });
 }
 
+// Ajouté le 26/09/2026 — Chantier A : affichage cohérent « qui a fait le
+// travail ». Priorité au(x) nom(s) réel(s) saisi(s) dans les intervenants
+// (ex. "MOHA") plutôt qu'au compte technicien générique assigné (ex.
+// "technicien.test"), qui ne reflète que le compte de connexion, pas la
+// personne physique. Retombe sur `assignee` (compte réel via assigned_to)
+// puis `planner` (texte importé) si aucun intervenant n'est renseigné.
+function getDisplayResponsible(wo?: WorkOrder | null): string {
+  const names = getWorkOrderIntervenants(wo)
+    .map((log) => log.name?.trim())
+    .filter((name): name is string => !!name);
+  const uniqueNames = Array.from(new Set(names));
+  if (uniqueNames.length > 0) return uniqueNames.join(' / ');
+  return wo?.assignee || wo?.planner || '—';
+}
+
 function computeDurationMinutes(startDateStr?: string, startTimeStr?: string, endDateStr?: string, endTimeStr?: string): number {
   if (!startTimeStr || !endTimeStr) return 0;
   
@@ -1020,8 +1035,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 <span class="value">${selectedWorkOrder.location || selectedWorkOrder.entity || 'Site Principal'}</span>
               </div>
               <div class="info-block" style="margin-top: 6px;">
-                <span class="label">Planificateur / Assigné à</span>
-                <span class="value">${selectedWorkOrder.assignee || selectedWorkOrder.planner || 'Technicien'}</span>
+                <span class="label">Intervenant / Compte technique</span>
+                <span class="value">${getDisplayResponsible(selectedWorkOrder)}</span>
               </div>
               <div class="info-block" style="margin-top: 6px;">
                 <span class="label">Date d'échéance</span>
@@ -2851,8 +2866,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.location || '—'}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500 block font-medium">Assigné à / Planificateur:</span>
-                      <span className="font-semibold text-gray-800 block mt-0.5">{selectedWorkOrder.assignee || selectedWorkOrder.planner || '—'}</span>
+                      <span className="text-gray-500 block font-medium">Intervenant / Compte technique:</span>
+                      <span className="font-semibold text-gray-800 block mt-0.5">{getDisplayResponsible(selectedWorkOrder)}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block font-medium">Date d'échéance:</span>
