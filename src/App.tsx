@@ -857,6 +857,20 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     });
   };
 
+  // Ajouté le 27/09/2026 — affectation d'un site à une zone Nord/Sud (chantier
+  // B, gérée depuis l'écran Techniciens plutôt que Emplacements, à la demande
+  // de l'utilisateur), pour le futur filtrage des techniciens par zone dans
+  // le formulaire OT.
+  const handleUpdateLocationZone = (id: string, zone: 'Nord' | 'Sud') => {
+    const previous = locations;
+    setLocations(prev => prev.map(l => (l.id === id ? { ...l, zone } : l)));
+    updateLocation(id, { zone }).catch(err => {
+      console.error('Erreur affectation de zone au site:', err);
+      setLocations(previous);
+      alert("La zone n'a pas pu être enregistrée. Vérifie ta connexion ou tes droits.");
+    });
+  };
+
   const handleAddUser = (user: Omit<UserItem, 'id'>) => {
     setUsers(prev => [...prev, { ...user, id: `usr-${Date.now()}` }]);
   };
@@ -1027,6 +1041,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onUpdateTechnicien={handleUpdateTechnicien}
             profiles={profiles}
             currentUserId={session.user.id}
+            locations={locations}
+            onUpdateLocationZone={handleUpdateLocationZone}
           />
         );
       case 'suppliers':
