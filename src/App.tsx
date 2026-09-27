@@ -63,9 +63,11 @@ import {
   WorkOrderStatus,
   OperationalStatus,
   WorkOrderPatchCandidate,
-  Profile
+  Profile,
+  Technicien
 } from './types';
 import { fetchProfiles } from './lib/queries/profiles';
+import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
 
 // Helper for localStorage state persistence
 function getInitialState<T extends { id: string }>(key: string, demoData: T[]): T[] {
@@ -172,6 +174,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // sélecteur d'assignation d'OT et savoir si l'utilisateur connecté est
   // manager (rôle 'responsable') ou technicien.
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Ajouté le 27/09/2026 — techniciens réels (table `techniciens`, chantier B),
+  // distincts de `profiles` : peuple l'onglet Techniciens et, à venir, le
+  // sélecteur d'intervenant du formulaire OT.
+  const [techniciens, setTechniciens] = useState<Technicien[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>(() =>
     getInitialState('gmao_inventory', INITIAL_INVENTORY)
   );
@@ -307,6 +313,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     fetchProfiles()
       .then(setProfiles)
       .catch(err => console.error('Erreur chargement profils:', err));
+  }, []);
+
+  React.useEffect(() => {
+    fetchTechniciens()
+      .then(setTechniciens)
+      .catch(err => console.error('Erreur chargement techniciens:', err));
   }, []);
 
   React.useEffect(() => {
@@ -848,6 +860,32 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setUsers(prev => [...prev, { ...user, id: `usr-${Date.now()}` }]);
   };
 
+  // Ajouté le 27/09/2026 — chantier B (onglet Techniciens réel). La RLS bloque
+  // déjà les non-managers côté base ; en cas d'erreur (droits, réseau) on
+  // annule l'ajout/la modification optimiste et on prévient l'utilisateur,
+  // même logique que pour les sites/emplacements plus haut.
+  const handleAddTechnicien = (t: { nom: string; zone: 'Nord' | 'Sud' }) => {
+    createTechnicien(t)
+      .then(created => setTechniciens(prev => [...prev, created]))
+      .catch(err => {
+        console.error('Erreur création technicien:', err);
+        alert("La création n'a pas pu être enregistrée dans Supabase. Vérifie ta connexion ou tes droits.");
+      });
+  };
+
+  const handleUpdateTechnicien = (
+    id: string,
+    patch: Partial<{ nom: string; zone: 'Nord' | 'Sud'; actif: boolean }>
+  ) => {
+    const previous = techniciens;
+    setTechniciens(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
+    updateTechnicien(id, patch).catch(err => {
+      console.error('Erreur modification technicien:', err);
+      setTechniciens(previous);
+      alert("La modification n'a pas pu être enregistrée dans Supabase. Vérifie ta connexion ou tes droits.");
+    });
+  };
+
   const handleAddSupplier = (supplier: Omit<SupplierItem, 'id'>) => {
     setSuppliers(prev => [...prev, { ...supplier, id: `sup-${Date.now()}` }]);
   };
@@ -978,6 +1016,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           <UsersView
             users={users}
             onAddUser={handleAddUser}
+            techniciens={techniciens}
+            onAddTechnicien={handleAddTechnicien}
+            onUpdateTechnicien={handleUpdateTechnicien}
+            profiles={profiles}
+            currentUserId={session.user.id}
           />
         );
       case 'suppliers':
