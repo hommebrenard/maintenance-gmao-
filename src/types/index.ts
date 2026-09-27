@@ -281,6 +281,9 @@ export interface LocationItem {
   parentLocation?: string;
   type: 'Site' | 'Bâtiment' | 'Zone' | 'Atelier';
   equipmentCount: number;
+  // Ajouté le 27/09/2026 — zone Nord/Sud du site, pour suggérer les bons
+  // techniciens dans le formulaire OT. Nullable : sites pas encore affectés.
+  zone?: 'Nord' | 'Sud' | null;
 }
 
 export interface UserItem {
