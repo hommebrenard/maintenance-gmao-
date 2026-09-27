@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Wrench, X } from 'lucide-react';
-import { Technicien, Profile } from '../../types';
+import { Technicien, Profile, LocationItem } from '../../types';
 
 // Ajouté le 27/09/2026 — chantier B. D'abord logé comme 4e onglet de
 // « Utilisateurs et équipes », puis sorti dans sa propre entrée de menu à la
@@ -12,6 +12,11 @@ interface TechniciensViewProps {
   onUpdateTechnicien: (id: string, patch: Partial<{ nom: string; zone: 'Nord' | 'Sud'; actif: boolean }>) => void;
   profiles?: Profile[];
   currentUserId?: string;
+  // Ajouté le 27/09/2026 — affectation des sites à une zone Nord/Sud, gérée
+  // ici (et non dans l'écran Emplacements) à la demande de l'utilisateur,
+  // pour préparer le filtrage des techniciens par zone dans le formulaire OT.
+  locations?: LocationItem[];
+  onUpdateLocationZone?: (id: string, zone: 'Nord' | 'Sud') => void;
 }
 
 export const TechniciensView: React.FC<TechniciensViewProps> = ({
@@ -20,6 +25,8 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
   onUpdateTechnicien,
   profiles = [],
   currentUserId,
+  locations = [],
+  onUpdateLocationZone,
 }) => {
   // Seul un manager (rôle 'responsable') peut créer/modifier un technicien —
   // réservé comme test en attendant un rôle admin dédié (décision du 27/09).
@@ -130,6 +137,58 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="max-w-6xl mx-auto mt-8">
+          <h2 className="text-sm font-bold text-gray-700 uppercase mb-1">Sites par zone</h2>
+          <p className="text-xs text-gray-500 mb-3">
+            Sert à proposer automatiquement les bons techniciens selon le site d'un OT.
+          </p>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 font-semibold uppercase">
+                <tr>
+                  <th className="px-5 py-3.5">Site</th>
+                  <th className="px-5 py-3.5">Zone</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {locations.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-5 py-8 text-center text-gray-400">
+                      Aucun site pour l'instant.
+                    </td>
+                  </tr>
+                ) : (
+                  locations.map(loc => (
+                    <tr key={loc.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-3.5 font-medium text-gray-900">{loc.name}</td>
+                      <td className="px-5 py-3.5">
+                        {isManager ? (
+                          <select
+                            value={loc.zone ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === 'Nord' || value === 'Sud') {
+                                onUpdateLocationZone?.(loc.id, value);
+                              }
+                            }}
+                            className="px-2 py-1 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="" disabled>Non défini</option>
+                            <option value="Nord">Nord</option>
+                            <option value="Sud">Sud</option>
+                          </select>
+                        ) : (
+                          <span className="text-gray-700">{loc.zone ?? 'Non défini'}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
