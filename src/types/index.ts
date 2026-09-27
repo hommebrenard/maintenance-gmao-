@@ -14,6 +14,7 @@ export type NavigationItem =
   | 'tags'
   | 'locations'
   | 'users'
+  | 'techniciens'
   | 'suppliers'
   | 'clients';
 
