@@ -16,6 +16,7 @@ import {
   MapPin, 
   Users, 
   Truck, 
+  Wrench, 
   Building2, 
   HelpCircle, 
   ChevronDown, 
@@ -299,6 +300,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-3">
                 <Users className={`w-4 h-4 ${isActive('users') ? 'text-blue-600' : 'text-gray-500'}`} />
                 <span>Utilisateurs et équipes</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => selectAndClose('techniciens')}
+              className={getItemClass('techniciens')}
+            >
+              <div className="flex items-center gap-3">
+                <Wrench className={`w-4 h-4 ${isActive('techniciens') ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span>Techniciens</span>
               </div>
             </button>
 
