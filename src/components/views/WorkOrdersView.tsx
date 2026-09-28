@@ -35,7 +35,7 @@ import {
   ShieldAlert,
   XCircle
 } from 'lucide-react';
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile } from '../../types';
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
@@ -52,6 +52,10 @@ interface WorkOrdersViewProps {
   // le sélecteur et savoir si l'utilisateur connecté est manager.
   profiles?: Profile[];
   currentUserId?: string;
+  // Ajouté le 27/09/2026 — sélecteur d'intervenant réel dans le formulaire OT,
+  // à la place du texte libre. Suggéré (pas filtré strictement) par zone du
+  // site de l'OT quand ce site a une zone renseignée.
+  techniciens?: Technicien[];
   onAddWorkOrder: (wo: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateStatus: (id: string, status: WorkOrderStatus) => void;
   onDeleteWorkOrder?: (id: string) => void;
@@ -186,6 +190,26 @@ function formatDateLabel(dateStr?: string): string {
   return dateStr;
 }
 
+function getSiteZone(locationName: string, locations: LocationItem[]): 'Nord' | 'Sud' | undefined {
+  const loc = locations.find(l => l.name === locationName);
+  return loc?.zone ?? undefined;
+}
+
+// Suggestion (pas filtrage strict) : les techniciens de la zone du site
+// remontent en premier, mais tous les techniciens actifs restent choisissables
+// — un site sans zone renseignée, ou un cas exceptionnel, ne doit pas bloquer
+// l'assignation.
+function sortTechniciensBySiteZone(techniciens: Technicien[], siteZone?: 'Nord' | 'Sud'): Technicien[] {
+  const actifs = techniciens.filter(t => t.actif);
+  if (!siteZone) return [...actifs].sort((a, b) => a.nom.localeCompare(b.nom));
+  return [...actifs].sort((a, b) => {
+    const aMatch = a.zone === siteZone ? 0 : 1;
+    const bMatch = b.zone === siteZone ? 0 : 1;
+    if (aMatch !== bMatch) return aMatch - bMatch;
+    return a.nom.localeCompare(b.nom);
+  });
+}
+
 function getWorkOrderIntervenants(wo?: WorkOrder | null): IntervenantLog[] {
   const durMins = computeDurationMinutes(
     wo?.startDate || wo?.dueDate,
@@ -302,6 +326,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   locations = [],
   profiles = [],
   currentUserId,
+  techniciens = [],
   onAddWorkOrder,
   onUpdateStatus,
   onDeleteWorkOrder,
@@ -436,6 +461,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     { id: '1', name: '', timeSpent: '00:00' }
   ]);
 
+  // Ajouté le 27/09/2026 — sélecteur d'intervenant : techniciens actifs
+  // triés en mettant en avant ceux de la zone du site sélectionné (`location`
+  // partagé création/édition), sans exclure les autres.
+  const sortedTechniciensForSite = useMemo(
+    () => sortTechniciensBySiteZone(techniciens, getSiteZone(location, locations)),
+    [techniciens, location, locations]
+  );
+
   useEffect(() => {
     const durMins = computeDurationMinutes(startDate, startTime, endDate, endTime);
     if (durMins > 0) {
@@ -464,6 +497,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
   const handleUpdateIntervenantRow = (id: string, field: 'name' | 'timeSpent', val: string) => {
     setIntervenantsLogs(prev => prev.map(item => item.id === id ? { ...item, [field]: val } : item));
+  };
+
+  // Ajouté le 27/09/2026 — sélection d'un technicien réel : recopie son nom
+  // (affiché ensuite partout où intervenantsLogs est lu, fiche/impression/
+  // export) et garde technicienId pour un futur usage structuré.
+  const handleSelectIntervenantTechnicien = (id: string, technicienId: string) => {
+    const tech = techniciens.find(t => t.id === technicienId);
+    setIntervenantsLogs(prev => prev.map(item =>
+      item.id === id
+        ? { ...item, technicienId: technicienId || undefined, name: tech ? tech.nom : item.name }
+        : item
+    ));
   };
 
   const handleRemoveIntervenantRow = (id: string) => {
@@ -2377,13 +2422,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   {intervenantsLogs.map((inter, idx) => (
                     <div key={inter.id || idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
                       <span className="text-xs font-bold text-slate-500 w-5 text-center">{idx + 1}</span>
-                      <input
-                        type="text"
-                        placeholder="Nom de l'intervenant"
-                        value={inter.name}
-                        onChange={(e) => handleUpdateIntervenantRow(inter.id, 'name', e.target.value)}
-                        className="flex-1 text-xs px-2 py-1 border border-slate-300 rounded font-semibold"
-                      />
+                      <select
+                        value={inter.technicienId || ''}
+                        onChange={(e) => handleSelectIntervenantTechnicien(inter.id, e.target.value)}
+                        className="flex-1 text-xs px-2 py-1 border border-slate-300 rounded font-semibold bg-white"
+                      >
+                        <option value="">
+                          {inter.name ? inter.name : 'Sélectionner un technicien...'}
+                        </option>
+                        {sortedTechniciensForSite.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.nom} ({t.zone})
+                          </option>
+                        ))}
+                      </select>
                       <input
                         type="text"
                         placeholder="00:45"
@@ -2634,13 +2686,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     {intervenantsLogs.map((inter, idx) => (
                       <div key={inter.id || idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
                         <span className="text-xs font-bold text-slate-500 w-5 text-center">{idx + 1}</span>
-                        <input
-                          type="text"
-                          placeholder="Nom de l'intervenant (ex: AMARA OMAR)"
-                          value={inter.name}
-                          onChange={(e) => handleUpdateIntervenantRow(inter.id, 'name', e.target.value)}
-                          className="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 font-semibold"
-                        />
+                        <select
+                          value={inter.technicienId || ''}
+                          onChange={(e) => handleSelectIntervenantTechnicien(inter.id, e.target.value)}
+                          className="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 font-semibold bg-white"
+                        >
+                          <option value="">
+                            {inter.name ? inter.name : 'Sélectionner un technicien...'}
+                          </option>
+                          {sortedTechniciensForSite.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.nom} ({t.zone})
+                            </option>
+                          ))}
+                        </select>
                         <div className="flex items-center gap-1 w-28">
                           <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <input
