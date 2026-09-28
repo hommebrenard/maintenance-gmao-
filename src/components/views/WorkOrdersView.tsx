@@ -884,7 +884,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       `"${wo.priority}"`,
       `"${wo.type}"`,
       `"${(wo.equipmentName || '').replace(/"/g, '""')}"`,
-      `"${wo.assignee || wo.planner || ''}"`,
+      `"${getDisplayResponsible(wo)}"`,
       `"${wo.dueDate}"`,
       `"${(wo.location || '').replace(/"/g, '""')}"`,
       `"${wo.createdAt}"`
@@ -1245,7 +1245,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
   // Workload Helper Grouping
     const assigneesMap = filteredOrders.reduce((acc, wo) => {
-    const name = wo.assignee || wo.planner || 'Non assigné';
+    const name = getDisplayResponsible(wo) || 'Non assigné';
     if (!acc[name]) acc[name] = [];
     acc[name].push(wo);
     return acc;
@@ -1668,7 +1668,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
                           <div className="flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-gray-400" />
-                            <span>{order.assignee || order.planner || 'Non spécifié'}</span>
+                            <span className="truncate">{getDisplayResponsible(order)}</span>
                           </div>
                           <div className={`flex items-center gap-1 ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
                             <Clock className="w-3.5 h-3.5" />
@@ -1763,7 +1763,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       </td>
                     )}
                     {visibleColumns.assignee && (
-                      <td className="px-4 py-3 text-gray-600">{order.assignee || order.planner || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600">{getDisplayResponsible(order)}</td>
                     )}
                     {visibleColumns.dueDate && (
                       <td className={`px-4 py-3 text-xs ${order.dueDate < todayStr && order.status !== 'Terminé' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
@@ -3788,7 +3788,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <h4 className="text-base font-bold text-gray-900">{wo.title}</h4>
                         <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-4">
                           <span>Équipement: <strong className="text-gray-800">{getEquipmentLabel(wo, equipmentList)}</strong></span>
-                          <span>Assigné à: <strong className="text-gray-800">{wo.assignee || wo.planner || '—'}</strong></span>
+                          <span>Assigné à: <strong className="text-gray-800">{getDisplayResponsible(wo)}</strong></span>
                         </div>
                       </div>
 
