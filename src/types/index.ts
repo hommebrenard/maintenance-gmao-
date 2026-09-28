@@ -79,6 +79,9 @@ export interface IntervenantLog {
   id: string;
   name: string;
   timeSpent?: string;
+  // Ajouté le 27/09/2026 — chantier B, sélecteur d'intervenant réel. Nullable :
+  // les entrées historiques (texte libre) n'ont pas de technicien rattaché.
+  technicienId?: string;
 }
 
 export interface WorkOrder {
