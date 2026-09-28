@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Wrench, X } from 'lucide-react';
+import { Wrench, X, Search } from 'lucide-react';
 import { Technicien, Profile, LocationItem } from '../../types';
 
 // Ajouté le 27/09/2026 — chantier B. D'abord logé comme 4e onglet de
@@ -68,6 +68,31 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
   const handleToggleActif = (t: Technicien) => {
     onUpdateTechnicien(t.id, { actif: !t.actif });
   };
+
+  // Ajouté le 28/09/2026 — recherche + filtres rapides sur les sites, pour
+  // que la section « Sites par zone » reste lisible au-delà des 4 sites
+  // actuels (jusqu'à ~27 sites prévus à terme).
+  const [siteSearch, setSiteSearch] = useState('');
+  const [siteZoneFilter, setSiteZoneFilter] = useState<'all' | 'Nord' | 'Sud' | 'none'>('all');
+
+  const siteCounts = useMemo(() => ({
+    all: locations.length,
+    Nord: locations.filter(l => l.zone === 'Nord').length,
+    Sud: locations.filter(l => l.zone === 'Sud').length,
+    none: locations.filter(l => !l.zone).length,
+  }), [locations]);
+
+  const filteredLocations = useMemo(() => {
+    const query = siteSearch.trim().toLowerCase();
+    return locations.filter(loc => {
+      const matchesSearch = !query || loc.name.toLowerCase().includes(query);
+      const matchesZone =
+        siteZoneFilter === 'all' ? true :
+        siteZoneFilter === 'none' ? !loc.zone :
+        loc.zone === siteZoneFilter;
+      return matchesSearch && matchesZone;
+    });
+  }, [locations, siteSearch, siteZoneFilter]);
 
   return (
     <div className="flex-1 bg-white min-h-screen flex flex-col">
@@ -144,6 +169,41 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
           <p className="text-xs text-gray-500 mb-3">
             Sert à proposer automatiquement les bons techniciens selon le site d'un OT.
           </p>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Rechercher un site..."
+                value={siteSearch}
+                onChange={(e) => setSiteSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {([
+                { id: 'all', label: 'Tous' },
+                { id: 'Nord', label: 'Nord' },
+                { id: 'Sud', label: 'Sud' },
+                { id: 'none', label: 'Non défini' },
+              ] as const).map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setSiteZoneFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    siteZoneFilter === f.id
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {f.label} ({siteCounts[f.id]})
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 font-semibold uppercase">
@@ -153,14 +213,14 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {locations.length === 0 ? (
+                {filteredLocations.length === 0 ? (
                   <tr>
                     <td colSpan={2} className="px-5 py-8 text-center text-gray-400">
-                      Aucun site pour l'instant.
+                      {locations.length === 0 ? "Aucun site pour l'instant." : 'Aucun site ne correspond à ce filtre.'}
                     </td>
                   </tr>
                 ) : (
-                  locations.map(loc => (
+                  filteredLocations.map(loc => (
                     <tr key={loc.id} className="hover:bg-gray-50">
                       <td className="px-5 py-3.5 font-medium text-gray-900">{loc.name}</td>
                       <td className="px-5 py-3.5">
