@@ -19,7 +19,7 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
   return (
     <>
               {/* En-tête fiche d'identité, façon passeport machine */}
-              <div className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div data-pdf-block className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex flex-col @lg:flex-row @lg:items-center justify-between gap-4 mb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="bg-gray-800 text-white font-mono px-2 py-0.5 rounded text-xs font-bold">{selected.code}</span>
@@ -58,11 +58,11 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                   (pas de formule de fiabilité, pas de suivi réglementaire en
                   base) : affichées honnêtement "Non renseigné", à reprendre
                   dans une prochaine étape plutôt que d'inventer un chiffre. */}
-              <div className="mb-4">
+              <div data-pdf-block className="mb-4">
                 <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2.5">
                   1. Synthèse de santé & Conformité réglementaire
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 @xl:grid-cols-3 gap-3">
                   <div className="border border-gray-200 rounded-lg p-3 bg-white">
                     <span className="text-[10px] font-semibold text-gray-500 block">Indice de Fiabilité Globale</span>
                     <span className="text-sm font-bold text-gray-400">Non renseigné</span>
@@ -92,9 +92,9 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                 </div>
               </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div data-pdf-block className="grid grid-cols-1 @xl:grid-cols-3 gap-4 mb-4">
               {/* Photo */}
-              <div className="col-span-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
+              <div className="@xl:col-span-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
                 {selected.photoUrl ? (
                   <img src={selected.photoUrl} alt={selected.name} className="w-full h-full object-cover" />
                 ) : (
@@ -106,7 +106,7 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
               </div>
 
               {/* Identité */}
-              <div className="col-span-2 border border-gray-200 rounded-lg divide-y divide-gray-100 text-sm">
+              <div className="@xl:col-span-2 border border-gray-200 rounded-lg divide-y divide-gray-100 text-sm">
                 {[
                   ['Catégorie', selected.category],
                   ['Constructeur', selected.manufacturer],
