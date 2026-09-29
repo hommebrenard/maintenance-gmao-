@@ -89,14 +89,28 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   // d'impression (index.css) déroule toute la fiche au lieu de la rogner à un
   // écran. Couvre le bouton « Imprimer » comme Ctrl+P.
   useEffect(() => {
-    const onBefore = () => document.body.classList.add('printing-carnet');
-    const onAfter = () => document.body.classList.remove('printing-carnet');
+    // @page ne peut pas être ciblé par une classe : la règle est injectée le temps de
+    // l'impression. Marge 0 = le navigateur n'imprime plus date, titre ni adresse web
+    // en haut/bas de page ; la marge visuelle est reposée par le CSS (index.css).
+    const onBefore = () => {
+      document.body.classList.add('printing-carnet');
+      if (!document.getElementById('carnet-print-page')) {
+        const style = document.createElement('style');
+        style.id = 'carnet-print-page';
+        style.textContent = '@page { size: A4 portrait; margin: 0; }';
+        document.head.appendChild(style);
+      }
+    };
+    const onAfter = () => {
+      document.body.classList.remove('printing-carnet');
+      document.getElementById('carnet-print-page')?.remove();
+    };
     window.addEventListener('beforeprint', onBefore);
     window.addEventListener('afterprint', onAfter);
     return () => {
       window.removeEventListener('beforeprint', onBefore);
       window.removeEventListener('afterprint', onAfter);
-      document.body.classList.remove('printing-carnet');
+      onAfter();
     };
   }, []);
 
@@ -224,7 +238,9 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     try {
       const result = await exportElementToPdf(
         printableRef.current,
-        `Carnet_Sante_${selected.code}_${new Date().toISOString().slice(0, 10)}`
+        `Carnet_Sante_${selected.code}_${new Date().toISOString().slice(0, 10)}`,
+        // Largeur fixe : même mise en page (et même PDF) sur téléphone que sur PC.
+        { captureWidth: 900 }
       );
       if (!result.success) setPdfError(result.error || 'Erreur lors de la génération du PDF');
     } finally {
@@ -297,7 +313,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
           </div>
         ) : (
           <div className="max-w-4xl">
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-3" data-pdf-exclude="true">
+            <div className="print:hidden flex items-center justify-between flex-wrap gap-2 mb-3" data-pdf-exclude="true">
               <button
                 onClick={() => setMobileShowFiche(false)}
                 className="print:hidden md:hidden flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
