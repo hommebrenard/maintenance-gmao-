@@ -43,6 +43,19 @@
     background-color: #ffffff !important;
   }
 
+  /* Carnet de santé (29/09/2026) : la coquille de l'app (h-screen + overflow-hidden,
+     <main> en overflow-y-auto) rogne l'impression à la hauteur d'un écran, donc à
+     une seule page. La classe est posée sur <body> par HealthRecordsView pendant
+     l'impression uniquement (événements beforeprint/afterprint) : les autres
+     écrans imprimables ne sont pas touchés. */
+  body.printing-carnet .h-screen,
+  body.printing-carnet .overflow-hidden,
+  body.printing-carnet .overflow-y-auto {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   /* Force background colors to print */
   * {
     -webkit-print-color-adjust: exact !important;
