@@ -56,6 +56,14 @@
     overflow: visible !important;
   }
 
+  /* Marge de page reposée par le contenu (l'@page est à 0 pour supprimer l'en-tête et le
+     pied de page du navigateur) ; clone = répétée sur chaque page. */
+  body.printing-carnet .carnet-print-root {
+    padding: 10mm !important;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
   /* Force background colors to print */
   * {
     -webkit-print-color-adjust: exact !important;
