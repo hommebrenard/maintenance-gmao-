@@ -12,7 +12,7 @@ export const LinkedWorkOrdersTable: React.FC<LinkedWorkOrdersTableProps> = ({ li
   return (
     <>
             {/* Registre des interventions (réel) */}
-            <div className="border border-gray-200 rounded-lg">
+            <div data-pdf-block className="border border-gray-200 rounded-lg">
               <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5">
                 <ClipboardList className="w-4 h-4 text-gray-500" />
                 <h3 className="text-sm font-bold text-gray-900">2. Registre chronologique d'entretien & dépannages ({linkedWorkOrders.length})</h3>
@@ -32,10 +32,10 @@ export const LinkedWorkOrdersTable: React.FC<LinkedWorkOrdersTableProps> = ({ li
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {linkedWorkOrders.map(wo => (
-                        <tr key={wo.id}>
-                          <td className="px-3 py-1.5 font-medium text-gray-900">{wo.code}</td>
+                        <tr key={wo.id} data-pdf-block>
+                          <td className="px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap">{wo.code}</td>
                           <td className="px-3 py-1.5 text-gray-700">{wo.title}</td>
-                          <td className="px-3 py-1.5 text-gray-500">{formatIsoDate(wo.dueDate)}</td>
+                          <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{formatIsoDate(wo.dueDate)}</td>
                           <td className="px-3 py-1.5">
                             <span className={`px-1.5 py-0.5 rounded-full font-semibold ${getWorkOrderStatusBadgeClass(wo.status)}`}>{wo.status}</span>
                           </td>
