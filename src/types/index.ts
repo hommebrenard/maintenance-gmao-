@@ -223,6 +223,70 @@ export interface HealthRecordEntry {
   updatedAt?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Carnet de santé enrichi (chantier AI Studio, Phase 3 — 29/09/2026).
+// Correspond aux tables `equipment_documents`, `maintenance_schedules` et
+// `equipment_parts` (schéma relu en base le 29/09). Champ optionnel = colonne
+// nullable en base : « non renseigné », jamais une valeur inventée.
+// ---------------------------------------------------------------------------
+
+export type EquipmentDocumentCategory = 'manual' | 'certificate' | 'diagram' | 'report' | 'procedure';
+
+export interface EquipmentDocument {
+  id: string;
+  equipmentId: string;
+  name: string;
+  category?: EquipmentDocumentCategory;
+  /** Chemin dans le bucket privé `equipment-files` (equipment/{equipmentId}/...). */
+  storagePath: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type MaintenanceFrequencyType = 'hours' | 'calendar';
+export type MaintenanceScheduleStatus = 'ok' | 'due_soon' | 'overdue';
+
+export interface MaintenanceSchedule {
+  id: string;
+  equipmentId: string;
+  title: string;
+  frequencyLabel?: string;
+  frequencyType?: MaintenanceFrequencyType;
+  intervalHours?: number;
+  intervalMonths?: number;
+  /** Dates au format YYYY-MM-DD (colonnes `date`). */
+  lastDoneDate?: string;
+  nextDueDate?: string;
+  legalRequirement: boolean;
+  /** id du profil assigné (FK profiles). */
+  assignedTo?: string;
+  /** Recalculé à la lecture depuis nextDueDate quand elle existe (voir utils/maintenanceSchedule.ts). */
+  status?: MaintenanceScheduleStatus;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface EquipmentPart {
+  id: string;
+  equipmentId: string;
+  code?: string;
+  name: string;
+  reference?: string;
+  manufacturer?: string;
+  stock: number;
+  minStock: number;
+  unit?: string;
+  unitPrice?: number;
+  location?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface InventoryItem {
   id: string;
   code: string;
