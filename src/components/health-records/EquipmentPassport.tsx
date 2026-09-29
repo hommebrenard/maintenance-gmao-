@@ -1,13 +1,20 @@
 import React from 'react';
 import { QrCode, Image as ImageIcon } from 'lucide-react';
-import type { Equipment, WorkOrder } from '../../types';
+import type { Equipment, WorkOrder, MaintenanceSchedule, HealthRecordEntry } from '../../types';
 import { getOperationalStatusBadgeClass, formatIsoDate } from '../../utils/equipmentDisplay';
 import { NotSet } from './NotSet';
+import type { ExtraState } from './useEquipmentExtras';
+import {
+  pickNextDue, scheduleStatusBadgeClass, scheduleStatusLabel, summarizeAnomalies, summarizeLegalControl,
+} from '../../utils/healthRecordDisplay';
 
 interface EquipmentPassportProps {
   selected: Equipment;
   qrDataUrl: string | null;
   lastCompletedWorkOrder: WorkOrder | null;
+  schedules: ExtraState<MaintenanceSchedule>;
+  entries: HealthRecordEntry[];
+  entriesLoading: boolean;
 }
 
 /**
@@ -15,7 +22,13 @@ interface EquipmentPassportProps {
  * santé & conformité, photo et tableau d'identité. Extrait tel quel de
  * HealthRecordsView (Phase 4a, 29/09/2026) — aucun changement de rendu.
  */
-export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder }) => {
+export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder, schedules, entries, entriesLoading }) => {
+  const legal = summarizeLegalControl(schedules.items);
+  const nextDue = pickNextDue(schedules.items);
+  const anomalies = summarizeAnomalies(entries);
+  const pending = (loading: boolean, error: string | null) =>
+    loading ? <span className="text-sm font-bold text-gray-400">Chargement...</span>
+    : error ? <span className="text-sm font-bold text-red-500">Indisponible</span> : null;
   return (
     <>
               {/* En-tête fiche d'identité, façon passeport machine */}
@@ -69,7 +82,17 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                   </div>
                   <div className="border border-gray-200 rounded-lg p-3 bg-white">
                     <span className="text-[10px] font-semibold text-gray-500 block">Contrôle réglementaire</span>
-                    <span className="text-sm font-bold text-gray-400">Non renseigné</span>
+                    {pending(schedules.loading, schedules.error) ?? (legal ? (
+                      <>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${scheduleStatusBadgeClass(legal.status)}`}>
+                          {scheduleStatusLabel(legal.status)}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {legal.title}{legal.date ? ` — ${formatIsoDate(legal.date)}` : ''}
+                          {legal.count > 1 ? ` (+${legal.count - 1} autre${legal.count > 2 ? 's' : ''})` : ''}
+                        </p>
+                      </>
+                    ) : <span className="text-sm font-bold text-gray-400">Non renseigné</span>)}
                   </div>
                   <div className="border border-gray-200 rounded-lg p-3 bg-white">
                     <span className="text-[10px] font-semibold text-gray-500 block">Dernière intervention de maintenance</span>
@@ -86,6 +109,29 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                       <>
                         <span className="text-sm font-bold text-gray-400">Non renseigné</span>
                         <p className="text-[10px] text-gray-500 mt-0.5">Effectué par : Non renseigné</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3 mt-3">
+                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                    <span className="text-[10px] font-semibold text-gray-500 block">Prochaine échéance de maintenance</span>
+                    {pending(schedules.loading, schedules.error) ?? (nextDue ? (
+                      <>
+                        <span className="text-sm font-bold text-gray-800">{formatIsoDate(nextDue.nextDueDate)}</span>
+                        <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${scheduleStatusBadgeClass(nextDue.status)}`}>
+                          {scheduleStatusLabel(nextDue.status)}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{nextDue.title}</p>
+                      </>
+                    ) : <span className="text-sm font-bold text-gray-400">Non renseigné</span>)}
+                  </div>
+                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                    <span className="text-[10px] font-semibold text-gray-500 block">Anomalies signalées (carnet de santé)</span>
+                    {entriesLoading ? <span className="text-sm font-bold text-gray-400">Chargement...</span> : (
+                      <>
+                        <span className="text-sm font-bold text-gray-800">{anomalies.count === 0 ? 'Aucune' : anomalies.count}</span>
+                        {anomalies.lastDate && <p className="text-[10px] text-gray-500 mt-0.5">Dernière : {formatIsoDate(anomalies.lastDate)}</p>}
                       </>
                     )}
                   </div>

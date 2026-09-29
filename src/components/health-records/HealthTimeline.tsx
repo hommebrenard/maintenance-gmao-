@@ -18,6 +18,8 @@ interface HealthTimelineProps {
   onSelectAnomalie: () => void;
   onDescriptionChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  /** false = lecture seule (document imprimable) : ni bouton d'ajout ni formulaire. */
+  showAddControls?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
   onSelectAnomalie,
   onDescriptionChange,
   onSubmit,
+  showAddControls = true,
 }) => {
   return (
     <>
@@ -50,6 +53,7 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
                   <HeartPulse className="w-4 h-4 text-emerald-600" />
                   <h3 className="text-sm font-bold text-gray-900">Carnet de santé ({entries.length})</h3>
                 </div>
+                {showAddControls && (
                 <button
                   onClick={onToggleAdding}
                   data-pdf-exclude="true"
@@ -57,9 +61,10 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" /> Ajouter une entrée
                 </button>
+                )}
               </div>
 
-              {isAdding && (
+              {showAddControls && isAdding && (
                 <form onSubmit={onSubmit} data-pdf-exclude="true" className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="flex gap-2">

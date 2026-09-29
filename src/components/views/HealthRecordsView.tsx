@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, HeartPulse, Printer, Download, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Equipment, WorkOrder, HealthRecordEntry } from '../../types';
-import { getLinkedWorkOrders } from '../../utils/equipmentDisplay';
+import { getLinkedWorkOrders, getOperationalStatusBadgeClass } from '../../utils/equipmentDisplay';
 import { fetchHealthRecords, createHealthRecord } from '../../lib/queries/healthRecords';
 import { exportElementToPdf } from '../../utils/pdfExport';
 
@@ -10,6 +10,11 @@ import { EquipmentPassport } from '../health-records/EquipmentPassport';
 import { LinkedWorkOrdersTable } from '../health-records/LinkedWorkOrdersTable';
 import { HealthTimeline } from '../health-records/HealthTimeline';
 import { HealthRecordPrint } from '../health-records/HealthRecordPrint';
+import { HealthRecordTabs, type HealthRecordTab } from '../health-records/HealthRecordTabs';
+import { MaintenanceSchedulePanel } from '../health-records/MaintenanceSchedulePanel';
+import { EquipmentPartsPanel } from '../health-records/EquipmentPartsPanel';
+import { EquipmentDocumentsPanel } from '../health-records/EquipmentDocumentsPanel';
+import { useEquipmentExtras } from '../health-records/useEquipmentExtras';
 
 interface HealthRecordsViewProps {
   equipmentList: Equipment[];
@@ -39,6 +44,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   // sur petit écran (liste OU fiche), avec bouton retour ; à partir de `md`
   // (≥768px) les deux restent côte à côte comme avant, cet état est ignoré.
   const [mobileShowFiche, setMobileShowFiche] = useState(false);
+  const [activeTab, setActiveTab] = useState<HealthRecordTab>('synthese');
 
   // Présélection depuis le lien profond du QR code (#health-records/<id>).
   // Réappliqué à chaque fois que l'id demandé change (pas seulement au
@@ -62,6 +68,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
       if (initialOpenAddForm) {
         pendingFormFocus.current = true;
         setIsAdding(true);
+        setActiveTab('interventions'); // le formulaire du QR code vit dans cet onglet
       }
     } else {
       setDeepLinkNotFound(initialEquipmentId);
@@ -170,7 +177,34 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     pendingFormFocus.current = false;
     input.scrollIntoView({ behavior: 'smooth', block: 'center' });
     input.focus({ preventScroll: true });
-  }, [isAdding, selected?.id, isLoadingEntries]);
+  }, [isAdding, selected?.id, isLoadingEntries, activeTab]);
+
+  const extras = useEquipmentExtras(selected?.id);
+
+  // Carnet de santé : même composant dans l'onglet Interventions (avec saisie) et dans le
+  // document PDF (lecture seule).
+  const timeline = (showAddControls: boolean) => (
+    <HealthTimeline
+      entries={entries}
+      isLoadingEntries={isLoadingEntries}
+      loadError={loadError}
+      isAdding={isAdding}
+      isSaving={isSaving}
+      newEventType={newEventType}
+      newDescription={newDescription}
+      descriptionError={descriptionError}
+      descriptionInputRef={descriptionInputRef}
+      onToggleAdding={() => setIsAdding(v => !v)}
+      onSelectRas={() => { setNewEventType('Ronde'); setDescriptionError(false); }}
+      onSelectAnomalie={() => setNewEventType('Anomalie')}
+      onDescriptionChange={value => {
+        setNewDescription(value);
+        if (descriptionError) setDescriptionError(false);
+      }}
+      onSubmit={handleAddEntry}
+      showAddControls={showAddControls}
+    />
+  );
 
   const linkedWorkOrders = useMemo(
     () => (selected ? getLinkedWorkOrders(selected, workOrders) : []),
@@ -313,55 +347,91 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
           </div>
         ) : (
           <div className="max-w-4xl">
-            <div className="print:hidden flex items-center justify-between flex-wrap gap-2 mb-3" data-pdf-exclude="true">
+            <div className="print:hidden md:hidden mb-2" data-pdf-exclude="true">
               <button
                 onClick={() => setMobileShowFiche(false)}
-                className="print:hidden md:hidden flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
               >
                 ← Liste des équipements
               </button>
-              <div className="flex items-center gap-2 flex-wrap ml-auto">
-                {pdfError && <span className="text-xs text-red-600">{pdfError}</span>}
-                <button
-                  onClick={() => window.print()}
-                  className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  <Printer className="w-3.5 h-3.5" /> Imprimer
-                </button>
-                <button
-                  onClick={handleDownloadPdf}
-                  disabled={isExportingPdf}
-                  className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
-                >
-                  {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  Télécharger PDF
-                </button>
-              </div>
             </div>
 
-            <HealthRecordPrint printRef={printableRef}>
-              <EquipmentPassport selected={selected} qrDataUrl={qrDataUrl} lastCompletedWorkOrder={lastCompletedWorkOrder} />
-              <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
-              <HealthTimeline
-                entries={entries}
-                isLoadingEntries={isLoadingEntries}
-                loadError={loadError}
-                isAdding={isAdding}
-                isSaving={isSaving}
-                newEventType={newEventType}
-                newDescription={newDescription}
-                descriptionError={descriptionError}
-                descriptionInputRef={descriptionInputRef}
-                onToggleAdding={() => setIsAdding(v => !v)}
-                onSelectRas={() => { setNewEventType('Ronde'); setDescriptionError(false); }}
-                onSelectAnomalie={() => setNewEventType('Anomalie')}
-                onDescriptionChange={value => {
-                  setNewDescription(value);
-                  if (descriptionError) setDescriptionError(false);
-                }}
-                onSubmit={handleAddEntry}
-              />
-            </HealthRecordPrint>
+            {activeTab !== 'synthese' && activeTab !== 'passeport' && (
+              <div className="print:hidden flex items-center gap-2 flex-wrap mb-3" data-pdf-exclude="true">
+                <span className="bg-gray-800 text-white font-mono px-2 py-0.5 rounded text-xs font-bold">{selected.code}</span>
+                <span className="text-base font-bold text-gray-900">{selected.name}</span>
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getOperationalStatusBadgeClass(selected.status)}`}>{selected.status}</span>
+              </div>
+            )}
+
+            <HealthRecordTabs
+              active={activeTab}
+              onChange={setActiveTab}
+              counts={{
+                planification: extras.schedules.loading ? undefined : extras.schedules.items.length,
+                pieces: extras.parts.loading ? undefined : extras.parts.items.length,
+                documents: extras.documents.loading ? undefined : extras.documents.items.length,
+              }}
+            />
+
+            {/* Hors onglet PDF, la marge d'impression est posée par ce conteneur (voir index.css). */}
+            <div role="tabpanel" className={activeTab !== 'passeport' ? 'carnet-print-root' : undefined}>
+              {activeTab === 'synthese' && (
+                <EquipmentPassport
+                  selected={selected}
+                  qrDataUrl={qrDataUrl}
+                  lastCompletedWorkOrder={lastCompletedWorkOrder}
+                  schedules={extras.schedules}
+                  entries={entries}
+                  entriesLoading={isLoadingEntries}
+                />
+              )}
+
+              {activeTab === 'interventions' && (
+                <>
+                  <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
+                  {timeline(true)}
+                </>
+              )}
+
+              {activeTab === 'planification' && <MaintenanceSchedulePanel state={extras.schedules} />}
+              {activeTab === 'pieces' && <EquipmentPartsPanel state={extras.parts} />}
+              {activeTab === 'documents' && <EquipmentDocumentsPanel state={extras.documents} />}
+
+              {activeTab === 'passeport' && (
+                <>
+                  <div className="print:hidden flex items-center justify-end gap-2 flex-wrap mb-3" data-pdf-exclude="true">
+                    {pdfError && <span className="text-xs text-red-600">{pdfError}</span>}
+                    <button
+                      onClick={() => window.print()}
+                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Imprimer
+                    </button>
+                    <button
+                      onClick={handleDownloadPdf}
+                      disabled={isExportingPdf}
+                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+                    >
+                      {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      Télécharger PDF
+                    </button>
+                  </div>
+                  <HealthRecordPrint printRef={printableRef}>
+                    <EquipmentPassport
+                      selected={selected}
+                      qrDataUrl={qrDataUrl}
+                      lastCompletedWorkOrder={lastCompletedWorkOrder}
+                      schedules={extras.schedules}
+                      entries={entries}
+                      entriesLoading={isLoadingEntries}
+                    />
+                    <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
+                    {timeline(false)}
+                  </HealthRecordPrint>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
