@@ -1,17 +1,15 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, HeartPulse, QrCode, Image as ImageIcon, Printer, Download, ClipboardList, Plus, Loader2 } from 'lucide-react';
+import { Search, HeartPulse, Printer, Download, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Equipment, WorkOrder, HealthRecordEntry } from '../../types';
-import {
-  getLinkedWorkOrders,
-  getOperationalStatusBadgeClass,
-  getWorkOrderStatusBadgeClass,
-  formatIsoDate,
-} from '../../utils/equipmentDisplay';
+import { getLinkedWorkOrders } from '../../utils/equipmentDisplay';
 import { fetchHealthRecords, createHealthRecord } from '../../lib/queries/healthRecords';
 import { exportElementToPdf } from '../../utils/pdfExport';
 
-const NotSet: React.FC = () => <span className="text-gray-400">Non renseigné</span>;
+import { EquipmentPassport } from '../health-records/EquipmentPassport';
+import { LinkedWorkOrdersTable } from '../health-records/LinkedWorkOrdersTable';
+import { HealthTimeline } from '../health-records/HealthTimeline';
+import { HealthRecordPrint } from '../health-records/HealthRecordPrint';
 
 interface HealthRecordsViewProps {
   equipmentList: Equipment[];
@@ -310,274 +308,29 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               </div>
             </div>
 
-            <div ref={printableRef} className="bg-white">
-              {/* En-tête fiche d'identité, façon passeport machine */}
-              <div className="border-2 border-gray-800 rounded-lg p-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-gray-800 text-white font-mono px-2 py-0.5 rounded text-xs font-bold">{selected.code}</span>
-                    <h1 className="text-base font-bold text-gray-900">{selected.name}</h1>
-                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getOperationalStatusBadgeClass(selected.status)}`}>
-                      {selected.status}
-                    </span>
-                  </div>
-                  <p className="text-gray-600 text-xs mt-1">
-                    {selected.manufacturer || <NotSet />}
-                    {selected.model ? ` — ${selected.model}` : ''}
-                  </p>
-                  <p className="text-gray-500 text-[11px] font-mono mt-0.5">
-                    N° série : {selected.serialNumber || 'Non renseigné'} | Emplacement : {selected.location || 'Non renseigné'}
-                  </p>
-                </div>
-                <div className="shrink-0 flex items-center gap-3">
-                  <div className="w-28 h-28 bg-white border border-gray-300 rounded flex flex-col items-center justify-center p-1 text-center">
-                    {qrDataUrl ? (
-                      <img src={qrDataUrl} alt={`QR code ${selected.code}`} className="w-full h-full object-contain" />
-                    ) : (
-                      <QrCode className="w-8 h-8 text-gray-300" />
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="block text-gray-400 text-[10px]">Date d'émission :</span>
-                    <span className="font-semibold text-gray-800 text-xs">
-                      {new Date().toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 1 : Synthèse de santé & Conformité réglementaire.
-                  1-1 et 1-2 n'ont aucune donnée réelle derrière aujourd'hui
-                  (pas de formule de fiabilité, pas de suivi réglementaire en
-                  base) : affichées honnêtement "Non renseigné", à reprendre
-                  dans une prochaine étape plutôt que d'inventer un chiffre. */}
-              <div className="mb-4">
-                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2.5">
-                  1. Synthèse de santé & Conformité réglementaire
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
-                    <span className="text-[10px] font-semibold text-gray-500 block">Indice de Fiabilité Globale</span>
-                    <span className="text-sm font-bold text-gray-400">Non renseigné</span>
-                  </div>
-                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
-                    <span className="text-[10px] font-semibold text-gray-500 block">Contrôle réglementaire</span>
-                    <span className="text-sm font-bold text-gray-400">Non renseigné</span>
-                  </div>
-                  <div className="border border-gray-200 rounded-lg p-3 bg-white">
-                    <span className="text-[10px] font-semibold text-gray-500 block">Dernière intervention de maintenance</span>
-                    {lastCompletedWorkOrder ? (
-                      <>
-                        <span className="text-sm font-bold text-gray-800">
-                          {formatIsoDate(lastCompletedWorkOrder.endDate || lastCompletedWorkOrder.updatedAt)}
-                        </span>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          Effectué par : {lastCompletedWorkOrder.assignee || 'Non renseigné'}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-sm font-bold text-gray-400">Non renseigné</span>
-                        <p className="text-[10px] text-gray-500 mt-0.5">Effectué par : Non renseigné</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              {/* Photo */}
-              <div className="col-span-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
-                {selected.photoUrl ? (
-                  <img src={selected.photoUrl} alt={selected.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-gray-300 flex flex-col items-center gap-1">
-                    <ImageIcon className="w-8 h-8" />
-                    <span className="text-[11px]">Aucune photo</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Identité */}
-              <div className="col-span-2 border border-gray-200 rounded-lg divide-y divide-gray-100 text-sm">
-                {[
-                  ['Catégorie', selected.category],
-                  ['Constructeur', selected.manufacturer],
-                  ['Modèle', selected.model],
-                  ['N° de série', selected.serialNumber],
-                  ['Emplacement', selected.location],
-                  ['Notes', selected.notes],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex px-3 py-1.5">
-                    <span className="w-32 shrink-0 text-gray-500">{label} :</span>
-                    <span className="text-gray-900">{value ? value : <NotSet />}</span>
-                  </div>
-                ))}
-                <div className="flex px-3 py-1.5 items-center">
-                  <span className="w-32 shrink-0 text-gray-500 flex items-center gap-1">
-                    <QrCode className="w-3.5 h-3.5" /> QR code :
-                  </span>
-                  <span className="text-gray-900">
-                    {selected.qrCode || selected.code}
-                    {!selected.qrCode && <span className="text-gray-400 text-xs ml-1">(= code équipement)</span>}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Registre des interventions (réel) */}
-            <div className="border border-gray-200 rounded-lg">
-              <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5">
-                <ClipboardList className="w-4 h-4 text-gray-500" />
-                <h3 className="text-sm font-bold text-gray-900">2. Registre chronologique d'entretien & dépannages ({linkedWorkOrders.length})</h3>
-              </div>
-              {linkedWorkOrders.length === 0 ? (
-                <div className="p-4 text-xs text-gray-400">Aucune intervention enregistrée pour cet équipement.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 text-gray-500">
-                      <tr>
-                        <th className="text-left px-3 py-1.5 font-medium">OT</th>
-                        <th className="text-left px-3 py-1.5 font-medium">Intitulé</th>
-                        <th className="text-left px-3 py-1.5 font-medium">Échéance</th>
-                        <th className="text-left px-3 py-1.5 font-medium">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {linkedWorkOrders.map(wo => (
-                        <tr key={wo.id}>
-                          <td className="px-3 py-1.5 font-medium text-gray-900">{wo.code}</td>
-                          <td className="px-3 py-1.5 text-gray-700">{wo.title}</td>
-                          <td className="px-3 py-1.5 text-gray-500">{formatIsoDate(wo.dueDate)}</td>
-                          <td className="px-3 py-1.5">
-                            <span className={`px-1.5 py-0.5 rounded-full font-semibold ${getWorkOrderStatusBadgeClass(wo.status)}`}>{wo.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Historique du carnet de santé (table `carnets_sante`, réelle) */}
-            <div className="mt-4 border border-gray-200 rounded-lg">
-              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <HeartPulse className="w-4 h-4 text-emerald-600" />
-                  <h3 className="text-sm font-bold text-gray-900">Carnet de santé ({entries.length})</h3>
-                </div>
-                <button
-                  onClick={() => setIsAdding(v => !v)}
-                  data-pdf-exclude="true"
-                  className="print:hidden flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Ajouter une entrée
-                </button>
-              </div>
-
-              {isAdding && (
-                <form onSubmit={handleAddEntry} data-pdf-exclude="true" className="print:hidden p-3 border-b border-gray-100 bg-gray-50 space-y-2">
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { setNewEventType('Ronde'); setDescriptionError(false); }}
-                        aria-pressed={newEventType !== 'Anomalie'}
-                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md border ${
-                          newEventType === 'Anomalie'
-                            ? 'text-gray-500 bg-white border-gray-200 hover:bg-gray-50'
-                            : 'text-emerald-700 bg-emerald-50 border-emerald-600'
-                        }`}
-                      >
-                        ✓ RAS
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewEventType('Anomalie')}
-                        aria-pressed={newEventType === 'Anomalie'}
-                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-md border ${
-                          newEventType === 'Anomalie'
-                            ? 'text-red-700 bg-red-50 border-red-600'
-                            : 'text-gray-500 bg-white border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        ⚠ Anomalie
-                      </button>
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        ref={descriptionInputRef}
-                        type="text"
-                        placeholder={newEventType === 'Anomalie' ? 'Décrire l\u2019anomalie...' : 'Note (optionnel)...'}
-                        value={newDescription}
-                        onChange={e => {
-                          setNewDescription(e.target.value);
-                          if (descriptionError) setDescriptionError(false);
-                        }}
-                        aria-invalid={descriptionError}
-                        className={`w-full text-xs border rounded-md px-2 py-1.5 ${
-                          descriptionError ? 'border-red-500 focus:outline-red-500' : 'border-gray-200'
-                        }`}
-                      />
-                      {descriptionError && (
-                        <p className="text-[11px] text-red-600 mt-1">Merci de décrire l'anomalie avant d'enregistrer.</p>
-                      )}
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:opacity-50 w-full sm:w-auto"
-                    >
-                      {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Enregistrer'}
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {isLoadingEntries ? (
-                <div className="p-4 text-xs text-gray-400 flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement...
-                </div>
-              ) : loadError ? (
-                <div className="p-4 text-xs text-red-600">{loadError}</div>
-              ) : entries.length === 0 ? (
-                <div className="p-4 text-xs text-gray-400">Aucune entrée enregistrée pour cet équipement.</div>
-              ) : (
-                <ul className="divide-y divide-gray-50">
-                  {entries.map(entry => (
-                    <li key={entry.id} className="px-3 py-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-gray-900 flex items-center gap-1.5">
-                          {entry.eventType === 'Anomalie' && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" aria-hidden="true" />
-                          )}
-                          {entry.eventType}
-                        </span>
-                        <span className="text-gray-400">{formatIsoDate(entry.eventDate)}</span>
-                      </div>
-                      {entry.description && <div className="text-gray-600 mt-0.5">{entry.description}</div>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-              {/* Visas */}
-              <div className="mt-4 pt-4 border-t-2 border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 text-[11px]">
-                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <span className="font-bold text-gray-700 block mb-1">Visa Responsable Maintenance :</span>
-                  <p className="text-gray-500 text-[10px] italic">Signature & cachet :</p>
-                  <div className="h-10 mt-2 border-b border-dashed border-gray-300" />
-                </div>
-                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <span className="font-bold text-gray-700 block mb-1">Visa Contrôle Qualité / HSE :</span>
-                  <p className="text-gray-500 text-[10px] italic">Signature & cachet :</p>
-                  <div className="h-10 mt-2 border-b border-dashed border-gray-300" />
-                </div>
-              </div>
-            </div>
+            <HealthRecordPrint printRef={printableRef}>
+              <EquipmentPassport selected={selected} qrDataUrl={qrDataUrl} lastCompletedWorkOrder={lastCompletedWorkOrder} />
+              <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
+              <HealthTimeline
+                entries={entries}
+                isLoadingEntries={isLoadingEntries}
+                loadError={loadError}
+                isAdding={isAdding}
+                isSaving={isSaving}
+                newEventType={newEventType}
+                newDescription={newDescription}
+                descriptionError={descriptionError}
+                descriptionInputRef={descriptionInputRef}
+                onToggleAdding={() => setIsAdding(v => !v)}
+                onSelectRas={() => { setNewEventType('Ronde'); setDescriptionError(false); }}
+                onSelectAnomalie={() => setNewEventType('Anomalie')}
+                onDescriptionChange={value => {
+                  setNewDescription(value);
+                  if (descriptionError) setDescriptionError(false);
+                }}
+                onSubmit={handleAddEntry}
+              />
+            </HealthRecordPrint>
           </div>
         )}
       </div>
