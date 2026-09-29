@@ -375,7 +375,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
             />
 
             {/* Hors onglet PDF, la marge d'impression est posée par ce conteneur (voir index.css). */}
-            <div role="tabpanel" className={activeTab !== 'passeport' ? 'carnet-print-root' : undefined}>
+            <div role="tabpanel" className={activeTab !== 'passeport' ? 'carnet-print-root @container' : undefined}>
               {activeTab === 'synthese' && (
                 <EquipmentPassport
                   selected={selected}
