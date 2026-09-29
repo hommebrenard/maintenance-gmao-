@@ -44,7 +44,7 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
   return (
     <>
             {/* Historique du carnet de santé (table `carnets_sante`, réelle) */}
-            <div className="mt-4 border border-gray-200 rounded-lg">
+            <div data-pdf-block className="mt-4 border border-gray-200 rounded-lg">
               <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <HeartPulse className="w-4 h-4 text-emerald-600" />
@@ -126,7 +126,7 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
               ) : (
                 <ul className="divide-y divide-gray-50">
                   {entries.map(entry => (
-                    <li key={entry.id} className="px-3 py-2 text-xs print:break-inside-avoid">
+                    <li key={entry.id} data-pdf-block className="px-3 py-2 text-xs print:break-inside-avoid">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-gray-900 flex items-center gap-1.5">
                           {entry.eventType === 'Anomalie' && (
