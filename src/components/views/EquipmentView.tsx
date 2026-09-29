@@ -53,6 +53,9 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   onSyncFromWorkOrders
 }) => {
   const [selectedId, setSelectedId] = useState<string>(equipmentList[0]?.id || '');
+  // Disposition mobile (29/09/2026) : sur petit écran un seul panneau à la fois (liste OU fiche,
+  // bouton retour) ; à partir de md (≥768px) les deux restent côte à côte comme avant.
+  const [mobileShowFiche, setMobileShowFiche] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -331,7 +334,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
       {/* Split Main Body matching Screenshot 7 */}
       <div className="flex-1 flex overflow-hidden bg-gray-50/20">
         {/* Left Equipment List Pane */}
-        <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto shrink-0">
+        <div className={`w-full md:w-80 border-r border-gray-200 bg-white overflow-y-auto md:shrink-0 ${mobileShowFiche ? 'hidden md:block' : 'block'}`}>
           {viewMode === 'list' ? (
             <div className="divide-y divide-gray-100">
               {filteredList.map(eq => {
@@ -339,7 +342,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                 return (
                   <div
                     key={eq.id}
-                    onClick={() => setSelectedId(eq.id)}
+                    onClick={() => { setSelectedId(eq.id); setMobileShowFiche(true); }}
                     className={`p-4 cursor-pointer flex items-center justify-between transition-colors ${
                       isSelected ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'hover:bg-gray-50'
                     }`}
@@ -395,7 +398,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                       return (
                         <div
                           key={eq.id}
-                          onClick={() => setSelectedId(eq.id)}
+                          onClick={() => { setSelectedId(eq.id); setMobileShowFiche(true); }}
                           className={`pl-8 pr-4 py-3 cursor-pointer flex items-center justify-between transition-colors border-t border-gray-50 ${
                             isSelected ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'hover:bg-gray-50'
                           }`}
@@ -426,8 +429,15 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
 
         {/* Right Detail Card matching Screenshot 7 */}
         {selectedEquipment ? (
-          <div className="flex-1 p-6 overflow-y-auto bg-gray-50/40">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-6 space-y-6 max-w-5xl mx-auto">
+          <div className={`flex-1 min-w-0 p-3 md:p-6 overflow-y-auto bg-gray-50/40 ${mobileShowFiche ? 'block' : 'hidden md:block'}`}>
+            <button
+              type="button"
+              onClick={() => setMobileShowFiche(false)}
+              className="md:hidden flex items-center gap-1 px-1 py-1.5 mb-2 text-xs font-semibold text-gray-600 hover:text-gray-900"
+            >
+              ← Liste des équipements
+            </button>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
               {/* Header section of detail */}
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-gray-100 pb-5">
                 <div>
@@ -901,6 +911,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                 onClick={() => {
                   onDeleteEquipment(selectedEquipment.id);
                   setIsDeleteConfirmOpen(false);
+                  setMobileShowFiche(false);
                 }}
                 className="px-4 py-2 text-xs font-bold text-white bg-red-600 rounded-xl hover:bg-red-700 shadow-sm flex items-center gap-1.5"
               >
