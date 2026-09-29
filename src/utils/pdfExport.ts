@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { toJpeg } from 'html-to-image';
+import { computePageBreaks } from './pdfPagination';
 
 // Export PDF 100% client (aucun serveur, aucune clé API) : capture l'élément
 // DOM ciblé en image haute résolution puis la place sur une ou plusieurs
@@ -36,24 +37,65 @@ async function inlineImages(element: HTMLElement): Promise<void> {
   );
 }
 
+export interface PdfExportOptions {
+  /**
+   * Largeur de capture en px CSS. Si fournie, le document est recopié hors écran
+   * à cette largeur avant capture : la mise en page (colonnes, grilles) est alors
+   * identique quel que soit l'appareil — un téléphone donne le même PDF qu'un PC.
+   */
+  captureWidth?: number;
+}
+
+// Plafond de pixels du canvas de capture (limite pratique des navigateurs mobiles,
+// ~16 M de pixels) : au-delà, la résolution est réduite au lieu d'échouer.
+const MAX_CAPTURE_PIXELS = 16_000_000;
+
+/** Positions (bas, en px CSS depuis le haut du document) des blocs marqués data-pdf-block. */
+function collectBreakCandidates(root: HTMLElement): number[] {
+  const rootTop = root.getBoundingClientRect().top;
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-pdf-block]')).map(
+    el => el.getBoundingClientRect().bottom - rootTop
+  );
+}
+
 /**
  * Génère un PDF A4 à partir d'un élément DOM et déclenche son téléchargement.
- * Découpe automatiquement sur plusieurs pages si le contenu dépasse une
- * page A4 (cas d'un carnet de santé avec beaucoup d'entrées, par exemple).
+ * Découpe sur plusieurs pages si le contenu dépasse une page A4, en coupant
+ * entre les blocs marqués `data-pdf-block` (jamais au milieu d'une ligne).
  */
 export async function exportElementToPdf(
   element: HTMLElement,
-  filename: string
+  filename: string,
+  options: PdfExportOptions = {}
 ): Promise<{ success: boolean; error?: string }> {
+  let host: HTMLElement | null = null;
   try {
-    await inlineImages(element);
+    let target = element;
+    if (options.captureWidth) {
+      host = document.createElement('div');
+      host.style.cssText = `position:fixed;left:-100000px;top:0;width:${options.captureWidth}px;background:#fff;pointer-events:none;`;
+      const clone = element.cloneNode(true) as HTMLElement;
+      // Éléments d'interface (boutons, formulaires) : retirés avant de mesurer la hauteur.
+      clone.querySelectorAll('[data-pdf-exclude="true"]').forEach(n => n.remove());
+      clone.style.width = `${options.captureWidth}px`;
+      clone.style.margin = '0';
+      host.appendChild(clone);
+      document.body.appendChild(host);
+      // Deux images d'attente : le navigateur applique la mise en page à la nouvelle largeur.
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      target = clone;
+    }
 
-    const elementWidth = element.offsetWidth || 800;
-    const elementHeight = element.scrollHeight || element.offsetHeight;
+    await inlineImages(target);
 
-    const imageData = await toJpeg(element, {
+    const elementWidth = target.offsetWidth || 800;
+    const elementHeight = target.scrollHeight || target.offsetHeight;
+    const breakCandidates = collectBreakCandidates(target);
+    const pixelRatio = Math.min(2, Math.sqrt(MAX_CAPTURE_PIXELS / (elementWidth * elementHeight)));
+
+    const imageData = await toJpeg(target, {
       quality: 0.95,
-      pixelRatio: 2,
+      pixelRatio,
       backgroundColor: '#ffffff',
       width: elementWidth,
       height: elementHeight,
@@ -86,13 +128,18 @@ export async function exportElementToPdf(
       // Tient sur une seule page.
       pdf.addImage(imageData, 'JPEG', marginMm, marginMm, availableWidthMm, totalHeightMm);
     } else {
-      // Découpe en tranches successives, une par page A4.
-      let sourceY = 0;
-      let pageIndex = 0;
-      while (sourceY < image.naturalHeight) {
-        if (pageIndex > 0) pdf.addPage();
+      // Découpe en tranches, une par page A4, coupées entre deux blocs.
+      const scale = image.naturalWidth / elementWidth;
+      const ends = computePageBreaks(
+        image.naturalHeight,
+        pageHeightInPx,
+        breakCandidates.map(c => c * scale)
+      ).map(e => Math.round(e));
 
-        const sliceHeightPx = Math.min(pageHeightInPx, image.naturalHeight - sourceY);
+      let sourceY = 0;
+      ends.forEach((end, pageIndex) => {
+        const sliceHeightPx = Math.max(1, end - sourceY);
+        if (pageIndex > 0) pdf.addPage();
         const sliceCanvas = document.createElement('canvas');
         sliceCanvas.width = image.naturalWidth;
         sliceCanvas.height = sliceHeightPx;
@@ -104,14 +151,15 @@ export async function exportElementToPdf(
           const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95);
           pdf.addImage(sliceData, 'JPEG', marginMm, marginMm, availableWidthMm, sliceHeightPx * mmPerPx);
         }
-        sourceY += sliceHeightPx;
-        pageIndex++;
-      }
+        sourceY = end;
+      });
     }
 
     pdf.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Erreur lors de la génération du PDF' };
+  } finally {
+    host?.remove();
   }
 }
