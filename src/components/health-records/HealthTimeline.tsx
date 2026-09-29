@@ -126,7 +126,7 @@ export const HealthTimeline: React.FC<HealthTimelineProps> = ({
               ) : (
                 <ul className="divide-y divide-gray-50">
                   {entries.map(entry => (
-                    <li key={entry.id} className="px-3 py-2 text-xs">
+                    <li key={entry.id} className="px-3 py-2 text-xs print:break-inside-avoid">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-gray-900 flex items-center gap-1.5">
                           {entry.eventType === 'Anomalie' && (
