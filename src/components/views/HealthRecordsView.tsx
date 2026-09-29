@@ -85,6 +85,21 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const descriptionInputRef = useRef<HTMLInputElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
+  // Impression : pendant beforeprint/afterprint, marque <body> pour que le CSS
+  // d'impression (index.css) déroule toute la fiche au lieu de la rogner à un
+  // écran. Couvre le bouton « Imprimer » comme Ctrl+P.
+  useEffect(() => {
+    const onBefore = () => document.body.classList.add('printing-carnet');
+    const onAfter = () => document.body.classList.remove('printing-carnet');
+    window.addEventListener('beforeprint', onBefore);
+    window.addEventListener('afterprint', onAfter);
+    return () => {
+      window.removeEventListener('beforeprint', onBefore);
+      window.removeEventListener('afterprint', onAfter);
+      document.body.classList.remove('printing-carnet');
+    };
+  }, []);
+
   const filteredList = useMemo(
     () =>
       [...equipmentList]
