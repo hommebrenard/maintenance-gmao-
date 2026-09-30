@@ -26,6 +26,10 @@ interface MaintenanceScheduleRow {
   next_due_date: string | null;
   legal_requirement: boolean;
   assigned_to: string | null;
+  inspection_body: string | null;
+  control_points: string | null;
+  safety_instructions: string | null;
+  estimated_duration_minutes: number | null;
   status: string | null;
   created_by: string | null;
   created_at: string;
@@ -45,6 +49,10 @@ function rowToSchedule(row: MaintenanceScheduleRow): MaintenanceSchedule {
     nextDueDate: row.next_due_date ?? undefined,
     legalRequirement: row.legal_requirement,
     assignedTo: row.assigned_to ?? undefined,
+    inspectionBody: row.inspection_body ?? undefined,
+    controlPoints: row.control_points ?? undefined,
+    safetyInstructions: row.safety_instructions ?? undefined,
+    estimatedDurationMinutes: row.estimated_duration_minutes ?? undefined,
     status:
       computeScheduleStatus(row.next_due_date) ??
       ((row.status ?? undefined) as MaintenanceSchedule['status']),
@@ -65,6 +73,11 @@ export interface MaintenanceScheduleInput {
   nextDueDate?: string | null;
   legalRequirement?: boolean;
   assignedTo?: string | null;
+  inspectionBody?: string | null;
+  controlPoints?: string | null;
+  safetyInstructions?: string | null;
+  /** Minutes (> 0) ; null = non renseigné. */
+  estimatedDurationMinutes?: number | null;
 }
 
 const emptyToNull = (v: string | null | undefined) => (v === '' || v === undefined ? null : v);
@@ -84,6 +97,10 @@ function inputToRow(input: Partial<MaintenanceScheduleInput>): Record<string, un
   }
   if (input.legalRequirement !== undefined) row.legal_requirement = input.legalRequirement;
   if (input.assignedTo !== undefined) row.assigned_to = emptyToNull(input.assignedTo);
+  if (input.inspectionBody !== undefined) row.inspection_body = emptyToNull(input.inspectionBody);
+  if (input.controlPoints !== undefined) row.control_points = emptyToNull(input.controlPoints);
+  if (input.safetyInstructions !== undefined) row.safety_instructions = emptyToNull(input.safetyInstructions);
+  if (input.estimatedDurationMinutes !== undefined) row.estimated_duration_minutes = input.estimatedDurationMinutes;
   return row;
 }
 
