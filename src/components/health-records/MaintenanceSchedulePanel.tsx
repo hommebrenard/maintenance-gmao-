@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { CalendarClock, Plus } from 'lucide-react';
 import type { MaintenanceSchedule } from '../../types';
 import { formatIsoDate } from '../../utils/equipmentDisplay';
-import { scheduleFrequencyLabel, scheduleStatusBadgeClass, scheduleStatusLabel } from '../../utils/healthRecordDisplay';
-import { sortSchedules } from '../../utils/maintenanceSchedule';
+import { hasControlDetails, scheduleFrequencyLabel, scheduleStatusBadgeClass, scheduleStatusLabel } from '../../utils/healthRecordDisplay';
+import { formatDuration, sortSchedules } from '../../utils/maintenanceSchedule';
 import {
   createMaintenanceSchedule, deleteMaintenanceSchedule, updateMaintenanceSchedule,
   type MaintenanceScheduleInput,
@@ -29,6 +29,14 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({ state, equipmentId, 
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const closeForm = () => { setFormOpen(null); setFormError(null); };
 
@@ -105,11 +113,17 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({ state, equipmentId, 
             </thead>
             <tbody className="divide-y divide-gray-100">
               {state.items.map(s => (
-                <tr key={s.id}>
+                <React.Fragment key={s.id}>
+                <tr>
                   <td className="px-3 py-1.5 text-gray-900">
                     {s.title}
                     {s.legalRequirement && (
                       <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-semibold">Réglementaire</span>
+                    )}
+                    {hasControlDetails(s) && (
+                      <button type="button" onClick={() => toggleExpanded(s.id)} className="ml-2 text-[10px] font-semibold text-emerald-700 hover:underline">
+                        {expanded.has(s.id) ? 'Détails ▲' : 'Détails ▼'}
+                      </button>
                     )}
                   </td>
                   <td className="px-3 py-1.5 text-gray-600">{scheduleFrequencyLabel(s) ?? <Dash />}</td>
@@ -127,6 +141,27 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({ state, equipmentId, 
                     </td>
                   )}
                 </tr>
+                {expanded.has(s.id) && (
+                  <tr className="bg-gray-50">
+                    <td colSpan={canEdit ? 6 : 5} className="px-3 py-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                        <div><span className="font-semibold text-gray-500">Organisme de contrôle : </span><span className="text-gray-900">{s.inspectionBody ?? <Dash />}</span></div>
+                        <div><span className="font-semibold text-gray-500">Durée estimée : </span><span className="text-gray-900">{s.estimatedDurationMinutes ? formatDuration(s.estimatedDurationMinutes) : <Dash />}</span></div>
+                        <div className="sm:col-span-2">
+                          <span className="font-semibold text-gray-500 block">Points de contrôle</span>
+                          {s.controlPoints ? <p className="text-gray-900 whitespace-pre-line">{s.controlPoints}</p> : <Dash />}
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="font-semibold text-gray-500 block">Consignes de sécurité / habilitations</span>
+                          {s.safetyInstructions
+                            ? <p className="text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 whitespace-pre-line">{s.safetyInstructions}</p>
+                            : <Dash />}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
