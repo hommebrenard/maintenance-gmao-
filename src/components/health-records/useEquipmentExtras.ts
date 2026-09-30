@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { EquipmentDocument, EquipmentPart, MaintenanceSchedule } from '../../types';
 import { fetchEquipmentDocuments } from '../../lib/queries/equipmentDocuments';
 import { fetchMaintenanceSchedules } from '../../lib/queries/maintenanceSchedules';
@@ -19,7 +19,10 @@ export function errorMessage(err: unknown): string {
   return 'Erreur de chargement';
 }
 
-function useLoader<T>(equipmentId: string | undefined, load: (id: string) => Promise<T[]>): ExtraState<T> {
+function useLoader<T>(
+  equipmentId: string | undefined,
+  load: (id: string) => Promise<T[]>
+): [ExtraState<T>, React.Dispatch<React.SetStateAction<ExtraState<T>>>] {
   const [state, setState] = useState<ExtraState<T>>(loadingState<T>);
   useEffect(() => {
     if (!equipmentId) return;
@@ -38,7 +41,7 @@ function useLoader<T>(equipmentId: string | undefined, load: (id: string) => Pro
     };
     // `load` est une fonction de module stable : seul l'équipement déclenche un rechargement.
   }, [equipmentId]);
-  return state;
+  return [state, setState];
 }
 
 /**
@@ -46,8 +49,13 @@ function useLoader<T>(equipmentId: string | undefined, load: (id: string) => Pro
  * Trois chargements indépendants : l'échec de l'un n'empêche pas l'affichage des autres.
  */
 export function useEquipmentExtras(equipmentId: string | undefined) {
-  const schedules = useLoader<MaintenanceSchedule>(equipmentId, fetchMaintenanceSchedules);
-  const parts = useLoader<EquipmentPart>(equipmentId, fetchEquipmentParts);
-  const documents = useLoader<EquipmentDocument>(equipmentId, fetchEquipmentDocuments);
-  return { schedules, parts, documents };
+  const [schedules, setSchedulesState] = useLoader<MaintenanceSchedule>(equipmentId, fetchMaintenanceSchedules);
+  const [parts, setPartsState] = useLoader<EquipmentPart>(equipmentId, fetchEquipmentParts);
+  const [documents] = useLoader<EquipmentDocument>(equipmentId, fetchEquipmentDocuments);
+  // Mise à jour locale après une écriture réussie (évite un rechargement complet).
+  const changeSchedules = (fn: (items: MaintenanceSchedule[]) => MaintenanceSchedule[]) =>
+    setSchedulesState(prev => ({ ...prev, items: fn(prev.items) }));
+  const changeParts = (fn: (items: EquipmentPart[]) => EquipmentPart[]) =>
+    setPartsState(prev => ({ ...prev, items: fn(prev.items) }));
+  return { schedules, parts, documents, changeSchedules, changeParts };
 }
