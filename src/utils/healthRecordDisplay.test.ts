@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceSchedule, HealthRecordEntry, WorkOrder } from '../types';
 import {
-  scheduleStatusLabel, scheduleFrequencyLabel, summarizeLegalControl, pickNextDue, summarizeAnomalies, computeNextDue,
+  scheduleStatusLabel, scheduleFrequencyLabel, summarizeLegalControl, pickNextDue, summarizeAnomalies, computeNextDue, hasControlDetails,
   documentCategoryLabel, formatFileSize, isLowStock, formatPrice,
 } from './healthRecordDisplay';
 
@@ -46,6 +46,19 @@ describe('summarizeLegalControl', () => {
     const r = summarizeLegalControl([sch({ title: 'A', legalRequirement: true })]);
     expect(r?.status).toBeUndefined();
     expect(r?.date).toBeUndefined();
+  });
+});
+
+describe('détails du contrôle réglementaire', () => {
+  it('summarizeLegalControl remonte l\'organisme de l\'échéance retenue', () => {
+    const r = summarizeLegalControl([sch({ title: 'A', legalRequirement: true, status: 'ok', nextDueDate: '2027-01-01', inspectionBody: 'APAVE' })]);
+    expect(r?.inspectionBody).toBe('APAVE');
+    expect(summarizeLegalControl([sch({ title: 'A', legalRequirement: true })])?.inspectionBody).toBeUndefined();
+  });
+  it('hasControlDetails : vrai dès qu\'un détail existe', () => {
+    expect(hasControlDetails(sch({}))).toBe(false);
+    expect(hasControlDetails(sch({ safetyInstructions: 'LOTO' }))).toBe(true);
+    expect(hasControlDetails(sch({ estimatedDurationMinutes: 60 }))).toBe(true);
   });
 });
 
