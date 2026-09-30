@@ -985,7 +985,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} isManager={profiles.find(p => p.id === session.user.id)?.role === 'responsable'} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
       case 'inventory':
         return (
           <InventoryView
