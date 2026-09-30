@@ -3,10 +3,11 @@ import { FileText } from 'lucide-react';
 import type { EquipmentDocument } from '../../types';
 import { formatIsoDate } from '../../utils/equipmentDisplay';
 import { documentCategoryLabel, formatFileSize } from '../../utils/healthRecordDisplay';
+import { isHttpUrl } from '../../utils/scheduleControls';
 import type { ExtraState } from './useEquipmentExtras';
 import { Dash, PanelState } from './PanelState';
 
-/** Documents rattachés à l'équipement (lecture seule ; l'ajout et le téléchargement viennent avec le stockage de fichiers). */
+/** Documents rattachés à l'équipement (lecture seule ; les liens GED sont ouvrables, le dépôt de fichiers viendra avec le stockage). */
 export const EquipmentDocumentsPanel: React.FC<{ state: ExtraState<EquipmentDocument> }> = ({ state }) => (
   <div>
     <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 mb-2">
@@ -26,10 +27,14 @@ export const EquipmentDocumentsPanel: React.FC<{ state: ExtraState<EquipmentDocu
           <tbody className="divide-y divide-gray-100">
             {state.items.map(d => (
               <tr key={d.id}>
-                <td className="px-3 py-1.5 text-gray-900">{d.name}</td>
+                <td className="px-3 py-1.5 text-gray-900">
+                  {d.externalUrl && isHttpUrl(d.externalUrl)
+                    ? <a href={d.externalUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{d.name}</a>
+                    : d.name}
+                </td>
                 <td className="px-3 py-1.5 text-gray-600">{documentCategoryLabel(d.category)}</td>
                 <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{formatIsoDate(d.createdAt)}</td>
-                <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{formatFileSize(d.sizeBytes) ?? <Dash />}</td>
+                <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{formatFileSize(d.sizeBytes) ?? (d.externalUrl ? 'Lien externe' : <Dash />)}</td>
               </tr>
             ))}
           </tbody>
