@@ -82,6 +82,11 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
     none: locations.filter(l => !l.zone).length,
   }), [locations]);
 
+  // Repli de la liste (même principe que « Charge de travail » des OT) : 3 sites
+  // visibles, « Voir tout (N) ▼ » déplie dans une zone à défilement.
+  const SITES_COLLAPSED_COUNT = 3;
+  const [sitesExpanded, setSitesExpanded] = useState(false);
+
   const filteredLocations = useMemo(() => {
     const query = siteSearch.trim().toLowerCase();
     return locations.filter(loc => {
@@ -93,6 +98,10 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
       return matchesSearch && matchesZone;
     });
   }, [locations, siteSearch, siteZoneFilter]);
+
+  const canCollapseSites = filteredLocations.length > SITES_COLLAPSED_COUNT;
+  const visibleLocations =
+    canCollapseSites && !sitesExpanded ? filteredLocations.slice(0, SITES_COLLAPSED_COUNT) : filteredLocations;
 
   return (
     <div className="flex-1 bg-white min-h-screen flex flex-col">
@@ -205,6 +214,7 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+            <div className={canCollapseSites && sitesExpanded ? 'max-h-72 overflow-y-auto' : ''}>
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 font-semibold uppercase">
                 <tr>
@@ -220,7 +230,7 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredLocations.map(loc => (
+                  visibleLocations.map(loc => (
                     <tr key={loc.id} className="hover:bg-gray-50">
                       <td className="px-5 py-3.5 font-medium text-gray-900">{loc.name}</td>
                       <td className="px-5 py-3.5">
@@ -248,6 +258,16 @@ export const TechniciensView: React.FC<TechniciensViewProps> = ({
                 )}
               </tbody>
             </table>
+            </div>
+            {canCollapseSites && (
+              <button
+                type="button"
+                onClick={() => setSitesExpanded(v => !v)}
+                className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-700 py-2.5 border-t border-gray-200"
+              >
+                {sitesExpanded ? 'Réduire ▲' : `Voir tout (${filteredLocations.length}) ▼`}
+              </button>
+            )}
           </div>
         </div>
       </div>
