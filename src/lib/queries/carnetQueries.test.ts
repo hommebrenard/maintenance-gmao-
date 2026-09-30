@@ -32,6 +32,7 @@ vi.mock('../supabaseClient', () => {
 
 import { fetchEquipmentDocuments, createEquipmentDocument, deleteEquipmentDocument } from './equipmentDocuments';
 import { fetchMaintenanceSchedules, createMaintenanceSchedule, updateMaintenanceSchedule, deleteMaintenanceSchedule } from './maintenanceSchedules';
+import { fetchScheduleControls, createScheduleControl, updateScheduleControl } from './scheduleControls';
 import { fetchEquipmentParts, createEquipmentPart, updateEquipmentPart, deleteEquipmentPart } from './equipmentParts';
 
 const EQ = '11111111-1111-1111-1111-111111111111';
@@ -127,5 +128,41 @@ describe('equipmentParts', () => {
   it('suppression refusée (0 ligne) → erreur', async () => {
     state.rows = [];
     await expect(deleteEquipmentPart('p1')).rejects.toThrow(/refusée/);
+  });
+});
+
+describe('scheduleControls', () => {
+  const row = {
+    id: 'k1', schedule_id: 's1', equipment_id: EQ, title: 'Contrôle ascenseur', performed_on: '2026-10-02',
+    inspection_body: 'VERITAS', result: 'reserves', notes: null, created_by: 'u1', created_at: 'x', updated_at: null,
+  };
+  it('lit et convertit une ligne (verdict, inconnus => undefined)', async () => {
+    state.rows = [row];
+    const [c] = await fetchScheduleControls(EQ);
+    expect(c).toMatchObject({ id: 'k1', scheduleId: 's1', performedOn: '2026-10-02', inspectionBody: 'VERITAS', result: 'reserves' });
+    expect(c.notes).toBeUndefined();
+  });
+  it('création : charge utile complète avec intitulé recopié et auteur', async () => {
+    state.rows = [row];
+    await createScheduleControl({ equipmentId: EQ, scheduleId: 's1', title: 'Contrôle ascenseur', performedOn: '2026-10-02', inspectionBody: 'VERITAS', result: 'reserves', notes: '' }, 'u1');
+    expect(calls[0]).toMatchObject({ table: 'schedule_controls', op: 'insert' });
+    expect(calls[0].payload).toEqual({
+      performed_on: '2026-10-02', inspection_body: 'VERITAS', result: 'reserves', notes: null,
+      equipment_id: EQ, schedule_id: 's1', title: 'Contrôle ascenseur', created_by: 'u1',
+    });
+  });
+  it('modification : seulement les champs fournis', async () => {
+    state.rows = [row];
+    await updateScheduleControl('k1', { result: 'conforme' });
+    expect(calls[0].op).toBe('update');
+    expect(Object.keys(calls[0].payload).sort()).toEqual(['result', 'updated_at']);
+  });
+  it('document : lien GED seul accepté, rien du tout refusé', async () => {
+    state.rows = [{ id: 'd9', equipment_id: EQ, name: 'PV', category: 'report', storage_path: null, external_url: 'https://ged/x', control_id: 'k1', mime_type: null, size_bytes: null, created_by: 'u1', created_at: 'x', updated_at: null }];
+    const d = await createEquipmentDocument({ equipmentId: EQ, name: 'PV', category: 'report', externalUrl: 'https://ged/x', controlId: 'k1' }, 'u1');
+    expect(calls[0].payload).toEqual({ equipment_id: EQ, name: 'PV', external_url: 'https://ged/x', control_id: 'k1', category: 'report', mime_type: null, size_bytes: null, created_by: 'u1' });
+    expect(d).toMatchObject({ externalUrl: 'https://ged/x', controlId: 'k1' });
+    expect(d.storagePath).toBeUndefined();
+    await expect(createEquipmentDocument({ equipmentId: EQ, name: 'Vide' }, 'u1')).rejects.toThrow('fichier ou un lien');
   });
 });
