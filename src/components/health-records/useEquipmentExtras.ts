@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import type { EquipmentDocument, EquipmentPart, MaintenanceSchedule } from '../../types';
+import type { EquipmentDocument, EquipmentPart, MaintenanceSchedule, ScheduleControl } from '../../types';
 import { fetchEquipmentDocuments } from '../../lib/queries/equipmentDocuments';
 import { fetchMaintenanceSchedules } from '../../lib/queries/maintenanceSchedules';
 import { fetchEquipmentParts } from '../../lib/queries/equipmentParts';
+import { fetchScheduleControls } from '../../lib/queries/scheduleControls';
 
 export interface ExtraState<T> {
   items: T[];
@@ -45,17 +46,22 @@ function useLoader<T>(
 }
 
 /**
- * Échéances, pièces et documents de l'équipement sélectionné (tables de la Phase 2).
- * Trois chargements indépendants : l'échec de l'un n'empêche pas l'affichage des autres.
+ * Échéances, pièces, documents et contrôles réalisés de l'équipement sélectionné.
+ * Quatre chargements indépendants : l'échec de l'un n'empêche pas l'affichage des autres.
  */
 export function useEquipmentExtras(equipmentId: string | undefined) {
   const [schedules, setSchedulesState] = useLoader<MaintenanceSchedule>(equipmentId, fetchMaintenanceSchedules);
   const [parts, setPartsState] = useLoader<EquipmentPart>(equipmentId, fetchEquipmentParts);
-  const [documents] = useLoader<EquipmentDocument>(equipmentId, fetchEquipmentDocuments);
+  const [documents, setDocumentsState] = useLoader<EquipmentDocument>(equipmentId, fetchEquipmentDocuments);
+  const [controls, setControlsState] = useLoader<ScheduleControl>(equipmentId, fetchScheduleControls);
   // Mise à jour locale après une écriture réussie (évite un rechargement complet).
   const changeSchedules = (fn: (items: MaintenanceSchedule[]) => MaintenanceSchedule[]) =>
     setSchedulesState(prev => ({ ...prev, items: fn(prev.items) }));
   const changeParts = (fn: (items: EquipmentPart[]) => EquipmentPart[]) =>
     setPartsState(prev => ({ ...prev, items: fn(prev.items) }));
-  return { schedules, parts, documents, changeSchedules, changeParts };
+  const changeDocuments = (fn: (items: EquipmentDocument[]) => EquipmentDocument[]) =>
+    setDocumentsState(prev => ({ ...prev, items: fn(prev.items) }));
+  const changeControls = (fn: (items: ScheduleControl[]) => ScheduleControl[]) =>
+    setControlsState(prev => ({ ...prev, items: fn(prev.items) }));
+  return { schedules, parts, documents, controls, changeSchedules, changeParts, changeDocuments, changeControls };
 }
