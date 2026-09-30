@@ -385,6 +385,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   lastCompletedWorkOrder={lastCompletedWorkOrder}
                   linkedWorkOrders={linkedWorkOrders}
                   schedules={extras.schedules}
+                  controls={extras.controls.items}
                   entries={entries}
                   entriesLoading={isLoadingEntries}
                 />
@@ -400,10 +401,14 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               {activeTab === 'planification' && (
                 <MaintenanceSchedulePanel
                   state={extras.schedules}
+                  controls={extras.controls.items}
+                  documents={extras.documents.items}
                   equipmentId={selected.id}
                   currentUserId={currentUserId}
                   canEdit={isManager}
                   onItemsChange={extras.changeSchedules}
+                  onControlsChange={extras.changeControls}
+                  onDocumentsChange={extras.changeDocuments}
                 />
               )}
               {activeTab === 'pieces' && (
@@ -443,6 +448,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                       lastCompletedWorkOrder={lastCompletedWorkOrder}
                       linkedWorkOrders={linkedWorkOrders}
                       schedules={extras.schedules}
+                      controls={extras.controls.items}
                       entries={entries}
                       entriesLoading={isLoadingEntries}
                     />
