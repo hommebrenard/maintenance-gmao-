@@ -52,6 +52,8 @@ export interface LegalControlSummary {
   status?: MaintenanceScheduleStatus;
   title: string;
   date?: string;
+  /** Organisme de contrôle de l'échéance retenue (saisie libre), s'il est renseigné. */
+  inspectionBody?: string;
   /** Nombre total de contrôles réglementaires de l'équipement. */
   count: number;
 }
@@ -64,7 +66,12 @@ export function summarizeLegalControl(schedules: MaintenanceSchedule[]): LegalCo
   const worst = [...legal].sort(
     (a, b) => rank(a) - rank(b) || (a.nextDueDate ?? NO_DATE).localeCompare(b.nextDueDate ?? NO_DATE)
   )[0];
-  return { status: worst.status, title: worst.title, date: worst.nextDueDate, count: legal.length };
+  return { status: worst.status, title: worst.title, date: worst.nextDueDate, inspectionBody: worst.inspectionBody, count: legal.length };
+}
+
+/** true si l'échéance porte au moins un détail de contrôle (organisme, durée, points, consignes). */
+export function hasControlDetails(s: MaintenanceSchedule): boolean {
+  return !!(s.inspectionBody || s.controlPoints || s.safetyInstructions || s.estimatedDurationMinutes);
 }
 
 /** Échéance la plus proche (date la plus ancienne, y compris dépassée) ; null si aucune date renseignée. */
