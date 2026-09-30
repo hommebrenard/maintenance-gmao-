@@ -23,7 +23,7 @@ describe('computeScheduleStatus', () => {
   });
 });
 
-import { addMonthsToIsoDate, isValidIsoDate, sortSchedules } from './maintenanceSchedule';
+import { addMonthsToIsoDate, isValidIsoDate, sortSchedules, parseDurationHHMM, minutesToHHMM, formatDuration } from './maintenanceSchedule';
 import type { MaintenanceSchedule } from '../types';
 
 describe('addMonthsToIsoDate / isValidIsoDate / sortSchedules', () => {
@@ -49,5 +49,22 @@ describe('addMonthsToIsoDate / isValidIsoDate / sortSchedules', () => {
   it('tri : échéance la plus proche d\'abord, sans date en dernier', () => {
     const s = (id: string, d?: string) => ({ id, nextDueDate: d }) as MaintenanceSchedule;
     expect(sortSchedules([s('a'), s('b', '2026-12-01'), s('c', '2026-10-01')]).map(i => i.id)).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('durée estimée HH:MM', () => {
+  it('parse en minutes, refuse invalide ou nul', () => {
+    expect(parseDurationHHMM('03:00')).toBe(180);
+    expect(parseDurationHHMM(' 3:30 ')).toBe(210);
+    expect(parseDurationHHMM('00:45')).toBe(45);
+    expect(parseDurationHHMM('00:00')).toBeUndefined();
+    expect(parseDurationHHMM('3h')).toBeUndefined();
+    expect(parseDurationHHMM('02:75')).toBeUndefined();
+    expect(parseDurationHHMM('')).toBeUndefined();
+  });
+  it('formats de saisie et d\'affichage', () => {
+    expect(minutesToHHMM(210)).toBe('03:30');
+    expect(formatDuration(210)).toBe('3 h 30');
+    expect(formatDuration(180)).toBe('3 h 00');
   });
 });
