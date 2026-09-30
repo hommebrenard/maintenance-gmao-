@@ -263,6 +263,14 @@ export interface MaintenanceSchedule {
   legalRequirement: boolean;
   /** id du profil assigné (FK profiles). */
   assignedTo?: string;
+  /** Détails du contrôle (ajoutés le 30/09/2026) : organisme / prestataire en saisie libre (ex. APAVE). */
+  inspectionBody?: string;
+  /** Points de contrôle à réaliser (texte libre, une ligne par point). */
+  controlPoints?: string;
+  /** Consignes de sécurité / habilitations (texte libre). */
+  safetyInstructions?: string;
+  /** Durée estimée du contrôle, en minutes. */
+  estimatedDurationMinutes?: number;
   /** Recalculé à la lecture depuis nextDueDate quand elle existe (voir utils/maintenanceSchedule.ts). */
   status?: MaintenanceScheduleStatus;
   createdBy?: string;
