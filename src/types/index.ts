@@ -237,10 +237,35 @@ export interface EquipmentDocument {
   equipmentId: string;
   name: string;
   category?: EquipmentDocumentCategory;
-  /** Chemin dans le bucket privé `equipment-files` (equipment/{equipmentId}/...). */
-  storagePath: string;
+  /** Chemin dans le bucket privé `equipment-files` (equipment/{equipmentId}/...). Absent pour un simple lien GED. */
+  storagePath?: string;
+  /** Lien vers la GED de l'institution (http/https), à la place ou en plus d'un fichier. */
+  externalUrl?: string;
+  /** Contrôle réalisé auquel ce document (compte rendu) est rattaché. */
+  controlId?: string;
   mimeType?: string;
   sizeBytes?: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type ControlResult = 'conforme' | 'reserves' | 'non_conforme';
+
+/** Un contrôle réalisé (historique des contrôles d'une échéance) — table `schedule_controls`. */
+export interface ScheduleControl {
+  id: string;
+  /** Échéance concernée ; absent si l'échéance a été supprimée (le contrôle est conservé). */
+  scheduleId?: string;
+  equipmentId: string;
+  /** Intitulé de l'échéance au moment du contrôle. */
+  title: string;
+  /** YYYY-MM-DD */
+  performedOn: string;
+  inspectionBody?: string;
+  /** Verdict du contrôleur ; absent = non renseigné. */
+  result?: ControlResult;
+  notes?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt?: string;
