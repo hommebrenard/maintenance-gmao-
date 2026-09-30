@@ -406,7 +406,15 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   onItemsChange={extras.changeSchedules}
                 />
               )}
-              {activeTab === 'pieces' && <EquipmentPartsPanel state={extras.parts} />}
+              {activeTab === 'pieces' && (
+                <EquipmentPartsPanel
+                  state={extras.parts}
+                  equipmentId={selected.id}
+                  currentUserId={currentUserId}
+                  canEdit={isManager}
+                  onItemsChange={extras.changeParts}
+                />
+              )}
               {activeTab === 'documents' && <EquipmentDocumentsPanel state={extras.documents} />}
 
               {activeTab === 'passeport' && (
