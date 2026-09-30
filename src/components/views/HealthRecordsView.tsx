@@ -20,6 +20,8 @@ interface HealthRecordsViewProps {
   equipmentList: Equipment[];
   workOrders: WorkOrder[];
   currentUserId: string;
+  /** Rôle « responsable » : seul autorisé à écrire dans Planification (la RLS reste le vrai verrou). */
+  isManager?: boolean;
   /** Id équipement à présélectionner (lien profond depuis le QR code, format #health-records/<id>). */
   initialEquipmentId?: string | null;
   /** Lien #health-records/<id>/nouvelle-entree : déplie le formulaire d'ajout et place le curseur dessus. */
@@ -36,7 +38,7 @@ interface HealthRecordsViewProps {
 // Volontairement PAS de section « Synthèse de santé / conformité
 // réglementaire » avec des chiffres inventés (indice de fiabilité, DESP...) :
 // aucune donnée réelle ne les alimente aujourd'hui (voir échange du 22/09).
-export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, initialEquipmentId, initialOpenAddForm, deepLinkKey }) => {
+export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, isManager = false, initialEquipmentId, initialOpenAddForm, deepLinkKey }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deepLinkNotFound, setDeepLinkNotFound] = useState<string | null>(null);
@@ -395,7 +397,15 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 </>
               )}
 
-              {activeTab === 'planification' && <MaintenanceSchedulePanel state={extras.schedules} />}
+              {activeTab === 'planification' && (
+                <MaintenanceSchedulePanel
+                  state={extras.schedules}
+                  equipmentId={selected.id}
+                  currentUserId={currentUserId}
+                  canEdit={isManager}
+                  onItemsChange={extras.changeSchedules}
+                />
+              )}
               {activeTab === 'pieces' && <EquipmentPartsPanel state={extras.parts} />}
               {activeTab === 'documents' && <EquipmentDocumentsPanel state={extras.documents} />}
 
