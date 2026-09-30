@@ -1,12 +1,13 @@
 import React from 'react';
 import { QrCode, Image as ImageIcon } from 'lucide-react';
-import type { Equipment, WorkOrder, MaintenanceSchedule, HealthRecordEntry } from '../../types';
+import type { Equipment, WorkOrder, MaintenanceSchedule, HealthRecordEntry, ScheduleControl } from '../../types';
 import { getOperationalStatusBadgeClass, formatIsoDate } from '../../utils/equipmentDisplay';
 import { NotSet } from './NotSet';
 import type { ExtraState } from './useEquipmentExtras';
 import {
   computeNextDue, scheduleStatusBadgeClass, scheduleStatusLabel, summarizeAnomalies, summarizeLegalControl,
 } from '../../utils/healthRecordDisplay';
+import { controlResultBadgeClass, controlResultLabel, latestLegalControl } from '../../utils/scheduleControls';
 
 interface EquipmentPassportProps {
   selected: Equipment;
@@ -15,6 +16,8 @@ interface EquipmentPassportProps {
   /** OT liés à l'équipement (pour la prochaine échéance des OT préventifs ouverts). */
   linkedWorkOrders: WorkOrder[];
   schedules: ExtraState<MaintenanceSchedule>;
+  /** Contrôles réalisés (pour le dernier verdict de la carte Contrôle réglementaire). */
+  controls: ScheduleControl[];
   entries: HealthRecordEntry[];
   entriesLoading: boolean;
 }
@@ -24,8 +27,9 @@ interface EquipmentPassportProps {
  * santé & conformité, photo et tableau d'identité. Extrait tel quel de
  * HealthRecordsView (Phase 4a, 29/09/2026) — aucun changement de rendu.
  */
-export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder, linkedWorkOrders, schedules, entries, entriesLoading }) => {
+export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder, linkedWorkOrders, schedules, controls, entries, entriesLoading }) => {
   const legal = summarizeLegalControl(schedules.items);
+  const lastControl = latestLegalControl(schedules.items, controls);
   const { next: nextDue, overdueCount } = computeNextDue(schedules.items, linkedWorkOrders);
   const anomalies = summarizeAnomalies(entries);
   const pending = (loading: boolean, error: string | null) =>
@@ -94,6 +98,14 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                           {legal.inspectionBody ? ` · ${legal.inspectionBody}` : ''}
                           {legal.count > 1 ? ` (+${legal.count - 1} autre${legal.count > 2 ? 's' : ''})` : ''}
                         </p>
+                        {lastControl && (
+                          <p className="text-[10px] text-gray-600 mt-1">
+                            Dernier contrôle : {formatIsoDate(lastControl.performedOn)}{' '}
+                            <span className={`px-1.5 py-0.5 rounded-full font-semibold ${controlResultBadgeClass(lastControl.result)}`}>
+                              {controlResultLabel(lastControl.result)}
+                            </span>
+                          </p>
+                        )}
                       </>
                     ) : <span className="text-sm font-bold text-gray-400">Non renseigné</span>)}
                   </div>
