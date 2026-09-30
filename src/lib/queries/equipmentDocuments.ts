@@ -15,7 +15,9 @@ interface EquipmentDocumentRow {
   equipment_id: string;
   name: string;
   category: string | null;
-  storage_path: string;
+  storage_path: string | null;
+  external_url: string | null;
+  control_id: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   created_by: string | null;
@@ -29,7 +31,9 @@ function rowToDocument(row: EquipmentDocumentRow): EquipmentDocument {
     equipmentId: row.equipment_id,
     name: row.name,
     category: (row.category ?? undefined) as EquipmentDocumentCategory | undefined,
-    storagePath: row.storage_path,
+    storagePath: row.storage_path ?? undefined,
+    externalUrl: row.external_url ?? undefined,
+    controlId: row.control_id ?? undefined,
     mimeType: row.mime_type ?? undefined,
     sizeBytes: row.size_bytes ?? undefined,
     createdBy: row.created_by ?? undefined,
@@ -49,24 +53,33 @@ export async function fetchEquipmentDocuments(equipmentId: string): Promise<Equi
   return ((data as EquipmentDocumentRow[]) || []).map(rowToDocument);
 }
 
-/** Enregistre un document (le fichier doit déjà être dans le bucket). Réservé aux managers. */
+/** Enregistre un document : fichier déjà dans le bucket et/ou lien GED. Réservé aux managers. */
 export async function createEquipmentDocument(
   input: {
     equipmentId: string;
     name: string;
-    storagePath: string;
+    /** Fichier déjà présent dans le bucket ; absent pour un simple lien GED. */
+    storagePath?: string;
+    /** Lien vers la GED (http/https). Au moins un de storagePath / externalUrl est obligatoire. */
+    externalUrl?: string;
+    /** Contrôle réalisé auquel rattacher le document. */
+    controlId?: string;
     category?: EquipmentDocumentCategory;
     mimeType?: string;
     sizeBytes?: number;
   },
   createdBy: string
 ): Promise<EquipmentDocument> {
+  if (!input.storagePath && !input.externalUrl) throw new Error('Un document doit avoir un fichier ou un lien.');
   const { data, error } = await supabase
     .from('equipment_documents')
     .insert({
       equipment_id: input.equipmentId,
       name: input.name,
-      storage_path: input.storagePath,
+      // Clés ajoutées seulement si renseignées : la charge utile historique reste inchangée.
+      ...(input.storagePath ? { storage_path: input.storagePath } : {}),
+      ...(input.externalUrl ? { external_url: input.externalUrl } : {}),
+      ...(input.controlId ? { control_id: input.controlId } : {}),
       category: input.category ?? null,
       mime_type: input.mimeType ?? null,
       size_bytes: input.sizeBytes ?? null,
