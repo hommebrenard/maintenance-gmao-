@@ -68,3 +68,21 @@ export function sortSchedules(items: MaintenanceSchedule[]): MaintenanceSchedule
     return a.nextDueDate.localeCompare(b.nextDueDate);
   });
 }
+
+/** « 3:30 » ou « 03:30 » -> 210 minutes ; undefined si invalide ou nul (max 99:59). */
+export function parseDurationHHMM(text: string): number | undefined {
+  const m = /^(\d{1,2}):([0-5]\d)$/.exec(text.trim());
+  if (!m) return undefined;
+  const minutes = Number(m[1]) * 60 + Number(m[2]);
+  return minutes > 0 ? minutes : undefined;
+}
+
+/** 210 -> « 03:30 » (valeur du champ de saisie). */
+export function minutesToHHMM(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** 210 -> « 3 h 30 » (affichage). */
+export function formatDuration(minutes: number): string {
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
+}
