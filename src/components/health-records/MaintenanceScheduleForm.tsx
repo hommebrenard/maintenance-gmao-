@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { MaintenanceSchedule, MaintenanceFrequencyType } from '../../types';
 import type { MaintenanceScheduleInput } from '../../lib/queries/maintenanceSchedules';
-import { addMonthsToIsoDate, isValidIsoDate } from '../../utils/maintenanceSchedule';
+import { addMonthsToIsoDate, isValidIsoDate, minutesToHHMM, parseDurationHHMM } from '../../utils/maintenanceSchedule';
+import { hasControlDetails } from '../../utils/healthRecordDisplay';
 import { formatIsoDate } from '../../utils/equipmentDisplay';
 
 interface Props {
@@ -38,7 +39,13 @@ export const MaintenanceScheduleForm: React.FC<Props> = ({ schedule, saving, err
   // true dès que l'utilisateur tape lui-même la prochaine échéance : on ne l'écrase plus.
   const [nextEdited, setNextEdited] = useState(false);
   const [nextIsSuggested, setNextIsSuggested] = useState(false);
+  const [inspectionBody, setInspectionBody] = useState(schedule?.inspectionBody ?? '');
+  const [duration, setDuration] = useState(schedule?.estimatedDurationMinutes ? minutesToHHMM(schedule.estimatedDurationMinutes) : '');
+  const [controlPoints, setControlPoints] = useState(schedule?.controlPoints ?? '');
+  const [safety, setSafety] = useState(schedule?.safetyInstructions ?? '');
   const [localError, setLocalError] = useState<string | null>(null);
+  // Détails du contrôle : visibles pour un contrôle réglementaire, ou dès qu'une valeur existe déjà (jamais perdue en silence).
+  const showDetails = legal || (schedule ? hasControlDetails(schedule) : false);
 
   const applySuggestion = (l: string, f: FreqChoice, m: string) => {
     if (nextEdited) return;
@@ -71,6 +78,12 @@ export const MaintenanceScheduleForm: React.FC<Props> = ({ schedule, saving, err
         return setLocalError("Périodicité : indiquez un nombre entier d'heures supérieur à 0.");
       }
     }
+    let estimatedDurationMinutes: number | null = null;
+    if (duration.trim()) {
+      const parsed = parseDurationHHMM(duration);
+      if (parsed === undefined) return setLocalError('Durée estimée : format HH:MM attendu, supérieur à 00:00 (ex. 03:00).');
+      estimatedDurationMinutes = parsed;
+    }
     setLocalError(null);
     onSubmit({
       title: title.trim(),
@@ -81,6 +94,10 @@ export const MaintenanceScheduleForm: React.FC<Props> = ({ schedule, saving, err
       intervalHours,
       lastDoneDate: last || null,
       nextDueDate: next || null,
+      inspectionBody: inspectionBody.trim() || null,
+      controlPoints: controlPoints.trim() || null,
+      safetyInstructions: safety.trim() || null,
+      estimatedDurationMinutes,
     });
   };
 
@@ -164,6 +181,30 @@ export const MaintenanceScheduleForm: React.FC<Props> = ({ schedule, saving, err
             <button type="button" onClick={() => { setNext(suggestion!); setNextEdited(false); setNextIsSuggested(true); }} className="text-[11px] font-semibold text-emerald-700 hover:underline -mt-2">
               Utiliser la date proposée ({formatIsoDate(suggestion)})
             </button>
+          )}
+
+          {showDetails && (
+            <div className="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+              <p className="text-xs font-bold text-gray-700">Détails du contrôle (facultatif)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Organisme de contrôle / prestataire</label>
+                  <input type="text" value={inspectionBody} onChange={e => setInspectionBody(e.target.value)} placeholder="Ex. APAVE" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Durée estimée (HH:MM)</label>
+                  <input type="text" inputMode="numeric" value={duration} onChange={e => setDuration(e.target.value)} placeholder="Ex. 03:00" className={inputCls} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Points de contrôle (un par ligne)</label>
+                <textarea rows={4} value={controlPoints} onChange={e => setControlPoints(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Consignes de sécurité / habilitations</label>
+                <textarea rows={3} value={safety} onChange={e => setSafety(e.target.value)} className={inputCls} />
+              </div>
+            </div>
           )}
 
           {(localError || error) && (
