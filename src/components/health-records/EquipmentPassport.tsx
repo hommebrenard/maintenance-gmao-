@@ -5,13 +5,15 @@ import { getOperationalStatusBadgeClass, formatIsoDate } from '../../utils/equip
 import { NotSet } from './NotSet';
 import type { ExtraState } from './useEquipmentExtras';
 import {
-  pickNextDue, scheduleStatusBadgeClass, scheduleStatusLabel, summarizeAnomalies, summarizeLegalControl,
+  computeNextDue, scheduleStatusBadgeClass, scheduleStatusLabel, summarizeAnomalies, summarizeLegalControl,
 } from '../../utils/healthRecordDisplay';
 
 interface EquipmentPassportProps {
   selected: Equipment;
   qrDataUrl: string | null;
   lastCompletedWorkOrder: WorkOrder | null;
+  /** OT liés à l'équipement (pour la prochaine échéance des OT préventifs ouverts). */
+  linkedWorkOrders: WorkOrder[];
   schedules: ExtraState<MaintenanceSchedule>;
   entries: HealthRecordEntry[];
   entriesLoading: boolean;
@@ -22,9 +24,9 @@ interface EquipmentPassportProps {
  * santé & conformité, photo et tableau d'identité. Extrait tel quel de
  * HealthRecordsView (Phase 4a, 29/09/2026) — aucun changement de rendu.
  */
-export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder, schedules, entries, entriesLoading }) => {
+export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, qrDataUrl, lastCompletedWorkOrder, linkedWorkOrders, schedules, entries, entriesLoading }) => {
   const legal = summarizeLegalControl(schedules.items);
-  const nextDue = pickNextDue(schedules.items);
+  const { next: nextDue, overdueCount } = computeNextDue(schedules.items, linkedWorkOrders);
   const anomalies = summarizeAnomalies(entries);
   const pending = (loading: boolean, error: string | null) =>
     loading ? <span className="text-sm font-bold text-gray-400">Chargement...</span>
@@ -118,13 +120,22 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                     <span className="text-[10px] font-semibold text-gray-500 block">Prochaine échéance de maintenance</span>
                     {pending(schedules.loading, schedules.error) ?? (nextDue ? (
                       <>
-                        <span className="text-sm font-bold text-gray-800">{formatIsoDate(nextDue.nextDueDate)}</span>
+                        <span className="text-sm font-bold text-gray-800">{formatIsoDate(nextDue.date)}</span>
                         <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${scheduleStatusBadgeClass(nextDue.status)}`}>
                           {scheduleStatusLabel(nextDue.status)}
                         </span>
-                        <p className="text-[10px] text-gray-500 mt-0.5">{nextDue.title}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {nextDue.title} · {nextDue.source === 'ot' ? `OT ${nextDue.code}` : 'Planification'}
+                        </p>
                       </>
+                    ) : overdueCount > 0 ? (
+                      <span className="text-sm font-bold text-gray-400">Aucune échéance à venir</span>
                     ) : <span className="text-sm font-bold text-gray-400">Non renseigné</span>)}
+                    {!schedules.loading && !schedules.error && overdueCount > 0 && (
+                      <p className="text-[10px] font-semibold text-red-600 mt-0.5">
+                        {overdueCount} échéance{overdueCount > 1 ? 's' : ''} en retard
+                      </p>
+                    )}
                   </div>
                   <div className="border border-gray-200 rounded-lg p-3 bg-white">
                     <span className="text-[10px] font-semibold text-gray-500 block">Anomalies signalées (carnet de santé)</span>
