@@ -91,6 +91,7 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                         </span>
                         <p className="text-[10px] text-gray-500 mt-0.5">
                           {legal.title}{legal.date ? ` — ${formatIsoDate(legal.date)}` : ''}
+                          {legal.inspectionBody ? ` · ${legal.inspectionBody}` : ''}
                           {legal.count > 1 ? ` (+${legal.count - 1} autre${legal.count > 2 ? 's' : ''})` : ''}
                         </p>
                       </>
