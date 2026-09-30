@@ -4,7 +4,9 @@ import type {
   HealthRecordEntry,
   MaintenanceSchedule,
   MaintenanceScheduleStatus,
+  WorkOrder,
 } from '../types';
+import { computeScheduleStatus } from './maintenanceSchedule';
 
 // Fonctions d'affichage pures du carnet de santé enrichi (Phase 4b, 29/09/2026).
 // Règle du projet : donnée absente => « Non renseigné », jamais de valeur inventée.
@@ -70,6 +72,58 @@ export function pickNextDue(schedules: MaintenanceSchedule[]): MaintenanceSchedu
   const dated = schedules.filter(s => s.nextDueDate);
   if (dated.length === 0) return null;
   return [...dated].sort((a, b) => a.nextDueDate!.localeCompare(b.nextDueDate!))[0];
+}
+
+export interface NextDueItem {
+  /** YYYY-MM-DD */
+  date: string;
+  title: string;
+  source: 'planification' | 'ot';
+  /** Code de l'OT quand la source est un OT. */
+  code?: string;
+  status: MaintenanceScheduleStatus;
+}
+
+export interface NextDueResult {
+  /** Échéance la plus proche à venir (aujourd'hui inclus) ; null s'il n'y en a aucune. */
+  next: NextDueItem | null;
+  /** Échéances déjà dépassées (Planification + OT préventifs ouverts), comptées à part. */
+  overdueCount: number;
+}
+
+const ISO_DAY = /^(\d{4}-\d{2}-\d{2})/;
+const localIsoDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * « Prochaine échéance » de la Synthèse (décision du 30/09/2026) : la date la plus proche
+ * À VENIR parmi la Planification et les OT préventifs non clos (ni Terminé ni Annulé).
+ * Les échéances déjà dépassées ne sont jamais présentées comme « prochaine » : elles sont
+ * seulement comptées. Dates absentes ou illisibles ignorées (« Non renseigné »).
+ */
+export function computeNextDue(
+  schedules: MaintenanceSchedule[],
+  workOrders: WorkOrder[],
+  today: Date = new Date()
+): NextDueResult {
+  const todayIso = localIsoDay(today);
+  const items: NextDueItem[] = [];
+  for (const s of schedules) {
+    const date = s.nextDueDate ? ISO_DAY.exec(s.nextDueDate)?.[1] : undefined;
+    if (!date) continue;
+    items.push({ date, title: s.title, source: 'planification', status: computeScheduleStatus(date, today) ?? 'ok' });
+  }
+  for (const wo of workOrders) {
+    if (wo.type !== 'Préventive' || wo.status === 'Terminé' || wo.status === 'Annulé') continue;
+    const date = wo.dueDate ? ISO_DAY.exec(wo.dueDate)?.[1] : undefined;
+    if (!date) continue;
+    items.push({ date, title: wo.title, source: 'ot', code: wo.code, status: computeScheduleStatus(date, today) ?? 'ok' });
+  }
+  const upcoming = items.filter(i => i.date >= todayIso);
+  const overdueCount = items.length - upcoming.length;
+  // À date égale, la Planification passe avant l'OT (tri stable sur l'ordre d'insertion).
+  const next = [...upcoming].sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+  return { next, overdueCount };
 }
 
 /**
