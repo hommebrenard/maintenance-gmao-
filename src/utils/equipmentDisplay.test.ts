@@ -374,3 +374,15 @@ describe('extractBrandFromDescription', () => {
     expect(extractBrandFromDescription(null)).toBe('');
   });
 });
+
+describe('buildEquipmentEditPatch — catégorie et notes', () => {
+  const base = { name: 'A', status: 'En service', criticality: 'Normal', manufacturer: '', model: '', serialNumber: '', description: '', locationId: '' } as never;
+  const cur = { name: 'A', status: 'En service', criticality: 'Normal', manufacturer: '', model: '', serialNumber: '', description: '', category: '', notes: '' } as never;
+  it('envoie catégorie et notes modifiées', () => {
+    const patch = buildEquipmentEditPatch(cur, { ...(base as object), category: ' Ascenseur ', notes: 'RAS' } as never, []);
+    expect(patch).toEqual({ category: 'Ascenseur', notes: 'RAS' });
+  });
+  it('ne touche pas catégorie/notes si le formulaire ne les gère pas', () => {
+    expect(buildEquipmentEditPatch(cur, base, [])).toEqual({});
+  });
+});
