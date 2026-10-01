@@ -4,7 +4,7 @@ import type { ControlResult, ScheduleControl } from '../../types';
 // ---------------------------------------------------------------------------
 // Table `schedule_controls` (créée le 30/09/2026) : un contrôle réalisé = date,
 // organisme, verdict, observations. RLS : lecture ouverte aux authentifiés,
-// INSERT/UPDATE/DELETE réservés à is_manager(). Pas de suppression depuis l'interface.
+// INSERT/UPDATE/DELETE réservés à is_manager(). Suppression depuis l'interface : managers uniquement, avec confirmation.
 // ---------------------------------------------------------------------------
 
 interface ScheduleControlRow {
@@ -98,4 +98,11 @@ export async function updateScheduleControl(id: string, patch: Partial<ScheduleC
     .single();
   if (error) throw error;
   return rowToControl(data as ScheduleControlRow);
+}
+
+/** Supprime un contrôle réalisé (managers). Les documents liés sont conservés (control_id passe à NULL). */
+export async function deleteScheduleControl(id: string): Promise<void> {
+  const { data, error } = await supabase.from('schedule_controls').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Suppression refusée ou contrôle introuvable.');
 }
