@@ -33,7 +33,7 @@ describe('registre OT : filtres', () => {
   it('détecte les filtres par défaut et libelle la période', () => {
     expect(isDefaultFilters(DEFAULT_REGISTER_FILTERS)).toBe(true);
     expect(isDefaultFilters({ ...DEFAULT_REGISTER_FILTERS, query: 'x' })).toBe(false);
-    expect(periodLabel('recent', now)).toBe('Année 2026 + OT non clos');
+    expect(periodLabel('recent', now)).toBe('Année 2026 + non clos des années précédentes');
     expect(periodLabel('all')).toBe('Toutes les années');
     expect(periodLabel('2025')).toBe('Année 2025');
   });
