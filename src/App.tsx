@@ -775,6 +775,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     if (updated.manufacturer !== undefined) dbPatch.manufacturer = updated.manufacturer;
     if (updated.model !== undefined) dbPatch.model = updated.model;
     if (updated.serialNumber !== undefined) dbPatch.serialNumber = updated.serialNumber;
+    if (updated.category !== undefined) dbPatch.category = updated.category;
+    if (updated.notes !== undefined) dbPatch.notes = updated.notes;
     if (updated.criticality !== undefined) dbPatch.criticality = updated.criticality;
     if (updated.status !== undefined) dbPatch.status = updated.status;
     if (updated.locationId) dbPatch.locationId = updated.locationId;
