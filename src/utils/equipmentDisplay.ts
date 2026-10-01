@@ -79,6 +79,9 @@ export interface EquipmentEditForm {
   model: string;
   serialNumber: string;
   description: string;
+  /** Optionnels : absents des appelants qui ne les gèrent pas (ils ne sont alors jamais modifiés). */
+  category?: string;
+  notes?: string;
   /** id de l'emplacement choisi ; '' = aucun choix (l'emplacement actuel est conservé). */
   locationId: string;
 }
@@ -106,6 +109,13 @@ export function buildEquipmentEditPatch(
   textFields.forEach(field => {
     const next = form[field].trim();
     const before = isBlankField(current[field]) ? '' : current[field].trim();
+    if (next !== before) patch[field] = next;
+  });
+
+  (['category', 'notes'] as const).forEach(field => {
+    if (form[field] === undefined) return;
+    const next = form[field].trim();
+    const before = isBlankField(current[field]) ? '' : (current[field] ?? '').trim();
     if (next !== before) patch[field] = next;
   });
 
