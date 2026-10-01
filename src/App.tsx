@@ -24,6 +24,7 @@ import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk }
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
+import { fetchSupplierOptions, createSupplierByName, type SupplierOption } from './lib/queries/suppliers';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
 
 
@@ -201,6 +202,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // depuis le 13/09/2026 — avant cette date, plus de mock local synchronisé
   // via localStorage (voir handlers plus bas pour le CRUD Supabase).
   const [locations, setLocations] = useState<LocationItem[]>([]);
+  const [supplierOptions, setSupplierOptions] = useState<SupplierOption[]>([]);
   const [users, setUsers] = useState<UserItem[]>(() =>
     getInitialState('gmao_users', INITIAL_USERS)
   );
@@ -320,6 +322,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     fetchTechniciens()
       .then(setTechniciens)
       .catch(err => console.error('Erreur chargement techniciens:', err));
+  }, []);
+
+  React.useEffect(() => {
+    fetchSupplierOptions()
+      .then(setSupplierOptions)
+      .catch(err => console.error('Erreur chargement fournisseurs:', err));
   }, []);
 
   React.useEffect(() => {
@@ -755,7 +763,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Depuis le 20/09/2026, la modification d'un équipement est enregistrée en base
   // (avant : état local uniquement, perdue au rechargement). Champs directs +
-  // emplacement ; le fournisseur et le code ne sont pas modifiables ici.
+  // emplacement + fournisseur ; le code n'est pas modifiable ici.
   const handleEditEquipment = (id: string, updated: Partial<Equipment>) => {
     const previous = equipmentList;
     setEquipmentList(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
@@ -775,6 +783,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     if (updated.manufacturer !== undefined) dbPatch.manufacturer = updated.manufacturer;
     if (updated.model !== undefined) dbPatch.model = updated.model;
     if (updated.serialNumber !== undefined) dbPatch.serialNumber = updated.serialNumber;
+    if (updated.supplierId !== undefined) dbPatch.supplierId = updated.supplierId;
     if (updated.category !== undefined) dbPatch.category = updated.category;
     if (updated.notes !== undefined) dbPatch.notes = updated.notes;
     if (updated.criticality !== undefined) dbPatch.criticality = updated.criticality;
@@ -979,6 +988,12 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             equipmentList={equipmentList}
             workOrders={workOrders}
             locations={locations}
+            supplierOptions={supplierOptions}
+            onCreateSupplier={async (name: string) => {
+              const created = await createSupplierByName(name, session.user.id);
+              setSupplierOptions(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+              return created;
+            }}
             onAddEquipment={handleAddEquipment}
             onUpdateStatus={handleUpdateEquipmentStatus}
             onDeleteEquipment={handleDeleteEquipment}
