@@ -14,7 +14,11 @@ import { HealthRecordTabs, type HealthRecordTab } from '../health-records/Health
 import { MaintenanceSchedulePanel } from '../health-records/MaintenanceSchedulePanel';
 import { EquipmentPartsPanel } from '../health-records/EquipmentPartsPanel';
 import { EquipmentDocumentsPanel } from '../health-records/EquipmentDocumentsPanel';
-import { useEquipmentExtras } from '../health-records/useEquipmentExtras';
+import { errorMessage, useEquipmentExtras } from '../health-records/useEquipmentExtras';
+import { updateEquipment } from '../../lib/queries/equipment';
+import { uploadEquipmentPhoto } from '../../lib/storage';
+import { compressImage } from '../../utils/imageCompress';
+import { PHOTO_MAX_BYTES, validatePhotoFile } from '../../utils/fileUpload';
 
 interface HealthRecordsViewProps {
   equipmentList: Equipment[];
@@ -182,6 +186,34 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   }, [isAdding, selected?.id, isLoadingEntries, activeTab]);
 
   const extras = useEquipmentExtras(selected?.id);
+
+  // Photo de l'équipement : envoi dans le bucket public, lien enregistré dans equipment.photo_url.
+  // `photoOverrides` affiche tout de suite la nouvelle photo sans recharger la liste des équipements.
+  const [photoOverrides, setPhotoOverrides] = useState<Record<string, string>>({});
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  useEffect(() => { setPhotoError(null); }, [selected?.id]);
+  const selectedView = selected && photoOverrides[selected.id] ? { ...selected, photoUrl: photoOverrides[selected.id] } : selected;
+
+  const handlePhotoSelected = async (file: File) => {
+    if (!selected) return;
+    const id = selected.id;
+    const invalid = validatePhotoFile(file);
+    if (invalid) { setPhotoError(invalid); return; }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const blob = await compressImage(file, { maxEdge: 1280, quality: 0.8 });
+      if (blob.size > PHOTO_MAX_BYTES) throw new Error('Photo trop volumineuse même après réduction.');
+      const url = await uploadEquipmentPhoto(id, blob);
+      await updateEquipment(id, { photoUrl: url });
+      setPhotoOverrides(prev => ({ ...prev, [id]: url }));
+    } catch (err) {
+      setPhotoError(errorMessage(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   // Carnet de santé : même composant dans l'onglet Interventions (avec saisie) et dans le
   // document PDF (lecture seule).
@@ -380,7 +412,11 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
             <div role="tabpanel" className={activeTab !== 'passeport' ? 'carnet-print-root @container' : undefined}>
               {activeTab === 'synthese' && (
                 <EquipmentPassport
-                  selected={selected}
+                  selected={selectedView ?? selected}
+                  canEditPhoto={isManager}
+                  photoBusy={photoBusy}
+                  photoError={photoError}
+                  onPhotoSelected={handlePhotoSelected}
                   qrDataUrl={qrDataUrl}
                   lastCompletedWorkOrder={lastCompletedWorkOrder}
                   linkedWorkOrders={linkedWorkOrders}
@@ -420,7 +456,15 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   onItemsChange={extras.changeParts}
                 />
               )}
-              {activeTab === 'documents' && <EquipmentDocumentsPanel state={extras.documents} />}
+              {activeTab === 'documents' && (
+                <EquipmentDocumentsPanel
+                  state={extras.documents}
+                  equipmentId={selected.id}
+                  currentUserId={currentUserId}
+                  canEdit={isManager}
+                  onItemsChange={extras.changeDocuments}
+                />
+              )}
 
               {activeTab === 'passeport' && (
                 <>
@@ -443,7 +487,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   </div>
                   <HealthRecordPrint printRef={printableRef}>
                     <EquipmentPassport
-                      selected={selected}
+                      selected={selectedView ?? selected}
                       qrDataUrl={qrDataUrl}
                       lastCompletedWorkOrder={lastCompletedWorkOrder}
                       linkedWorkOrders={linkedWorkOrders}
