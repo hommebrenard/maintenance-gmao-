@@ -1,5 +1,5 @@
 import type { EquipmentDocument, EquipmentDocumentCategory } from '../types';
-import { createEquipmentDocument } from './queries/equipmentDocuments';
+import { createEquipmentDocument, deleteEquipmentDocument } from './queries/equipmentDocuments';
 import { getDocumentSignedUrl, removeDocumentFile, uploadDocumentFile } from './storage';
 import { compressImage } from '../utils/imageCompress';
 import { DOC_MAX_BYTES, extensionFor, isImageType, nameWithoutExtension, resolveMime, validateDocumentFile } from '../utils/fileUpload';
@@ -93,4 +93,20 @@ export async function openEquipmentDocument(doc: EquipmentDocument): Promise<voi
   } else if (doc.externalUrl && isHttpUrl(doc.externalUrl)) {
     window.open(doc.externalUrl, '_blank', 'noopener,noreferrer');
   }
+}
+
+/**
+ * Supprime un document (managers) : la ligne d'abord, puis le fichier du stockage s'il y en a un.
+ * Si la ligne est supprimée mais pas le fichier, renvoie un avertissement (fichier orphelin) au lieu d'échouer.
+ */
+export async function deleteEquipmentDocumentWithFile(doc: EquipmentDocument): Promise<{ warning?: string }> {
+  await deleteEquipmentDocument(doc.id);
+  if (doc.storagePath) {
+    try {
+      await removeDocumentFile(doc.storagePath);
+    } catch (err) {
+      return { warning: `Le document est supprimé, mais son fichier n'a pas pu être retiré du stockage (${err instanceof Error ? err.message : 'erreur'}).` };
+    }
+  }
+  return {};
 }
