@@ -82,6 +82,8 @@ export interface EquipmentEditForm {
   /** Optionnels : absents des appelants qui ne les gèrent pas (ils ne sont alors jamais modifiés). */
   category?: string;
   notes?: string;
+  /** id du fournisseur choisi ; '' = aucun. Optionnel : absent = jamais modifié. */
+  supplierId?: string;
   /** id de l'emplacement choisi ; '' = aucun choix (l'emplacement actuel est conservé). */
   locationId: string;
 }
@@ -96,7 +98,8 @@ export interface EquipmentEditForm {
 export function buildEquipmentEditPatch(
   current: Equipment,
   form: EquipmentEditForm,
-  locations: { id: string; name: string }[]
+  locations: { id: string; name: string }[],
+  suppliers: { id: string; name: string }[] = []
 ): Partial<Equipment> {
   const patch: Partial<Equipment> = {};
 
@@ -118,6 +121,11 @@ export function buildEquipmentEditPatch(
     const before = isBlankField(current[field]) ? '' : (current[field] ?? '').trim();
     if (next !== before) patch[field] = next;
   });
+
+  if (form.supplierId !== undefined && form.supplierId !== (current.supplierId ?? '')) {
+    patch.supplierId = form.supplierId;
+    patch.supplier = suppliers.find(s => s.id === form.supplierId)?.name ?? '';
+  }
 
   if (form.locationId && form.locationId !== current.locationId) {
     const loc = locations.find(l => l.id === form.locationId);
