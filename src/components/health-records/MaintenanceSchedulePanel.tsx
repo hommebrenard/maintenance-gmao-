@@ -9,7 +9,7 @@ import {
   createMaintenanceSchedule, deleteMaintenanceSchedule, updateMaintenanceSchedule,
   type MaintenanceScheduleInput,
 } from '../../lib/queries/maintenanceSchedules';
-import { createScheduleControl, updateScheduleControl } from '../../lib/queries/scheduleControls';
+import { createScheduleControl, deleteScheduleControl, updateScheduleControl } from '../../lib/queries/scheduleControls';
 import { addEquipmentDocuments, openEquipmentDocument } from '../../lib/documents';
 import { errorMessage, type ExtraState } from './useEquipmentExtras';
 import { Dash, PanelState } from './PanelState';
@@ -37,8 +37,9 @@ const ControlList: React.FC<{
   canEdit: boolean;
   onEdit: (c: ScheduleControl) => void;
   onAddDoc: (c: ScheduleControl) => void;
+  onDelete?: (c: ScheduleControl) => void;
   onOpenDoc: (d: EquipmentDocument) => void;
-}> = ({ controls, documents, canEdit, onEdit, onAddDoc, onOpenDoc }) => (
+}> = ({ controls, documents, canEdit, onEdit, onAddDoc, onDelete, onOpenDoc }) => (
   <div className="space-y-2">
     {controls.map(c => {
       const docs = documents.filter(d => d.controlId === c.id);
@@ -54,6 +55,7 @@ const ControlList: React.FC<{
               <span className="ml-auto space-x-3 font-semibold">
                 <button type="button" onClick={() => onAddDoc(c)} className="text-emerald-700 hover:underline">Ajouter un document</button>
                 <button type="button" onClick={() => onEdit(c)} className="text-blue-600 hover:underline">Modifier</button>
+                {onDelete && <button type="button" onClick={() => onDelete(c)} className="text-red-600 hover:underline">Supprimer</button>}
               </span>
             )}
           </div>
@@ -89,6 +91,7 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
   // formOpen : null = fermé, 'new' = création, sinon l'échéance en cours de modification.
   const [formOpen, setFormOpen] = useState<null | 'new' | MaintenanceSchedule>(null);
   const [toDelete, setToDelete] = useState<MaintenanceSchedule | null>(null);
+  const [controlToDelete, setControlToDelete] = useState<ScheduleControl | null>(null);
   // controlForm : contrôle à enregistrer (échéance) ou à corriger (échéance + contrôle).
   const [controlForm, setControlForm] = useState<null | { schedule: MaintenanceSchedule; control?: ScheduleControl }>(null);
   // docForm : contrôle auquel on ajoute un document (fichier et/ou lien).
@@ -148,6 +151,24 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
       setActionError(errorMessage(err));
       setToDelete(null);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleControlDelete = async () => {
+    if (!controlToDelete) return;
+    const id = controlToDelete.id;
+    setBusy(true);
+    try {
+      await deleteScheduleControl(id);
+      onControlsChange(items => items.filter(i => i.id !== id));
+      // La base détache les documents (control_id = NULL) : on reflète la même chose à l'écran.
+      onDocumentsChange(items => items.map(d => (d.controlId === id ? { ...d, controlId: undefined } : d)));
+      setActionError(null);
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setControlToDelete(null);
       setBusy(false);
     }
   };
@@ -342,6 +363,7 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
                             controls={controlsOf(s.id)} documents={documents} canEdit={canEdit}
                             onEdit={c => { setFormError(null); setControlForm({ schedule: s, control: c }); }}
                             onAddDoc={c => { setFormError(null); setDocForm(c); }}
+                            onDelete={c => setControlToDelete(c)}
                             onOpenDoc={openDoc}
                           />
                         </div>
@@ -396,6 +418,26 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
           onSubmit={handleDocSubmit}
           onCancel={() => { setDocForm(null); setFormError(null); }}
         />
+      )}
+
+      {controlToDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3">
+            <h3 className="text-base font-bold text-gray-900">Supprimer ce contrôle réalisé ?</h3>
+            <p className="text-sm text-gray-700">
+              « {controlToDelete.title} » du {formatIsoDate(controlToDelete.performedOn)}. Cette suppression est définitive.
+            </p>
+            <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">
+              Les documents liés (comptes rendus) restent dans l'onglet Documents. Les dates de l'échéance (dernière réalisation, prochaine échéance) ne sont pas modifiées.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setControlToDelete(null)} disabled={busy} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg disabled:opacity-50">Annuler</button>
+              <button type="button" onClick={handleControlDelete} disabled={busy} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50">
+                {busy ? 'Suppression…' : 'Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toDelete && (
