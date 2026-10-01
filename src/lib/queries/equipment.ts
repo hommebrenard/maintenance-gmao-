@@ -105,6 +105,7 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
     location: row.locations?.name ?? '',
     locationId: row.location_id ?? undefined,
     supplier: row.suppliers?.name ?? '',
+    supplierId: row.supplier_id ?? undefined,
     manufacturer: row.brand ?? '',
     model: row.model ?? '',
     serialNumber: row.serial_number ?? '',
@@ -178,7 +179,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   // handleSyncEquipmentFromWorkOrders dans App.tsx). Pas de lecture via ces
   // clés : la lecture continue de passer par `location`/`supplier` (jointure).
   if (eq.locationId) row.location_id = eq.locationId; // '' ou undefined : rien à écrire
-  if (eq.supplierId !== undefined) row.supplier_id = eq.supplierId;
+  if (eq.supplierId !== undefined) row.supplier_id = eq.supplierId || null; // '' = retirer le fournisseur
   if (eq.qrCode !== undefined) row.qr_code = eq.qrCode;
   if (eq.photoUrl !== undefined) row.photo_url = eq.photoUrl;
   if (eq.manualUrl !== undefined) row.manual_url = eq.manualUrl;
