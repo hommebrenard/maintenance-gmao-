@@ -2,7 +2,7 @@ import type { WorkOrder, WorkOrderStatus, WorkOrderType } from '../types';
 
 /** Filtres du registre d'entretien & dépannages d'un équipement. */
 export interface RegisterFilters {
-  /** 'recent' = année en cours + OT non clos ; 'all' = tout ; sinon une année (« 2025 »). */
+  /** 'recent' = année en cours (tous statuts) + OT non clos des années précédentes ; 'all' = tout ; sinon une année (« 2025 »). */
   period: string;
   status: 'all' | WorkOrderStatus;
   type: 'all' | WorkOrderType;
@@ -29,7 +29,7 @@ export function isDefaultFilters(f: RegisterFilters): boolean {
 /** Libellé de la période choisie (repris sur le PDF pour qu'on sache que la liste est filtrée). */
 export function periodLabel(period: string, now: Date = new Date()): string {
   if (period === 'all') return 'Toutes les années';
-  if (period === 'recent') return `Année ${now.getFullYear()} + OT non clos`;
+  if (period === 'recent') return `Année ${now.getFullYear()} + non clos des années précédentes`;
   return `Année ${period}`;
 }
 
