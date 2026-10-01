@@ -35,6 +35,10 @@ interface EquipmentViewProps {
   workOrders?: WorkOrder[];
   /** Liste des emplacements (table `locations`) proposée dans les formulaires. */
   locations?: LocationItem[];
+  /** Fournisseurs de la table `suppliers` proposés dans « Modifier ». */
+  supplierOptions?: { id: string; name: string }[];
+  /** Crée un fournisseur (nom seul) et le renvoie ; lève une erreur si la base refuse. */
+  onCreateSupplier?: (name: string) => Promise<{ id: string; name: string }>;
   onAddEquipment: (eq: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt' | 'workOrdersCount'>) => void;
   onUpdateStatus: (id: string, status: OperationalStatus) => void;
   onDeleteEquipment: (id: string) => void;
@@ -46,6 +50,8 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   equipmentList,
   workOrders = [],
   locations = [],
+  supplierOptions = [],
+  onCreateSupplier,
   onAddEquipment,
   onUpdateStatus,
   onDeleteEquipment,
@@ -98,6 +104,10 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [description, setDescription] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [newSupplier, setNewSupplier] = useState('');
+  const [supplierBusy, setSupplierBusy] = useState(false);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
   const [category, setCategory] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -220,9 +230,28 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     setModel(clean(selectedEquipment.model));
     setSerialNumber(clean(selectedEquipment.serialNumber));
     setDescription(clean(selectedEquipment.description));
+    setSupplierId(selectedEquipment.supplierId ?? '');
+    setNewSupplier('');
+    setSupplierError(null);
     setCategory(clean(selectedEquipment.category ?? ''));
     setNotes(clean(selectedEquipment.notes ?? ''));
     setIsEditModalOpen(true);
+  };
+
+  const handleCreateSupplier = async () => {
+    const name = newSupplier.trim();
+    if (!name || !onCreateSupplier) return;
+    setSupplierBusy(true);
+    setSupplierError(null);
+    try {
+      const created = await onCreateSupplier(name);
+      setSupplierId(created.id);
+      setNewSupplier('');
+    } catch (err) {
+      setSupplierError(`Création impossible : ${err instanceof Error ? err.message : 'erreur'}`);
+    } finally {
+      setSupplierBusy(false);
+    }
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -233,8 +262,9 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     // fournisseur n'est pas encore géré).
     const patch = buildEquipmentEditPatch(
       selectedEquipment,
-      { name, status, criticality, manufacturer, model, serialNumber, description, category, notes, locationId },
-      locations
+      { name, status, criticality, manufacturer, model, serialNumber, description, category, notes, supplierId, locationId },
+      locations,
+      supplierOptions
     );
     if (Object.keys(patch).length > 0) {
       onEditEquipment(selectedEquipment.id, patch);
@@ -854,6 +884,43 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Fournisseur</label>
+                <select
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Non renseigné</option>
+                  {supplierId !== '' && !supplierOptions.some(o => o.id === supplierId) && (
+                    <option value={supplierId}>{selectedEquipment?.supplier || 'Fournisseur actuel'}</option>
+                  )}
+                  {supplierOptions.map(o => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+                {onCreateSupplier && (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Nouveau fournisseur (nom)"
+                      value={newSupplier}
+                      onChange={(e) => setNewSupplier(e.target.value)}
+                      className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateSupplier}
+                      disabled={supplierBusy || newSupplier.trim() === ''}
+                      className="px-3 py-1.5 text-sm font-semibold text-blue-700 bg-blue-50 rounded-lg disabled:opacity-50"
+                    >
+                      {supplierBusy ? '…' : 'Créer'}
+                    </button>
+                  </div>
+                )}
+                {supplierError && <p className="mt-1 text-xs text-red-700">{supplierError}</p>}
               </div>
 
               <div>
