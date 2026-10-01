@@ -169,10 +169,10 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
 
             <div data-pdf-block className="grid grid-cols-1 @xl:grid-cols-3 gap-4 mb-4">
               {/* Photo */}
-              <div className="@xl:col-span-1">
-                <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center h-40">
+              <div className="@xl:col-span-1 flex flex-col">
+                <div className="relative flex-1 min-h-40 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
                   {selected.photoUrl ? (
-                    <img src={selected.photoUrl} alt={selected.name} className="w-full h-full object-cover" />
+                    <img src={selected.photoUrl} alt={selected.name} className="absolute inset-0 w-full h-full object-cover" />
                   ) : (
                     <div className="text-gray-300 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8" />
