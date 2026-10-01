@@ -4,6 +4,7 @@ import type { ControlResult, MaintenanceSchedule, ScheduleControl } from '../../
 import { addMonthsToIsoDate, isValidIsoDate } from '../../utils/maintenanceSchedule';
 import { CONTROL_RESULTS, controlResultLabel, isHttpUrl } from '../../utils/scheduleControls';
 import { formatIsoDate } from '../../utils/equipmentDisplay';
+import { validateDocumentFile } from '../../utils/fileUpload';
 
 export interface ScheduleControlFormValues {
   performedOn: string;
@@ -13,6 +14,8 @@ export interface ScheduleControlFormValues {
   /** Lien GED du compte rendu (http/https) et son intitulé, si renseignés. */
   docUrl: string | null;
   docName: string | null;
+  /** Fichier du compte rendu (PDF ou photo), s'il est joint. */
+  docFile: File | null;
   /** Création uniquement : mettre à jour la dernière réalisation / prochaine échéance de l'échéance. */
   updateSchedule: boolean;
   nextDueDate: string | null;
@@ -40,6 +43,7 @@ export const ScheduleControlForm: React.FC<Props> = ({ schedule, control, saving
   const [notes, setNotes] = useState(control?.notes ?? '');
   const [docUrl, setDocUrl] = useState('');
   const [docName, setDocName] = useState('');
+  const [docFile, setDocFile] = useState<File | null>(null);
   const [next, setNext] = useState(schedule.nextDueDate?.slice(0, 10) ?? '');
   const [nextEdited, setNextEdited] = useState(false);
   const [nextIsSuggested, setNextIsSuggested] = useState(false);
@@ -63,6 +67,10 @@ export const ScheduleControlForm: React.FC<Props> = ({ schedule, control, saving
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidIsoDate(performedOn)) return setLocalError('Date du contrôle : obligatoire.');
+    if (docFile) {
+      const invalid = validateDocumentFile(docFile);
+      if (invalid) return setLocalError(invalid);
+    }
     if (docUrl.trim() && !isHttpUrl(docUrl)) return setLocalError('Lien du compte rendu : adresse http:// ou https:// attendue.');
     if (updateSchedule && next) {
       if (!isValidIsoDate(next)) return setLocalError('Prochaine échéance : date invalide.');
@@ -76,6 +84,7 @@ export const ScheduleControlForm: React.FC<Props> = ({ schedule, control, saving
       notes: notes.trim() || null,
       docUrl: docUrl.trim() || null,
       docName: docName.trim() || null,
+      docFile,
       updateSchedule,
       nextDueDate: updateSchedule ? next || null : null,
     });
@@ -124,10 +133,15 @@ export const ScheduleControlForm: React.FC<Props> = ({ schedule, control, saving
           </div>
 
           <div className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
-            <p className="text-xs font-bold text-gray-700">Compte rendu du contrôleur (lien GED, facultatif)</p>
-            <input type="text" inputMode="url" value={docUrl} onChange={e => setDocUrl(e.target.value)} placeholder="https://…" className={inputCls} />
+            <p className="text-xs font-bold text-gray-700">Compte rendu du contrôleur (facultatif)</p>
+            <input
+              type="file" accept=".pdf,application/pdf,image/*"
+              onChange={e => setDocFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-xs text-gray-700 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-semibold"
+            />
+            <input type="text" inputMode="url" value={docUrl} onChange={e => setDocUrl(e.target.value)} placeholder="Lien vers la GED : https://…" className={inputCls} />
             <input type="text" value={docName} onChange={e => setDocName(e.target.value)} placeholder="Intitulé du document (facultatif)" className={inputCls} />
-            <p className="text-[11px] text-gray-500">Le dépôt d'un fichier PDF arrivera avec l'étape suivante.</p>
+            <p className="text-[11px] text-gray-500">PDF ou photo (10 Mo maximum), et/ou lien vers la GED. Les photos sont réduites automatiquement.</p>
           </div>
 
           {!isEdit && (
