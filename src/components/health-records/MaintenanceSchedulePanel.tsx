@@ -10,11 +10,12 @@ import {
   type MaintenanceScheduleInput,
 } from '../../lib/queries/maintenanceSchedules';
 import { createScheduleControl, updateScheduleControl } from '../../lib/queries/scheduleControls';
-import { createEquipmentDocument } from '../../lib/queries/equipmentDocuments';
+import { addEquipmentDocuments, openEquipmentDocument } from '../../lib/documents';
 import { errorMessage, type ExtraState } from './useEquipmentExtras';
 import { Dash, PanelState } from './PanelState';
 import { MaintenanceScheduleForm } from './MaintenanceScheduleForm';
 import { ScheduleControlForm, type ScheduleControlFormValues } from './ScheduleControlForm';
+import { DocumentUploadForm, type DocumentUploadValues } from './DocumentUploadForm';
 
 interface Props {
   state: ExtraState<MaintenanceSchedule>;
@@ -35,7 +36,9 @@ const ControlList: React.FC<{
   documents: EquipmentDocument[];
   canEdit: boolean;
   onEdit: (c: ScheduleControl) => void;
-}> = ({ controls, documents, canEdit, onEdit }) => (
+  onAddDoc: (c: ScheduleControl) => void;
+  onOpenDoc: (d: EquipmentDocument) => void;
+}> = ({ controls, documents, canEdit, onEdit, onAddDoc, onOpenDoc }) => (
   <div className="space-y-2">
     {controls.map(c => {
       const docs = documents.filter(d => d.controlId === c.id);
@@ -48,7 +51,10 @@ const ControlList: React.FC<{
             </span>
             <span className="text-gray-600">{c.inspectionBody ?? 'Organisme : Non renseigné'}</span>
             {canEdit && (
-              <button type="button" onClick={() => onEdit(c)} className="ml-auto font-semibold text-blue-600 hover:underline">Modifier</button>
+              <span className="ml-auto space-x-3 font-semibold">
+                <button type="button" onClick={() => onAddDoc(c)} className="text-emerald-700 hover:underline">Ajouter un document</button>
+                <button type="button" onClick={() => onEdit(c)} className="text-blue-600 hover:underline">Modifier</button>
+              </span>
             )}
           </div>
           {c.notes && <p className="mt-1 text-gray-800 whitespace-pre-line">{c.notes}</p>}
@@ -59,7 +65,9 @@ const ControlList: React.FC<{
               docs.map(d => (
                 <div key={d.id}>
                   Compte rendu :{' '}
-                  {d.externalUrl && isHttpUrl(d.externalUrl) ? (
+                  {d.storagePath ? (
+                    <button type="button" onClick={() => onOpenDoc(d)} className="text-blue-600 hover:underline">{d.name}</button>
+                  ) : d.externalUrl && isHttpUrl(d.externalUrl) ? (
                     <a href={d.externalUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{d.name}</a>
                   ) : (
                     <span className="text-gray-900">{d.name}</span>
@@ -83,6 +91,8 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
   const [toDelete, setToDelete] = useState<MaintenanceSchedule | null>(null);
   // controlForm : contrôle à enregistrer (échéance) ou à corriger (échéance + contrôle).
   const [controlForm, setControlForm] = useState<null | { schedule: MaintenanceSchedule; control?: ScheduleControl }>(null);
+  // docForm : contrôle auquel on ajoute un document (fichier et/ou lien).
+  const [docForm, setDocForm] = useState<ScheduleControl | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -142,24 +152,52 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
     }
   };
 
-  /** Ajoute le lien GED du compte rendu ; renvoie un avertissement si l'enregistrement échoue. */
-  const addReportLink = async (control: ScheduleControl, v: ScheduleControlFormValues): Promise<string | null> => {
-    if (!v.docUrl) return null;
+  /** Ajoute le fichier et/ou le lien GED du compte rendu ; renvoie un avertissement si l'ajout échoue. */
+  const addReportDocuments = async (control: ScheduleControl, v: ScheduleControlFormValues): Promise<string | null> => {
+    if (!v.docUrl && !v.docFile) return null;
     try {
-      const doc = await createEquipmentDocument(
-        {
-          equipmentId,
-          name: v.docName ?? `Compte rendu de contrôle du ${formatIsoDate(v.performedOn)}`,
-          category: 'report',
-          externalUrl: v.docUrl,
-          controlId: control.id,
-        },
-        currentUserId
-      );
-      onDocumentsChange(items => [doc, ...items]);
-      return null;
+      const { docs, warning } = await addEquipmentDocuments({
+        equipmentId,
+        createdBy: currentUserId,
+        name: v.docName ?? undefined,
+        category: 'report',
+        controlId: control.id,
+        file: v.docFile,
+        externalUrl: v.docUrl,
+      });
+      onDocumentsChange(items => [...docs, ...items]);
+      return warning ?? null;
     } catch (err) {
-      return `Le lien du compte rendu n'a pas pu être enregistré (${errorMessage(err)}). Vous pouvez le rajouter avec « Modifier » sur le contrôle.`;
+      return `Le compte rendu n'a pas pu être enregistré (${errorMessage(err)}). Vous pouvez le rajouter avec « Ajouter un document » sur le contrôle.`;
+    }
+  };
+
+  /** Ajout d'un document sur un contrôle existant. */
+  const handleDocSubmit = async (v: DocumentUploadValues) => {
+    if (!docForm) return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      const { docs, warning } = await addEquipmentDocuments({
+        equipmentId, createdBy: currentUserId, name: v.name, category: 'report', controlId: docForm.id, file: v.file, externalUrl: v.url,
+      });
+      onDocumentsChange(items => [...docs, ...items]);
+      setNotice(warning ?? null);
+      setActionError(null);
+      setDocForm(null);
+    } catch (err) {
+      setFormError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openDoc = async (d: EquipmentDocument) => {
+    try {
+      await openEquipmentDocument(d);
+      setActionError(null);
+    } catch (err) {
+      setActionError(`Ouverture impossible : ${errorMessage(err)}`);
     }
   };
 
@@ -186,7 +224,7 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
         );
         onControlsChange(items => sortControls([...items, saved]));
       }
-      const linkWarning = await addReportLink(saved, v);
+      const linkWarning = await addReportDocuments(saved, v);
       if (linkWarning) warnings.push(linkWarning);
       if (v.updateSchedule) {
         try {
@@ -303,6 +341,8 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
                           <ControlList
                             controls={controlsOf(s.id)} documents={documents} canEdit={canEdit}
                             onEdit={c => { setFormError(null); setControlForm({ schedule: s, control: c }); }}
+                            onAddDoc={c => { setFormError(null); setDocForm(c); }}
+                            onOpenDoc={openDoc}
                           />
                         </div>
                       )}
@@ -320,7 +360,7 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
         <div className="mt-4">
           <h4 className="text-xs font-bold text-gray-700 mb-1">Contrôles sans échéance associée ({orphanControls.length})</h4>
           <p className="text-[11px] text-gray-500 mb-2">L'échéance correspondante a été supprimée : les contrôles et leurs comptes rendus sont conservés.</p>
-          <ControlList controls={orphanControls} documents={documents} canEdit={false} onEdit={() => undefined} />
+          <ControlList controls={orphanControls} documents={documents} canEdit={false} onEdit={() => undefined} onAddDoc={() => undefined} onOpenDoc={openDoc} />
         </div>
       )}
 
@@ -344,6 +384,17 @@ export const MaintenanceSchedulePanel: React.FC<Props> = ({
           error={formError}
           onSubmit={handleControlSubmit}
           onCancel={closeControlForm}
+        />
+      )}
+
+      {docForm && (
+        <DocumentUploadForm
+          title="Ajouter un document au contrôle"
+          categoryFixed="report"
+          saving={busy}
+          error={formError}
+          onSubmit={handleDocSubmit}
+          onCancel={() => { setDocForm(null); setFormError(null); }}
         />
       )}
 
