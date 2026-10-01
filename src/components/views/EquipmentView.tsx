@@ -98,6 +98,8 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [notes, setNotes] = useState('');
 
   const selectedEquipment = equipmentList.find(e => e.id === selectedId) || equipmentList[0];
 
@@ -218,6 +220,8 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     setModel(clean(selectedEquipment.model));
     setSerialNumber(clean(selectedEquipment.serialNumber));
     setDescription(clean(selectedEquipment.description));
+    setCategory(clean(selectedEquipment.category ?? ''));
+    setNotes(clean(selectedEquipment.notes ?? ''));
     setIsEditModalOpen(true);
   };
 
@@ -229,7 +233,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     // fournisseur n'est pas encore géré).
     const patch = buildEquipmentEditPatch(
       selectedEquipment,
-      { name, status, criticality, manufacturer, model, serialNumber, description, locationId },
+      { name, status, criticality, manufacturer, model, serialNumber, description, category, notes, locationId },
       locations
     );
     if (Object.keys(patch).length > 0) {
@@ -858,6 +862,27 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Catégorie</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Ascenseur"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
