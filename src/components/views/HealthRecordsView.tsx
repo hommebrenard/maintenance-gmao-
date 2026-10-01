@@ -429,7 +429,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
 
               {activeTab === 'interventions' && (
                 <>
-                  <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
+                  <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} />
                   {timeline(true)}
                 </>
               )}
@@ -496,7 +496,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                       entries={entries}
                       entriesLoading={isLoadingEntries}
                     />
-                    <LinkedWorkOrdersTable linkedWorkOrders={linkedWorkOrders} />
+                    <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} showAll />
                     {timeline(false)}
                   </HealthRecordPrint>
                 </>
