@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   removeDocumentFile: vi.fn(),
   getDocumentSignedUrl: vi.fn(),
   createEquipmentDocument: vi.fn(),
+  deleteEquipmentDocument: vi.fn(),
   compressImage: vi.fn(),
 }));
 
@@ -14,10 +15,10 @@ vi.mock('./storage', () => ({
   removeDocumentFile: h.removeDocumentFile,
   getDocumentSignedUrl: h.getDocumentSignedUrl,
 }));
-vi.mock('./queries/equipmentDocuments', () => ({ createEquipmentDocument: h.createEquipmentDocument }));
+vi.mock('./queries/equipmentDocuments', () => ({ createEquipmentDocument: h.createEquipmentDocument, deleteEquipmentDocument: h.deleteEquipmentDocument }));
 vi.mock('../utils/imageCompress', () => ({ compressImage: h.compressImage }));
 
-import { addEquipmentDocuments } from './documents';
+import { addEquipmentDocuments, deleteEquipmentDocumentWithFile } from './documents';
 
 const pdf = (size = 1000) => ({ name: 'PV VERITAS.pdf', type: 'application/pdf', size }) as File;
 
@@ -26,6 +27,7 @@ beforeEach(() => {
   h.order.length = 0;
   h.uploadDocumentFile.mockImplementation(async () => { h.order.push('upload'); return 'equipment/e1/uuid.pdf'; });
   h.removeDocumentFile.mockResolvedValue(undefined);
+  h.deleteEquipmentDocument.mockResolvedValue(undefined);
   h.createEquipmentDocument.mockImplementation(async (i: Record<string, unknown>) => { h.order.push('insert'); return { id: 'd1', ...i }; });
 });
 
@@ -81,5 +83,35 @@ describe('addEquipmentDocuments', () => {
     await expect(addEquipmentDocuments({ equipmentId: 'e1', createdBy: 'u1', externalUrl: 'https://ged/x' })).rejects.toThrow('intitulé');
     await expect(addEquipmentDocuments({ equipmentId: 'e1', createdBy: 'u1', file: pdf(11 * 1024 * 1024) })).rejects.toThrow('PDF trop volumineux');
     expect(h.uploadDocumentFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteEquipmentDocumentWithFile', () => {
+  const fileDoc = { id: 'd1', storagePath: 'equipment/e1/uuid.pdf' } as never;
+  const linkDoc = { id: 'd2', externalUrl: 'https://exemple.ma/pv' } as never;
+
+  it('supprime la ligne puis le fichier', async () => {
+    h.deleteEquipmentDocument.mockImplementation(async () => { h.order.push('row'); });
+    h.removeDocumentFile.mockImplementation(async () => { h.order.push('file'); });
+    expect(await deleteEquipmentDocumentWithFile(fileDoc)).toEqual({});
+    expect(h.order).toEqual(['row', 'file']);
+  });
+
+  it('ne touche pas au stockage pour un simple lien', async () => {
+    await deleteEquipmentDocumentWithFile(linkDoc);
+    expect(h.deleteEquipmentDocument).toHaveBeenCalledWith('d2');
+    expect(h.removeDocumentFile).not.toHaveBeenCalled();
+  });
+
+  it('garde le fichier si la ligne ne peut pas être supprimée', async () => {
+    h.deleteEquipmentDocument.mockRejectedValue(new Error('refusée'));
+    await expect(deleteEquipmentDocumentWithFile(fileDoc)).rejects.toThrow('refusée');
+    expect(h.removeDocumentFile).not.toHaveBeenCalled();
+  });
+
+  it('avertit si le fichier ne part pas du stockage', async () => {
+    h.removeDocumentFile.mockRejectedValue(new Error('réseau'));
+    const r = await deleteEquipmentDocumentWithFile(fileDoc);
+    expect(r.warning).toContain('réseau');
   });
 });
