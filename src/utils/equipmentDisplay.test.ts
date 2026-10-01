@@ -386,3 +386,21 @@ describe('buildEquipmentEditPatch — catégorie et notes', () => {
     expect(buildEquipmentEditPatch(cur, base, [])).toEqual({});
   });
 });
+
+describe('buildEquipmentEditPatch — fournisseur', () => {
+  const sup = [{ id: 's1', name: 'SCHINDLER MAROC' }];
+  const base = { name: 'A', status: 'En service', criticality: 'Normal', manufacturer: '', model: '', serialNumber: '', description: '', locationId: '' } as never;
+  it('envoie id et nom du fournisseur choisi', () => {
+    const cur = { ...(base as object), supplierId: undefined, supplier: '' } as never;
+    expect(buildEquipmentEditPatch(cur, { ...(base as object), supplierId: 's1' } as never, [], sup)).toEqual({ supplierId: 's1', supplier: 'SCHINDLER MAROC' });
+  });
+  it('retire le fournisseur avec une valeur vide', () => {
+    const cur = { ...(base as object), supplierId: 's1', supplier: 'SCHINDLER MAROC' } as never;
+    expect(buildEquipmentEditPatch(cur, { ...(base as object), supplierId: '' } as never, [], sup)).toEqual({ supplierId: '', supplier: '' });
+  });
+  it('ne change rien si inchangé ou non géré', () => {
+    const cur = { ...(base as object), supplierId: 's1' } as never;
+    expect(buildEquipmentEditPatch(cur, { ...(base as object), supplierId: 's1' } as never, [], sup)).toEqual({});
+    expect(buildEquipmentEditPatch(cur, base, [], sup)).toEqual({});
+  });
+});
