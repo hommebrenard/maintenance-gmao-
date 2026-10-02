@@ -193,7 +193,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   useEffect(() => { setPhotoError(null); }, [selected?.id]);
-  const selectedView = selected && photoOverrides[selected.id] ? { ...selected, photoUrl: photoOverrides[selected.id] } : selected;
+  const selectedView = selected && selected.id in photoOverrides ? { ...selected, photoUrl: photoOverrides[selected.id] } : selected;
 
   const handlePhotoSelected = async (file: File) => {
     if (!selected) return;
@@ -208,6 +208,24 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
       const url = await uploadEquipmentPhoto(id, blob);
       await updateEquipment(id, { photoUrl: url });
       setPhotoOverrides(prev => ({ ...prev, [id]: url }));
+    } catch (err) {
+      setPhotoError(errorMessage(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  // Retrait de la photo : on vide equipment.photo_url (le fichier du stockage est simplement
+  // écrasé au prochain envoi : le bucket n'a pas de policy de suppression, aucun SQL requis).
+  const handlePhotoRemove = async () => {
+    if (!selected) return;
+    const id = selected.id;
+    if (!window.confirm('Supprimer la photo de cet équipement ?')) return;
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      await updateEquipment(id, { photoUrl: '' });
+      setPhotoOverrides(prev => ({ ...prev, [id]: '' }));
     } catch (err) {
       setPhotoError(errorMessage(err));
     } finally {
@@ -417,6 +435,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                   photoBusy={photoBusy}
                   photoError={photoError}
                   onPhotoSelected={handlePhotoSelected}
+                  onPhotoRemove={handlePhotoRemove}
                   qrDataUrl={qrDataUrl}
                   lastCompletedWorkOrder={lastCompletedWorkOrder}
                   linkedWorkOrders={linkedWorkOrders}
