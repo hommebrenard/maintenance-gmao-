@@ -16,6 +16,8 @@ interface EquipmentPassportProps {
   photoBusy?: boolean;
   photoError?: string | null;
   onPhotoSelected?: (file: File) => void;
+  /** Retire la photo (managers) ; la confirmation est demandée par l'appelant. */
+  onPhotoRemove?: () => void;
   qrDataUrl: string | null;
   lastCompletedWorkOrder: WorkOrder | null;
   /** OT liés à l'équipement (pour la prochaine échéance des OT préventifs ouverts). */
@@ -32,7 +34,7 @@ interface EquipmentPassportProps {
  * santé & conformité, photo et tableau d'identité. Extrait tel quel de
  * HealthRecordsView (Phase 4a, 29/09/2026) — aucun changement de rendu.
  */
-export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, canEditPhoto = false, photoBusy = false, photoError = null, onPhotoSelected, qrDataUrl, lastCompletedWorkOrder, linkedWorkOrders, schedules, controls, entries, entriesLoading }) => {
+export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, canEditPhoto = false, photoBusy = false, photoError = null, onPhotoSelected, onPhotoRemove, qrDataUrl, lastCompletedWorkOrder, linkedWorkOrders, schedules, controls, entries, entriesLoading }) => {
   const legal = summarizeLegalControl(schedules.items);
   const lastControl = latestLegalControl(schedules.items, controls);
   const { next: nextDue, overdueCount } = computeNextDue(schedules.items, linkedWorkOrders);
@@ -170,9 +172,9 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
             <div data-pdf-block className="grid grid-cols-1 @xl:grid-cols-3 gap-4 mb-4">
               {/* Photo */}
               <div className="@xl:col-span-1 flex flex-col">
-                <div className="relative flex-1 min-h-40 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
+                <div className="relative flex-1 min-h-40 aspect-[4/3] @xl:aspect-auto border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
                   {selected.photoUrl ? (
-                    <img src={selected.photoUrl} alt={selected.name} className="absolute inset-0 w-full h-full object-cover" />
+                    <img src={selected.photoUrl} alt={selected.name} className="absolute inset-0 w-full h-full object-contain" />
                   ) : (
                     <div className="text-gray-300 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8" />
@@ -180,20 +182,29 @@ export const EquipmentPassport: React.FC<EquipmentPassportProps> = ({ selected, 
                     </div>
                   )}
                   {canEditPhoto && onPhotoSelected && (
-                    <label
-                      data-pdf-exclude="true"
-                      className={`print:hidden absolute bottom-2 right-2 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-white/90 border border-gray-300 text-gray-800 shadow-sm ${photoBusy ? 'opacity-60 pointer-events-none' : 'cursor-pointer hover:bg-white'}`}
-                    >
-                      {photoBusy ? 'Envoi…' : selected.photoUrl ? 'Changer la photo' : 'Ajouter une photo'}
-                      <input
-                        type="file" accept="image/*" className="hidden" disabled={photoBusy}
-                        onChange={e => {
-                          const f = e.target.files?.[0];
-                          e.target.value = '';
-                          if (f) onPhotoSelected(f);
-                        }}
-                      />
-                    </label>
+                    <div data-pdf-exclude="true" className="print:hidden absolute bottom-2 right-2 flex gap-1.5">
+                      {selected.photoUrl && onPhotoRemove && (
+                        <button
+                          type="button" onClick={onPhotoRemove} disabled={photoBusy}
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-md bg-white/90 border border-red-300 text-red-700 shadow-sm ${photoBusy ? 'opacity-60 pointer-events-none' : 'hover:bg-white'}`}
+                        >
+                          Supprimer la photo
+                        </button>
+                      )}
+                      <label
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md bg-white/90 border border-gray-300 text-gray-800 shadow-sm ${photoBusy ? 'opacity-60 pointer-events-none' : 'cursor-pointer hover:bg-white'}`}
+                      >
+                        {photoBusy ? 'Envoi…' : selected.photoUrl ? 'Changer la photo' : 'Ajouter une photo'}
+                        <input
+                          type="file" accept="image/*" className="hidden" disabled={photoBusy}
+                          onChange={e => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) onPhotoSelected(f);
+                          }}
+                        />
+                      </label>
+                    </div>
                   )}
                 </div>
                 {photoError && (
