@@ -44,6 +44,8 @@ interface EquipmentViewProps {
   onDeleteEquipment: (id: string) => void;
   onEditEquipment: (id: string, updated: Partial<Equipment>) => void;
   onSyncFromWorkOrders?: () => void;
+  /** Manager (rôle « responsable ») : seul à voir Nouvel équipement, Générer, Modifier et Supprimer (la RLS reste le vrai verrou). */
+  isManager?: boolean;
 }
 
 export const EquipmentView: React.FC<EquipmentViewProps> = ({
@@ -56,7 +58,8 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   onUpdateStatus,
   onDeleteEquipment,
   onEditEquipment,
-  onSyncFromWorkOrders
+  onSyncFromWorkOrders,
+  isManager = false
 }) => {
   const [selectedId, setSelectedId] = useState<string>(equipmentList[0]?.id || '');
   // Disposition mobile (29/09/2026) : sur petit écran un seul panneau à la fois (liste OU fiche,
@@ -305,7 +308,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
               </button>
             </div>
 
-            {onSyncFromWorkOrders && newEquipmentFromWOCount > 0 && (
+            {isManager && onSyncFromWorkOrders && newEquipmentFromWOCount > 0 && (
               <button
                 onClick={onSyncFromWorkOrders}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 font-medium rounded-lg text-sm shadow-2xs transition-colors"
@@ -316,6 +319,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
               </button>
             )}
 
+            {isManager && (
             <button
               onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-xs transition-colors"
@@ -323,6 +327,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
               <Plus className="w-4 h-4" />
               <span>Nouvel équipement</span>
             </button>
+            )}
           </div>
         </div>
 
@@ -498,6 +503,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                     <QrCode className="w-4 h-4 text-gray-500" />
                     <span>QR code</span>
                   </button>
+                  {isManager && (<>
                   <button
                     onClick={openEdit}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-2xs"
@@ -512,6 +518,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                     <Trash2 className="w-4 h-4 text-red-500" />
                     <span>Supprimer</span>
                   </button>
+                  </>)}
                 </div>
               </div>
 
