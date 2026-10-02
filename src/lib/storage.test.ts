@@ -33,6 +33,8 @@ describe('stockage', () => {
     expect(h.createSignedUrl).toHaveBeenCalledWith('equipment/e1/a.pdf', 300);
     h.createSignedUrl.mockResolvedValue({ data: null, error: null });
     await expect(getDocumentSignedUrl('p')).rejects.toThrow('indisponible');
+    h.createSignedUrl.mockResolvedValue({ data: null, error: { message: 'Object not found' } });
+    await expect(getDocumentSignedUrl('p')).rejects.toThrow('fichier introuvable');
   });
 
   it('retrait d\'un fichier qu\'on vient d\'envoyer', async () => {
