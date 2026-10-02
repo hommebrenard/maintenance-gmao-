@@ -5,7 +5,12 @@ import { fitWithin } from './fileUpload';
  * Sortie toujours en JPEG (fond blanc pour les PNG transparents). L'orientation EXIF est respectée.
  */
 export async function compressImage(file: Blob, opts: { maxEdge: number; quality: number }): Promise<Blob> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    throw new Error("Image illisible : le fichier n'est pas une vraie image JPEG, PNG ou WebP.");
+  }
   try {
     const { width, height } = fitWithin(bitmap.width, bitmap.height, opts.maxEdge);
     const canvas = document.createElement('canvas');
