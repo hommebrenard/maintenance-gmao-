@@ -999,6 +999,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onDeleteEquipment={handleDeleteEquipment}
             onEditEquipment={handleEditEquipment}
             onSyncFromWorkOrders={handleSyncEquipmentFromWorkOrders}
+            isManager={profiles.find(p => p.id === session.user.id)?.role === 'responsable'}
           />
         );
       case 'health-records':
