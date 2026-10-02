@@ -25,7 +25,10 @@ export async function removeDocumentFile(path: string): Promise<void> {
 /** Lien signé de courte durée (secondes) pour ouvrir un fichier du bucket privé. */
 export async function getDocumentSignedUrl(path: string, expiresInSeconds = 300): Promise<string> {
   const { data, error } = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, expiresInSeconds);
-  if (error) throw error;
+  if (error) {
+    if (/not found/i.test(error.message ?? '')) throw new Error("fichier introuvable dans le stockage (il a peut-être été supprimé ou n'a jamais été envoyé).");
+    throw error;
+  }
   if (!data?.signedUrl) throw new Error("Lien d'accès au document indisponible.");
   return data.signedUrl;
 }
