@@ -33,10 +33,12 @@ import {
   Eye,
   Filter,
   ShieldAlert,
-  XCircle
+  XCircle,
+  Grid3x3
 } from 'lucide-react';
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
+import { AnnualMatrixView } from './AnnualMatrixView';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
@@ -343,7 +345,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const technicians = useMemo(() => profiles.filter(p => p.role === 'technicien'), [profiles]);
   const currentProfile = useMemo(() => profiles.find(p => p.id === currentUserId), [profiles, currentUserId]);
   const isManager = currentProfile?.role === 'responsable';
-  const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload'>('todo');
+  const [viewMode, setViewMode] = useState<'todo' | 'list' | 'calendar' | 'workload' | 'annual'>('todo');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string | null>(null);
   const [expandedAssignees, setExpandedAssignees] = useState<Set<string>>(new Set());
@@ -643,7 +645,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Filter Logic
   const todayStr = formatLocalDate(new Date());
 
-  const filteredOrders = workOrders.filter(wo => {
+  const passesFilters = (wo: WorkOrder, withMonth: boolean): boolean => {
     const matchesSearch = wo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           wo.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -674,12 +676,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     }
 
     let matchesMonth = true;
-    if (selectedMonthFilter !== 'all') {
+    if (withMonth && selectedMonthFilter !== 'all') {
       matchesMonth = Boolean(wo.dueDate && wo.dueDate.startsWith(selectedMonthFilter));
     }
 
     return matchesSearch && matchesStatus && matchesPriority && matchesLocation && matchesMonth;
-  });
+  };
+  const filteredOrders = workOrders.filter(wo => passesFilters(wo, true));
+  // Vue annuelle : mêmes filtres que la page, sauf « Mois » (elle affiche déjà toute l'année).
+  const annualOrders = workOrders.filter(wo => passesFilters(wo, false));
 
   // Reset Create Form
   const resetForm = () => {
@@ -1292,6 +1297,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               >
                 <CalendarIcon className="w-4 h-4" />
                 <span>Calendrier</span>
+              </button>
+              <button
+                onClick={() => setViewMode('annual')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+                  viewMode === 'annual' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Grid3x3 className="w-4 h-4" />
+                <span>Annuel</span>
               </button>
               <button
                 onClick={() => setViewMode('workload')}
@@ -2186,6 +2200,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </>
             )}
           </div>
+        ) : viewMode === 'annual' ? (
+          <AnnualMatrixView
+            orders={annualOrders}
+            todayStr={todayStr}
+            onOpenOrder={handleOpenEdit}
+            siteFilter={selectedLocationFilter}
+            siteNames={availableSiteNames}
+            onSiteChange={setSelectedLocationFilter}
+            zoneOf={(wo) => getSiteZone(wo.location || '', locations)}
+          />
         ) : (
           /* Workload / Charge de travail View */
           <div className="space-y-4">

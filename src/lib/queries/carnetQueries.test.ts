@@ -33,6 +33,7 @@ vi.mock('../supabaseClient', () => {
 import { fetchEquipmentDocuments, createEquipmentDocument, deleteEquipmentDocument } from './equipmentDocuments';
 import { fetchMaintenanceSchedules, createMaintenanceSchedule, updateMaintenanceSchedule, deleteMaintenanceSchedule } from './maintenanceSchedules';
 import { fetchScheduleControls, createScheduleControl, updateScheduleControl } from './scheduleControls';
+import { fetchSuppliers, createSupplier, setSupplierActive } from './suppliers';
 import { fetchEquipmentParts, createEquipmentPart, updateEquipmentPart, deleteEquipmentPart } from './equipmentParts';
 
 const EQ = '11111111-1111-1111-1111-111111111111';
@@ -164,5 +165,27 @@ describe('scheduleControls', () => {
     expect(d).toMatchObject({ externalUrl: 'https://ged/x', controlId: 'k1' });
     expect(d.storagePath).toBeUndefined();
     await expect(createEquipmentDocument({ equipmentId: EQ, name: 'Vide' }, 'u1')).rejects.toThrow('fichier ou un lien');
+  });
+});
+
+describe('suppliers', () => {
+  it('convertit les lignes (null -> chaîne vide, is_active par défaut vrai)', async () => {
+    state.rows = [{ id: 's1', name: 'ACME', contact_name: null, email: 'a@b.c', phone: null, notes: null, is_active: null }];
+    const list = await fetchSuppliers();
+    expect(list).toEqual([{ id: 's1', name: 'ACME', contactName: '', email: 'a@b.c', phone: '', notes: '', isActive: true }]);
+  });
+
+  it('crée avec chaînes vides -> null et created_by', async () => {
+    state.rows = [{ id: 's2', name: 'NEW', is_active: true }];
+    await createSupplier({ name: ' NEW ', contactName: '', email: '', phone: '0600', notes: '' }, 'u1');
+    const ins = calls.find(c => c.table === 'suppliers' && c.op === 'insert')!;
+    expect(ins.payload).toMatchObject({ name: 'NEW', contact_name: null, email: null, phone: '0600', notes: null, created_by: 'u1' });
+  });
+
+  it('désactive sans supprimer', async () => {
+    state.rows = [{ id: 's3', name: 'X', is_active: false }];
+    const r = await setSupplierActive('s3', false);
+    expect(r.isActive).toBe(false);
+    expect(calls.some(c => c.table === 'suppliers' && c.op === 'delete')).toBe(false);
   });
 });

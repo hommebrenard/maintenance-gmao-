@@ -24,7 +24,7 @@ import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk }
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
-import { fetchSupplierOptions, createSupplierByName, type SupplierOption } from './lib/queries/suppliers';
+import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
 
 
@@ -41,7 +41,6 @@ import {
   INITIAL_PROCEDURES,
   INITIAL_TAGS,
   INITIAL_USERS,
-  INITIAL_SUPPLIERS,
   INITIAL_CLIENTS
 } from './data/mockData';
 
@@ -60,7 +59,6 @@ import {
   Tag,
   LocationItem,
   UserItem,
-  SupplierItem,
   ClientItem,
   WorkOrderStatus,
   OperationalStatus,
@@ -176,6 +174,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // sélecteur d'assignation d'OT et savoir si l'utilisateur connecté est
   // manager (rôle 'responsable') ou technicien.
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Même règle que is_manager() en base : admin OU responsable.
+  const myRole = profiles.find(p => p.id === session.user.id)?.role;
+  const isManager = myRole === 'responsable' || myRole === 'admin';
   // Ajouté le 27/09/2026 — techniciens réels (table `techniciens`, chantier B),
   // distincts de `profiles` : peuple l'onglet Techniciens et, à venir, le
   // sélecteur d'intervenant du formulaire OT.
@@ -206,9 +207,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   const [users, setUsers] = useState<UserItem[]>(() =>
     getInitialState('gmao_users', INITIAL_USERS)
   );
-  const [suppliers, setSuppliers] = useState<SupplierItem[]>(() =>
-    getInitialState('gmao_suppliers', INITIAL_SUPPLIERS)
-  );
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [clients, setClients] = useState<ClientItem[]>(() =>
     getInitialState('gmao_clients', INITIAL_CLIENTS)
   );
@@ -328,6 +327,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     fetchSupplierOptions()
       .then(setSupplierOptions)
       .catch(err => console.error('Erreur chargement fournisseurs:', err));
+    fetchSuppliers()
+      .then(setSuppliers)
+      .catch(err => console.error('Erreur chargement page fournisseurs:', err));
   }, []);
 
   React.useEffect(() => {
@@ -912,8 +914,26 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     });
   };
 
-  const handleAddSupplier = (supplier: Omit<SupplierItem, 'id'>) => {
-    setSuppliers(prev => [...prev, { ...supplier, id: `sup-${Date.now()}` }]);
+  // Fournisseurs (Supabase) : la page et la liste déroulante de la fiche équipement partagent la même table.
+  const syncSupplierOptions = (list: SupplierRecord[]) =>
+    setSupplierOptions(list.filter(s => s.isActive).map(s => ({ id: s.id, name: s.name })));
+  const applySuppliers = (updater: (prev: SupplierRecord[]) => SupplierRecord[]) =>
+    setSuppliers(prev => {
+      const next = updater(prev).sort((a, b) => a.name.localeCompare(b.name));
+      syncSupplierOptions(next);
+      return next;
+    });
+  const handleCreateSupplier = async (input: SupplierInput) => {
+    const created = await createSupplier(input, session.user.id);
+    applySuppliers(prev => [...prev, created]);
+  };
+  const handleUpdateSupplier = async (id: string, input: SupplierInput) => {
+    const updated = await updateSupplier(id, input);
+    applySuppliers(prev => prev.map(s => (s.id === id ? updated : s)));
+  };
+  const handleSetSupplierActive = async (id: string, isActive: boolean) => {
+    const updated = await setSupplierActive(id, isActive);
+    applySuppliers(prev => prev.map(s => (s.id === id ? updated : s)));
   };
 
   const handleAddClient = (client: Omit<ClientItem, 'id'>) => {
@@ -999,11 +1019,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onDeleteEquipment={handleDeleteEquipment}
             onEditEquipment={handleEditEquipment}
             onSyncFromWorkOrders={handleSyncEquipmentFromWorkOrders}
-            isManager={profiles.find(p => p.id === session.user.id)?.role === 'responsable'}
+            isManager={isManager}
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} isManager={profiles.find(p => p.id === session.user.id)?.role === 'responsable'} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} isManager={isManager} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
       case 'inventory':
         return (
           <InventoryView
@@ -1068,7 +1088,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         return (
           <SuppliersView
             suppliers={suppliers}
-            onAddSupplier={handleAddSupplier}
+            isManager={isManager}
+            onCreate={handleCreateSupplier}
+            onUpdate={handleUpdateSupplier}
+            onSetActive={handleSetSupplierActive}
           />
         );
       case 'clients':
