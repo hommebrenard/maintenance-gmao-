@@ -2209,6 +2209,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             siteNames={availableSiteNames}
             onSiteChange={setSelectedLocationFilter}
             zoneOf={(wo) => getSiteZone(wo.location || '', locations)}
+            siteZoneOf={(name) => getSiteZone(name, locations)}
           />
         ) : (
           /* Workload / Charge de travail View */
