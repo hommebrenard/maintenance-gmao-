@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf } from './annualMatrix';
+import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf, familyKeyOf, cleanFamilyName, buildFamilyOptions } from './annualMatrix';
 import type { WorkOrder } from '../types';
 
 const wo = (o: Partial<WorkOrder>): WorkOrder => ({
@@ -105,5 +105,33 @@ describe('frequencyOf', () => {
     ], 2026, TODAY);
     expect(m.rows[0].cells[2].freqs).toEqual(['H', 'M', '•']);
     expect(m.rows[0].cells[0].freqs).toEqual([]);
+  });
+});
+
+describe('familles d\'équipements', () => {
+  it('lit le segment type du code', () => {
+    expect(familyKeyOf('BAM-KNT_AG-ASC-01')).toBe('ASC');
+    expect(familyKeyOf('BAM-RAK_AG-EQCUIS-01')).toBe('EQCUIS');
+    expect(familyKeyOf('')).toBe('AUTRES');
+    expect(familyKeyOf('sans format')).toBe('AUTRES');
+  });
+
+  it('nettoie les noms (numéro, marque, caractéristiques)', () => {
+    expect(cleanFamilyName('ASCENSEUR N1 MARQUE: SCHINDLER, POID: 400KG')).toBe('ASCENSEUR');
+    expect(cleanFamilyName('ARMOIRE DE CLIMATISATION N1 SALLE')).toBe('ARMOIRE DE CLIMATISATION');
+    expect(cleanFamilyName('TABLEAU DE DISTRIBUTION 02TEE9')).toBe('TABLEAU DE DISTRIBUTION');
+    expect(cleanFamilyName('EXTRACTEUR 12C HALL')).toBe('EXTRACTEUR');
+  });
+
+  it('regroupe par famille avec effectifs ; noms variés → mots communs', () => {
+    const rows = [
+      { family: 'ASC', label: 'ASCENSEUR N1' }, { family: 'ASC', label: 'ASCENSEUR N2 PERSONNEL' },
+      { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR MEZZANINE' }, { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR TERASSE' },
+      { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR HALL' },
+    ];
+    expect(buildFamilyOptions(rows)).toEqual([
+      { key: 'ASC', label: 'ASCENSEUR (ASC)', count: 2 },
+      { key: 'ECLIN', label: 'ECLAIRAGE INTERIEUR (ECLIN)', count: 3 },
+    ]);
   });
 });
