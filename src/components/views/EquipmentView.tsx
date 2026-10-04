@@ -68,6 +68,9 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [criticalityFilter, setCriticalityFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
 
   const newEquipmentFromWOCount = useMemo(() => {
     const existingCodes = new Set(equipmentList.map(e => e.code));
@@ -160,8 +163,28 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
       matchesStatus = eq.status === statusFilter;
     }
 
-    return matchesSearch && matchesStatus;
+    const matchesCriticality = !criticalityFilter || eq.criticality === criticalityFilter;
+    const matchesSupplier =
+      !supplierFilter ||
+      (supplierFilter === '__none__'
+        ? !eq.supplierId && isBlankField(eq.supplier)
+        : eq.supplierId === supplierFilter);
+    const matchesLocation =
+      !locationFilter ||
+      (locationFilter === '__none__'
+        ? !eq.locationId && isBlankField(eq.location)
+        : eq.locationId === locationFilter);
+
+    return matchesSearch && matchesStatus && matchesCriticality && matchesSupplier && matchesLocation;
   });
+  const hasActiveFilter = !!(statusFilter || criticalityFilter || supplierFilter || locationFilter || searchQuery);
+  const resetFilters = () => {
+    setStatusFilter(null);
+    setCriticalityFilter('');
+    setSupplierFilter('');
+    setLocationFilter('');
+    setSearchQuery('');
+  };
 
   // Libellé d'un emplacement dans les listes déroulantes (ajoute le type quand
   // deux emplacements portent le même nom).
@@ -358,15 +381,34 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             </button>
           ))}
 
-          <select className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
+          <select value={criticalityFilter} onChange={(e) => setCriticalityFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Criticité ∨</option>
+            {(['Critique', 'Élevée', 'Normal', 'Faible'] as const).map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
           </select>
-          <select className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
+          <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Fournisseur ∨</option>
+            {supplierOptions.map(o => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+            <option value="__none__">Sans fournisseur</option>
           </select>
-          <select className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Emplacement ∨</option>
+            {sortedLocations.map(l => (
+              <option key={l.id} value={l.id}>{locationLabel(l)}</option>
+            ))}
+            <option value="__none__">Sans emplacement</option>
           </select>
+          {hasActiveFilter && (
+            <button
+              onClick={resetFilters}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 underline hover:text-gray-900"
+            >
+              Réinitialiser
+            </button>
+          )}
         </div>
       </div>
 
