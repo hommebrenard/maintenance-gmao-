@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf, familyKeyOf, cleanFamilyName, buildFamilyOptions, statusBucketOf, hasAnomaly } from './annualMatrix';
 import type { WorkOrder } from '../types';
+import { FAMILIES, lotOfFamily } from './equipmentFamilies';
 
 const wo = (o: Partial<WorkOrder>): WorkOrder => ({
   id: o.code || 'x', code: 'OT-1', title: 't', description: '', status: 'Ouvert', priority: 'Moyenne',
@@ -129,10 +130,14 @@ describe('familles d\'équipements', () => {
       { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR MEZZANINE' }, { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR TERASSE' },
       { family: 'ECLIN', label: 'ECLAIRAGE INTERIEUR HALL' },
     ];
+    // familles du référentiel : libellé propre ; famille inconnue : libellé déduit des noms
     expect(buildFamilyOptions(rows)).toEqual([
-      { key: 'ASC', label: 'ASCENSEUR (ASC)', count: 2 },
-      { key: 'ECLIN', label: 'ECLAIRAGE INTERIEUR (ECLIN)', count: 3 },
+      { key: 'ASC', label: 'Ascenseur (ASC)', count: 2 },
+      { key: 'ECLIN', label: 'Éclairage intérieur (ECLIN)', count: 3 },
     ]);
+    expect(buildFamilyOptions([
+      { family: 'XYZ', label: 'FOUR N1' }, { family: 'XYZ', label: 'FOUR N2' },
+    ])).toEqual([{ key: 'XYZ', label: 'FOUR (XYZ)', count: 2 }]);
   });
 });
 
@@ -166,5 +171,35 @@ describe('anomalies', () => {
     expect(cells[3]).toMatchObject({ state: 'done', anomalies: 0 });
     expect(cells[4]).toMatchObject({ state: 'overdue', anomalies: 1 });
     expect(m.rows[0].anomalies).toBe(2);
+  });
+});
+
+describe('lots (equipmentFamilies)', () => {
+  it('classe les familles validées et met les inconnues en Divers', () => {
+    expect(lotOfFamily('TD')).toBe('ELEC');
+    expect(lotOfFamily('PRAUT')).toBe('ELEC');
+    expect(lotOfFamily('SNOR')).toBe('ELEC');
+    expect(lotOfFamily('SPT')).toBe('FLUIDE');
+    expect(lotOfFamily('PMP')).toBe('FLUIDE');
+    expect(lotOfFamily('GEG')).toBe('FLUIDE'); // groupe d'EAU GLACÉE (GPLC = groupe électrogène)
+    expect(lotOfFamily('GPLC')).toBe('ELEC');
+    expect(lotOfFamily('ASC')).toBe('CIRC');
+    expect(lotOfFamily('EQCUIS')).toBe('DIVERS');
+    expect(lotOfFamily('NOUVELLE')).toBe('DIVERS');
+  });
+
+  it('les 30 familles actuelles sont toutes dans le référentiel (9 ELEC, 17 FLUIDE, 3 CIRC, 1 DIVERS)', () => {
+    const keys = Object.keys(FAMILIES);
+    expect(keys).toHaveLength(30);
+    const count = (l: string) => keys.filter(k => FAMILIES[k].lot === l).length;
+    expect([count('ELEC'), count('FLUIDE'), count('CIRC'), count('DIVERS')]).toEqual([9, 17, 3, 1]);
+  });
+
+  it('chaque ligne de la matrice porte le lot de sa famille', () => {
+    const m = buildAnnualMatrix([
+      wo({ code: 'A', equipmentId: 'e1', equipmentCode: 'BAM-KNT_AG-PRAUT-01' }),
+      wo({ code: 'B', equipmentId: 'e2', equipmentCode: 'BAM-KNT_AG-SPT-01', equipmentName: 'SPLIT' }),
+    ], 2026, TODAY);
+    expect(m.rows.map(r => [r.family, r.lot]).sort()).toEqual([['PRAUT', 'ELEC'], ['SPT', 'FLUIDE']]);
   });
 });
