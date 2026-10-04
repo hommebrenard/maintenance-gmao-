@@ -46,6 +46,8 @@ export interface MatrixRow {
   key: string;
   label: string;
   code: string;
+  /** Famille d'équipement : segment « type » du code (BAM-KNT_AG-ASC-01 → ASC). */
+  family: string;
   location: string;
   cells: MatrixCell[]; // une case par colonne (12 mois, ou 52/53 semaines)
   total: number;
@@ -95,6 +97,51 @@ export function weekColumns(year: number): MatrixColumn[] {
   });
 }
 
+/** Segment « type » d'un code équipement : BAM-KNT_AG-ASC-01 → ASC ; « AUTRES » si le code n'a pas ce format. */
+export function familyKeyOf(code?: string): string {
+  const m = /-([A-Z0-9]+)-\d+\s*$/i.exec((code || '').trim());
+  return m ? m[1].toUpperCase() : 'AUTRES';
+}
+
+/** Nom d'équipement sans numéro, marque ni caractéristiques : « ASCENSEUR N1 MARQUE: X » → « ASCENSEUR ». */
+export function cleanFamilyName(label: string): string {
+  const head = label.toUpperCase().split(/MARQUE|:|,/)[0];
+  const words: string[] = [];
+  for (const w of head.trim().split(/\s+/)) {
+    if (!w || /\d/.test(w) || w === 'N' || w === 'N°') break;
+    words.push(w);
+  }
+  return words.join(' ');
+}
+
+export interface FamilyOption { key: string; label: string; count: number }
+
+/** Familles présentes dans les lignes (avec le nombre d'équipements), libellé déduit des noms. */
+export function buildFamilyOptions(rows: Pick<MatrixRow, 'family' | 'label'>[]): FamilyOption[] {
+  const groups = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = groups.get(r.family) ?? [];
+    list.push(cleanFamilyName(r.label));
+    groups.set(r.family, list);
+  }
+  const options: FamilyOption[] = [];
+  for (const [key, names] of groups) {
+    const freq = new Map<string, number>();
+    names.filter(Boolean).forEach(n => freq.set(n, (freq.get(n) ?? 0) + 1));
+    const top = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0];
+    let name = top ? top[0] : '';
+    if (top && top[1] < names.length * 0.4) {
+      // noms trop variés : on garde les mots communs à tous (ex. « ECLAIRAGE INTERIEUR »)
+      const split = [...freq.keys()].map(n => n.split(' '));
+      const common: string[] = [];
+      for (let i = 0; i < split[0].length && split.every(w => w[i] === split[0][i]); i++) common.push(split[0][i]);
+      if (common.length) name = common.join(' ');
+    }
+    options.push({ key, label: name ? `${name} (${key})` : key, count: names.length });
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+}
+
 function equipmentKey(wo: WorkOrder): string {
   return wo.equipmentId || wo.equipmentCode || wo.equipmentName || NO_EQUIPMENT;
 }
@@ -133,6 +180,7 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
         key,
         label: wo.equipmentName || wo.equipmentCode || NO_EQUIPMENT,
         code: wo.equipmentCode || '',
+        family: familyKeyOf(wo.equipmentCode),
         location: wo.location || '',
         cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], freqs: [] as string[] })),
         total: 0, done: 0, overdue: 0, percent: 0,
