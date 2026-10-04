@@ -2204,7 +2204,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
           <AnnualMatrixView
             orders={annualOrders}
             todayStr={todayStr}
-            onOpenOrder={handleOpenEdit}
+            onOpenOrder={(wo) => { setSelectedWorkOrder(wo); setIsEditMode(false); }}
             siteFilter={selectedLocationFilter}
             siteNames={availableSiteNames}
             onSiteChange={setSelectedLocationFilter}
