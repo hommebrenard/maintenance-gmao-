@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns } from './annualMatrix';
+import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf } from './annualMatrix';
 import type { WorkOrder } from '../types';
 
 const wo = (o: Partial<WorkOrder>): WorkOrder => ({
@@ -84,5 +84,26 @@ describe('semaines ISO', () => {
   it('mode mois : repère le mois courant, null si l\'année affichée est différente', () => {
     expect(buildAnnualMatrix([], 2026, '2026-06-15').currentIndex).toBe(5);
     expect(buildAnnualMatrix([], 2025, '2026-06-15').currentIndex).toBeNull();
+  });
+});
+
+describe('frequencyOf', () => {
+  it('lit la lettre dans le code de gamme, sinon dans le titre', () => {
+    expect(frequencyOf({ interventionCode: 'PS-ASC-1H-01', title: '' })).toBe('H');
+    expect(frequencyOf({ interventionCode: ' PS-TD-1T-01 ', title: '' })).toBe('T');
+    expect(frequencyOf({ interventionCode: 'PS-CTA-1A-01', title: 'x' })).toBe('A');
+    expect(frequencyOf({ interventionCode: '', title: 'PREVENTIF SYSTEMATIQUE MENSUEL ASCENSEUR' })).toBe('M');
+    expect(frequencyOf({ interventionCode: undefined, title: 'Visite semestrielle' })).toBe('S');
+    expect(frequencyOf({ interventionCode: 'REP-01', title: 'Fuite' })).toBeUndefined();
+  });
+
+  it('liste les fréquences de chaque case (ordre H, M, T, S, A, puis « • »)', () => {
+    const m = buildAnnualMatrix([
+      wo({ code: 'A', dueDate: '2026-03-10', interventionCode: 'PS-ASC-1M-01' }),
+      wo({ code: 'B', dueDate: '2026-03-11', interventionCode: 'PS-ASC-1H-01' }),
+      wo({ code: 'C', dueDate: '2026-03-12', title: 'Fuite', type: 'Corrective' }),
+    ], 2026, TODAY);
+    expect(m.rows[0].cells[2].freqs).toEqual(['H', 'M', '•']);
+    expect(m.rows[0].cells[0].freqs).toEqual([]);
   });
 });
