@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf, familyKeyOf, cleanFamilyName, buildFamilyOptions } from './annualMatrix';
+import { buildAnnualMatrix, availableYears, isoWeekOf, weekColumns, frequencyOf, familyKeyOf, cleanFamilyName, buildFamilyOptions, statusBucketOf, hasAnomaly } from './annualMatrix';
 import type { WorkOrder } from '../types';
 
 const wo = (o: Partial<WorkOrder>): WorkOrder => ({
@@ -133,5 +133,38 @@ describe('familles d\'équipements', () => {
       { key: 'ASC', label: 'ASCENSEUR (ASC)', count: 2 },
       { key: 'ECLIN', label: 'ECLAIRAGE INTERIEUR (ECLIN)', count: 3 },
     ]);
+  });
+});
+
+describe('statusBucketOf', () => {
+  it('classe un OT selon son statut et son échéance', () => {
+    expect(statusBucketOf({ status: 'Terminé', dueDate: '2026-01-01' }, TODAY)).toBe('done');
+    expect(statusBucketOf({ status: 'Ouvert', dueDate: '2026-06-01' }, TODAY)).toBe('overdue');
+    expect(statusBucketOf({ status: 'En cours', dueDate: '2026-06-01' }, TODAY)).toBe('overdue');
+    expect(statusBucketOf({ status: 'En cours', dueDate: '2026-06-20' }, TODAY)).toBe('progress');
+    expect(statusBucketOf({ status: 'En attente', dueDate: '2026-07-01' }, TODAY)).toBe('planned');
+  });
+});
+
+describe('anomalies', () => {
+  const task = (isAnomaly: boolean) => ({ id: 't', code: '1', label: 'x', completed: true, isAnomaly });
+  it('détecte une anomalie sur une action de l\'OT', () => {
+    expect(hasAnomaly({ tasks: [task(false), task(true)] })).toBe(true);
+    expect(hasAnomaly({ tasks: [task(false)] })).toBe(false);
+    expect(hasAnomaly({ tasks: undefined })).toBe(false);
+  });
+
+  it('case terminée avec anomalie → état « reserve » ; non terminée → état inchangé + compteur', () => {
+    const m = buildAnnualMatrix([
+      wo({ code: 'A', dueDate: '2026-03-10', status: 'Terminé', tasks: [task(true)] }),
+      wo({ code: 'B', dueDate: '2026-03-11', status: 'Terminé' }),
+      wo({ code: 'C', dueDate: '2026-04-10', status: 'Terminé', tasks: [task(false)] }),
+      wo({ code: 'D', dueDate: '2026-05-10', status: 'Ouvert', tasks: [task(true)] }),
+    ], 2026, TODAY);
+    const cells = m.rows[0].cells;
+    expect(cells[2]).toMatchObject({ state: 'reserve', anomalies: 1, done: 2, total: 2 });
+    expect(cells[3]).toMatchObject({ state: 'done', anomalies: 0 });
+    expect(cells[4]).toMatchObject({ state: 'overdue', anomalies: 1 });
+    expect(m.rows[0].anomalies).toBe(2);
   });
 });
