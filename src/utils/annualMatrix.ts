@@ -16,6 +16,30 @@ export interface MatrixCell {
   done: number;
   state: CellState;
   orders: WorkOrder[];
+  /** Fréquences (H, M, T, S, A) des OT de la case, sans doublon ; « • » = fréquence inconnue. */
+  freqs: string[];
+}
+
+export type FrequencyLetter = 'H' | 'M' | 'T' | 'S' | 'A';
+export const FREQUENCY_ORDER: FrequencyLetter[] = ['H', 'M', 'T', 'S', 'A'];
+export const FREQUENCY_LABELS: Record<FrequencyLetter, string> = {
+  H: 'Hebdomadaire', M: 'Mensuelle', T: 'Trimestrielle', S: 'Semestrielle', A: 'Annuelle',
+};
+const FREQUENCY_WORDS: [RegExp, FrequencyLetter][] = [
+  [/HEBDOMADAIRE/, 'H'], [/MENSUEL/, 'M'], [/TRIMESTRIEL/, 'T'], [/SEMESTRIEL/, 'S'], [/ANNUEL/, 'A'],
+];
+
+/**
+ * Fréquence d'un OT préventif : lue dans le code d'intervention de la gamme
+ * (PS-ASC-1H-01 → H, PS-TD-1T-01 → T), sinon dans le titre (« … MENSUEL … »).
+ * undefined si rien ne permet de la déterminer (ex. OT correctif).
+ */
+export function frequencyOf(wo: Pick<WorkOrder, 'interventionCode' | 'title'>): FrequencyLetter | undefined {
+  const m = /-\d*([HMTSA])-\d+$/i.exec((wo.interventionCode || '').trim());
+  if (m) return m[1].toUpperCase() as FrequencyLetter;
+  const title = (wo.title || '').toUpperCase();
+  for (const [re, letter] of FREQUENCY_WORDS) if (re.test(title)) return letter;
+  return undefined;
 }
 
 export interface MatrixRow {
@@ -110,7 +134,7 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
         label: wo.equipmentName || wo.equipmentCode || NO_EQUIPMENT,
         code: wo.equipmentCode || '',
         location: wo.location || '',
-        cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [] })),
+        cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], freqs: [] as string[] })),
         total: 0, done: 0, overdue: 0, percent: 0,
       };
       map.set(key, row);
@@ -139,6 +163,8 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
       else if (cell.orders.some(o => o.status !== 'Terminé' && o.dueDate < today)) cell.state = 'overdue';
       else if (cell.done > 0) cell.state = 'partial';
       else cell.state = 'pending';
+      const letters = new Set<string>(cell.orders.map(o => frequencyOf(o) ?? '•'));
+      cell.freqs = [...FREQUENCY_ORDER, '•'].filter(l => letters.has(l));
       monthTotals[m].total += cell.total;
       monthTotals[m].done += cell.done;
     });
