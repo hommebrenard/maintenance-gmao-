@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { WorkOrder } from '../../types';
-import { buildAnnualMatrix, availableYears, frequencyOf, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode } from '../../utils/annualMatrix';
+import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode } from '../../utils/annualMatrix';
 
 interface Props {
   /** OT déjà filtrés par la page (recherche, site, statut, priorité). */
@@ -40,6 +40,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const [zone, setZone] = useState<'all' | 'Nord' | 'Sud'>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [freqFilter, setFreqFilter] = useState<string>('all');
+  const [familyFilter, setFamilyFilter] = useState<string>('all');
   const [equipQuery, setEquipQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [selected, setSelected] = useState<{ rowKey: string; month: number } | null>(null);
@@ -47,14 +48,29 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const currentRef = useRef<HTMLTableCellElement>(null);
 
   // Filtres propres à la vue : zone du site et type d'OT (appliqués avant le calcul des totaux).
+  const scopedBase = useMemo(
+    () => orders.filter(o => (zone === 'all' || zoneOf(o) === zone) && (typeFilter === 'all' || o.type === typeFilter)),
+    [orders, zone, typeFilter, zoneOf]
+  );
   const scoped = useMemo(
-    () => orders.filter(o =>
-      (zone === 'all' || zoneOf(o) === zone) &&
-      (typeFilter === 'all' || o.type === typeFilter) &&
-      (freqFilter === 'all' || frequencyOf(o) === freqFilter)),
-    [orders, zone, typeFilter, freqFilter, zoneOf]
+    () => (freqFilter === 'all' ? scopedBase : scopedBase.filter(o => (frequencyOf(o) ?? '•') === freqFilter)),
+    [scopedBase, freqFilter]
   );
   const matrix = useMemo(() => buildAnnualMatrix(scoped, year, todayStr, mode), [scoped, year, todayStr, mode]);
+
+  // Nombre d'OT par fréquence (année affichée, sans le filtre de fréquence lui-même).
+  const freqCounts = useMemo(() => {
+    const counts: Record<string, number> = { total: 0, '•': 0 };
+    FREQUENCY_ORDER.forEach(f => { counts[f] = 0; });
+    for (const row of buildAnnualMatrix(scopedBase, year, todayStr, mode).rows) {
+      for (const c of row.cells) for (const o of c.orders) {
+        counts[frequencyOf(o) ?? '•'] += 1;
+        counts.total += 1;
+      }
+    }
+    return counts;
+  }, [scopedBase, year, todayStr, mode]);
+  const familyOptions = useMemo(() => buildFamilyOptions(matrix.rows), [matrix.rows]);
   const cur = matrix.currentIndex;
   const isWeek = mode === 'week';
 
@@ -103,6 +119,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const CUR = 'border-l-2 border-l-blue-600';
   const eq = equipQuery.trim().toLowerCase();
   const rows = matrix.rows.filter(r =>
+    (familyFilter === 'all' || r.family === familyFilter) &&
     (rowFilter === 'all' ||
       (rowFilter === 'overdue' && r.overdue > 0) ||
       (rowFilter === 'open' && r.done < r.total) ||
@@ -166,18 +183,23 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           <option value="Amélioration">Amélioration</option>
         </select>
         <select value={freqFilter} onChange={e => { setFreqFilter(e.target.value); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-          <option value="all">Toutes fréquences</option>
-          {FREQUENCY_ORDER.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f]} ({f})</option>)}
+          <option value="all">Toutes fréquences ({freqCounts.total} OT)</option>
+          {FREQUENCY_ORDER.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f]} ({f}) — {freqCounts[f]} OT</option>)}
+          {freqCounts['•'] > 0 && <option value="•">Non renseignée (•) — {freqCounts['•']} OT</option>}
+        </select>
+        <select value={familyFilter} onChange={e => { setFamilyFilter(e.target.value); setShowAll(false); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white max-w-[220px]">
+          <option value="all">Tous les équipements ({matrix.rows.length})</option>
+          {familyOptions.map(o => <option key={o.key} value={o.key}>{o.label} — {o.count}</option>)}
         </select>
         <select value={rowFilter} onChange={e => { setRowFilter(e.target.value as RowFilter); setShowAll(false); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-          <option value="all">Tous les équipements</option>
+          <option value="all">Tous les états</option>
           <option value="overdue">Avec retard</option>
           <option value="open">Non entièrement clôturés</option>
           <option value="closed">Entièrement clôturés</option>
         </select>
         <input value={equipQuery} onChange={e => { setEquipQuery(e.target.value); setShowAll(false); }} placeholder="Équipement ou code…" className="border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white w-40" />
-        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
-          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
+        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || familyFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
+          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setFamilyFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
         )}
       </div>
 
