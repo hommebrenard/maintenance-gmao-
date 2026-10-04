@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { WorkOrder } from '../../types';
-import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode, type MatrixRow } from '../../utils/annualMatrix';
+import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, statusBucketOf, hasAnomaly, STATUS_LABELS, STATUS_ORDER, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode, type MatrixRow } from '../../utils/annualMatrix';
 
 interface Props {
   /** OT déjà filtrés par la page (recherche, site, statut, priorité). */
@@ -26,6 +26,7 @@ const PAGE = 50;
 const CELL_STYLE: Record<CellState, string> = {
   none: 'bg-gray-50 text-gray-300',
   done: 'bg-green-100 text-green-800 border-green-200',
+  reserve: 'bg-purple-100 text-purple-800 border-purple-300',
   partial: 'bg-amber-100 text-amber-800 border-amber-200',
   overdue: 'bg-red-100 text-red-700 border-red-200 font-semibold',
   pending: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -41,6 +42,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [freqFilter, setFreqFilter] = useState<string>('all');
   const [familyFilter, setFamilyFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [equipQuery, setEquipQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [selected, setSelected] = useState<{ rowKey: string; month: number } | null>(null);
@@ -53,8 +55,10 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
     [orders, zone, typeFilter, zoneOf]
   );
   const scoped = useMemo(
-    () => (freqFilter === 'all' ? scopedBase : scopedBase.filter(o => (frequencyOf(o) ?? '•') === freqFilter)),
-    [scopedBase, freqFilter]
+    () => scopedBase.filter(o =>
+      (freqFilter === 'all' || (frequencyOf(o) ?? '•') === freqFilter) &&
+      (statusFilter === 'all' || (statusFilter === 'anomaly' ? hasAnomaly(o) : statusBucketOf(o, todayStr) === statusFilter))),
+    [scopedBase, freqFilter, statusFilter, todayStr]
   );
   const matrix = useMemo(() => buildAnnualMatrix(scoped, year, todayStr, mode), [scoped, year, todayStr, mode]);
 
@@ -69,18 +73,24 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
       (rowFilter === 'closed' && r.done === r.total)) &&
     (!eq || r.label.toLowerCase().includes(eq) || r.code.toLowerCase().includes(eq));
 
-  // Nombre d'OT par fréquence (année affichée, sans le filtre de fréquence lui-même).
-  const freqCounts = useMemo(() => {
-    const counts: Record<string, number> = { total: 0, '•': 0 };
-    FREQUENCY_ORDER.forEach(f => { counts[f] = 0; });
+  // Effectifs des menus Fréquence et Statut : OT de l'année affichée, équipements filtrés (famille, état,
+  // recherche) ; chaque menu tient compte de l'autre mais pas de son propre filtre.
+  const { freqCounts, statusCounts } = useMemo(() => {
+    const fc: Record<string, number> = { total: 0, '•': 0 };
+    FREQUENCY_ORDER.forEach(f => { fc[f] = 0; });
+    const sc: Record<string, number> = { total: 0, anomaly: 0 };
+    STATUS_ORDER.forEach(b => { sc[b] = 0; });
     for (const row of buildAnnualMatrix(scopedBase, year, todayStr, mode).rows.filter(rowPasses)) {
       for (const c of row.cells) for (const o of c.orders) {
-        counts[frequencyOf(o) ?? '•'] += 1;
-        counts.total += 1;
+        const f = frequencyOf(o) ?? '•';
+        const b = statusBucketOf(o, todayStr);
+        const an = hasAnomaly(o);
+        if (statusFilter === 'all' || (statusFilter === 'anomaly' ? an : b === statusFilter)) { fc[f] += 1; fc.total += 1; }
+        if (freqFilter === 'all' || f === freqFilter) { sc[b] += 1; sc.total += 1; if (an) sc.anomaly += 1; }
       }
     }
-    return counts;
-  }, [scopedBase, year, todayStr, mode, familyFilter, rowFilter, eq]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { freqCounts: fc, statusCounts: sc };
+  }, [scopedBase, year, todayStr, mode, familyFilter, rowFilter, eq, freqFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   const familyOptions = useMemo(() => buildFamilyOptions(matrix.rows), [matrix.rows]);
   const cur = matrix.currentIndex;
   const isWeek = mode === 'week';
@@ -133,8 +143,8 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const colTotals = matrix.columns.map((_, i) => rows.reduce(
     (acc, r) => ({ total: acc.total + r.cells[i].total, done: acc.done + r.cells[i].done }), { total: 0, done: 0 }));
   const grand = rows.reduce(
-    (acc, r) => ({ total: acc.total + r.total, done: acc.done + r.done, overdue: acc.overdue + r.overdue }),
-    { total: 0, done: 0, overdue: 0 });
+    (acc, r) => ({ total: acc.total + r.total, done: acc.done + r.done, overdue: acc.overdue + r.overdue, anomalies: acc.anomalies + r.anomalies }),
+    { total: 0, done: 0, overdue: 0, anomalies: 0 });
   const grandPercent = grand.total ? Math.round((grand.done / grand.total) * 100) : 0;
   const visible = showAll ? rows : rows.slice(0, PAGE);
   const detailRow = selected ? matrix.rows.find(r => r.key === selected.rowKey) : null;
@@ -152,6 +162,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           <span className="text-xs text-gray-500 ml-2">
             {grand.done}/{grand.total} OT clôturés ({grandPercent} %)
             {grand.overdue > 0 && <span className="text-red-600 font-semibold"> · {grand.overdue} en retard</span>}
+            {grand.anomalies > 0 && <span className="text-purple-700 font-semibold"> · {grand.anomalies} avec anomalie</span>}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -197,6 +208,11 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           {FREQUENCY_ORDER.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f]} ({f}) — {freqCounts[f]} OT</option>)}
           {freqCounts['•'] > 0 && <option value="•">Non renseignée (•) — {freqCounts['•']} OT</option>}
         </select>
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+          <option value="all">Tous statuts ({statusCounts.total} OT)</option>
+          {STATUS_ORDER.map(b => <option key={b} value={b}>{STATUS_LABELS[b]} — {statusCounts[b]} OT</option>)}
+          <option value="anomaly">Avec anomalie (!) — {statusCounts.anomaly} OT</option>
+        </select>
         <select value={familyFilter} onChange={e => { setFamilyFilter(e.target.value); setShowAll(false); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white max-w-[220px]">
           <option value="all">Tous les équipements ({matrix.rows.length})</option>
           {familyOptions.map(o => <option key={o.key} value={o.key}>{o.label} — {o.count}</option>)}
@@ -208,15 +224,16 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           <option value="closed">Entièrement clôturés</option>
         </select>
         <input value={equipQuery} onChange={e => { setEquipQuery(e.target.value); setShowAll(false); }} placeholder="Équipement ou code…" className="border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white w-40" />
-        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || familyFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
-          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setFamilyFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
+        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || statusFilter !== 'all' || familyFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
+          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setStatusFilter('all'); setFamilyFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
         )}
       </div>
 
       <div className="flex flex-wrap gap-3 text-[11px] text-gray-600">
-        {([['done', 'Tout clôturé'], ['partial', 'Partiel'], ['overdue', 'En retard'], ['pending', 'À venir'], ['none', 'Aucun OT']] as [CellState, string][]).map(([s, l]) => (
+        {([['done', 'Tout clôturé'], ['reserve', 'Clôturé avec anomalie'], ['partial', 'Partiel'], ['overdue', 'En retard'], ['pending', 'À venir'], ['none', 'Aucun OT']] as [CellState, string][]).map(([s, l]) => (
           <span key={s} className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded border ${CELL_STYLE[s]}`} />{l}</span>
         ))}
+        <span className="flex items-center gap-1.5"><span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-purple-600 text-white text-[8px] font-bold">!</span>Anomalie signalée</span>
         <span className="text-gray-500">Fréquence : {FREQUENCY_ORDER.map(f => `${f} = ${FREQUENCY_LABELS[f].toLowerCase()}`).join(' · ')} · • = non renseignée</span>
         {cur !== null && <span className="flex items-center gap-1.5"><span className="inline-block w-0.5 h-3 bg-blue-600" />{isWeek ? `Semaine en cours (S${matrix.columns[cur].label})` : 'Mois en cours'}</span>}
       </div>
@@ -262,9 +279,12 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
                       ) : (
                         <button
                           onClick={() => (c.total === 1 ? onOpenOrder(c.orders[0]) : setSelected({ rowKey: row.key, month: m }))}
-                          title={`${colName(m)} : ${c.total} OT, ${c.done} clôturé(s) · fréquence ${c.freqs.join(' ')}${c.total === 1 ? ' · cliquer pour ouvrir l\'OT' : ''}`}
-                          className={`w-full rounded border px-1 py-1 ${CELL_STYLE[c.state]} ${selected?.rowKey === row.key && selected.month === m ? 'ring-2 ring-blue-500' : ''}`}
+                          title={`${colName(m)} : ${c.total} OT, ${c.done} clôturé(s) · fréquence ${c.freqs.join(' ')}${c.anomalies > 0 ? ` · ${c.anomalies} anomalie(s)` : ''}${c.total === 1 ? ' · cliquer pour ouvrir l\'OT' : ''}`}
+                          className={`relative w-full rounded border px-1 py-1 ${CELL_STYLE[c.state]} ${selected?.rowKey === row.key && selected.month === m ? 'ring-2 ring-blue-500' : ''}`}
                         >
+                          {c.anomalies > 0 && (
+                            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-purple-600 text-white text-[9px] font-bold leading-none">!</span>
+                          )}
                           {isWeek ? (
                             <span className="font-bold tracking-tight text-[11px]">{c.freqs.join('')}</span>
                           ) : (
@@ -279,6 +299,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
                   ))}
                   <td className="px-2 py-1 border-b border-gray-100 text-center">
                     <div className="font-semibold text-gray-800">{row.done}/{row.total}</div>
+                    {row.anomalies > 0 && <div className="text-[10px] font-semibold text-purple-700">! {row.anomalies}</div>}
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-0.5">
                       <div className={`h-full ${row.overdue > 0 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${row.percent}%` }} />
                     </div>
@@ -322,7 +343,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
                   <li key={o.id}>
                     <button onClick={() => { setSelected(null); onOpenOrder(o); }} className="w-full text-left py-2 flex items-center justify-between gap-3 hover:bg-gray-50 px-1 rounded">
                       <span className="min-w-0">
-                        <span className="font-mono text-gray-500"><span className="font-bold text-blue-700 mr-1">{frequencyOf(o) ?? '•'}</span>{o.code}</span>
+                        <span className="font-mono text-gray-500"><span className="font-bold text-blue-700 mr-1">{frequencyOf(o) ?? '•'}</span>{o.code}{hasAnomaly(o) && <span className="ml-2 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-purple-600 text-white text-[9px] font-bold align-middle" title="Anomalie signalée">!</span>}</span>
                         <span className="block text-gray-800">{o.title}</span>
                       </span>
                       <span className="shrink-0 text-right">
