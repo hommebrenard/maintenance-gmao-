@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { WorkOrder } from '../../types';
+import { LOT_BADGE, LOT_LABELS, LOT_ORDER } from '../../utils/equipmentFamilies';
 import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, statusBucketOf, hasAnomaly, STATUS_LABELS, STATUS_ORDER, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode, type MatrixRow } from '../../utils/annualMatrix';
 
 interface Props {
@@ -42,6 +43,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [freqFilter, setFreqFilter] = useState<string>('all');
   const [familyFilter, setFamilyFilter] = useState<string>('all');
+  const [lotFilter, setLotFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [equipQuery, setEquipQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -66,6 +68,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   // les totaux (en-tête, ligne Total, colonne Année) et les effectifs du menu des fréquences.
   const eq = equipQuery.trim().toLowerCase();
   const rowPasses = (r: MatrixRow) =>
+    (lotFilter === 'all' || r.lot === lotFilter) &&
     (familyFilter === 'all' || r.family === familyFilter) &&
     (rowFilter === 'all' ||
       (rowFilter === 'overdue' && r.overdue > 0) ||
@@ -90,8 +93,17 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
       }
     }
     return { freqCounts: fc, statusCounts: sc };
-  }, [scopedBase, year, todayStr, mode, familyFilter, rowFilter, eq, freqFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-  const familyOptions = useMemo(() => buildFamilyOptions(matrix.rows), [matrix.rows]);
+  }, [scopedBase, year, todayStr, mode, lotFilter, familyFilter, rowFilter, eq, freqFilter, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Lots présents (avec nombre d'équipements) ; les familles proposées se limitent au lot choisi.
+  const lotCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    matrix.rows.forEach(r => { c[r.lot] = (c[r.lot] ?? 0) + 1; });
+    return c;
+  }, [matrix.rows]);
+  const familyOptions = useMemo(
+    () => buildFamilyOptions(matrix.rows.filter(r => lotFilter === 'all' || r.lot === lotFilter)),
+    [matrix.rows, lotFilter]
+  );
   const cur = matrix.currentIndex;
   const isWeek = mode === 'week';
 
@@ -213,6 +225,10 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           {STATUS_ORDER.map(b => <option key={b} value={b}>{STATUS_LABELS[b]} — {statusCounts[b]} OT</option>)}
           <option value="anomaly">Avec anomalie (!) — {statusCounts.anomaly} OT</option>
         </select>
+        <select value={lotFilter} onChange={e => { setLotFilter(e.target.value); setFamilyFilter('all'); setShowAll(false); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white max-w-[220px]">
+          <option value="all">Tous les lots</option>
+          {LOT_ORDER.filter(l => lotCounts[l]).map(l => <option key={l} value={l}>{LOT_LABELS[l]} — {lotCounts[l]}</option>)}
+        </select>
         <select value={familyFilter} onChange={e => { setFamilyFilter(e.target.value); setShowAll(false); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white max-w-[220px]">
           <option value="all">Tous les équipements ({matrix.rows.length})</option>
           {familyOptions.map(o => <option key={o.key} value={o.key}>{o.label} — {o.count}</option>)}
@@ -224,8 +240,8 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           <option value="closed">Entièrement clôturés</option>
         </select>
         <input value={equipQuery} onChange={e => { setEquipQuery(e.target.value); setShowAll(false); }} placeholder="Équipement ou code…" className="border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white w-40" />
-        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || statusFilter !== 'all' || familyFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
-          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setStatusFilter('all'); setFamilyFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
+        {(siteFilter !== 'all' || zone !== 'all' || typeFilter !== 'all' || freqFilter !== 'all' || statusFilter !== 'all' || lotFilter !== 'all' || familyFilter !== 'all' || rowFilter !== 'all' || equipQuery) && (
+          <button onClick={() => { onSiteChange('all'); setZone('all'); setTypeFilter('all'); setFreqFilter('all'); setStatusFilter('all'); setFamilyFilter('all'); setLotFilter('all'); setRowFilter('all'); setEquipQuery(''); setSelected(null); }} className="text-blue-600 font-medium hover:underline">Réinitialiser</button>
         )}
       </div>
 
@@ -268,7 +284,10 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
               {visible.map(row => (
                 <tr key={row.key}>
                   <td className="sticky left-0 z-10 bg-white px-3 py-1.5 border-b border-gray-100 min-w-[150px] sm:min-w-[260px] max-w-[300px] align-top">
-                    <div className="font-medium text-gray-900 leading-tight break-words">{row.label}</div>
+                    <div className="font-medium text-gray-900 leading-tight break-words">
+                      <span className={`inline-block align-middle mr-1.5 px-1 rounded text-[9px] font-bold leading-4 ${LOT_BADGE[row.lot]}`} title={LOT_LABELS[row.lot]}>{row.lot}</span>
+                      {row.label}
+                    </div>
                     <div className="text-[10px] text-gray-500 break-all">{row.code}</div>
                     {row.location && <div className="text-[10px] text-gray-400 leading-tight break-words">{row.location}</div>}
                   </td>
