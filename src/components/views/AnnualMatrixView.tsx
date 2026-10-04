@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { WorkOrder } from '../../types';
-import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode } from '../../utils/annualMatrix';
+import { buildAnnualMatrix, buildFamilyOptions, availableYears, frequencyOf, FREQUENCY_LABELS, FREQUENCY_ORDER, type CellState, type MatrixMode, type MatrixRow } from '../../utils/annualMatrix';
 
 interface Props {
   /** OT déjà filtrés par la page (recherche, site, statut, priorité). */
@@ -58,18 +58,29 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   );
   const matrix = useMemo(() => buildAnnualMatrix(scoped, year, todayStr, mode), [scoped, year, todayStr, mode]);
 
+  // Filtres de lignes (famille, état, recherche) : ils pilotent à la fois les lignes affichées,
+  // les totaux (en-tête, ligne Total, colonne Année) et les effectifs du menu des fréquences.
+  const eq = equipQuery.trim().toLowerCase();
+  const rowPasses = (r: MatrixRow) =>
+    (familyFilter === 'all' || r.family === familyFilter) &&
+    (rowFilter === 'all' ||
+      (rowFilter === 'overdue' && r.overdue > 0) ||
+      (rowFilter === 'open' && r.done < r.total) ||
+      (rowFilter === 'closed' && r.done === r.total)) &&
+    (!eq || r.label.toLowerCase().includes(eq) || r.code.toLowerCase().includes(eq));
+
   // Nombre d'OT par fréquence (année affichée, sans le filtre de fréquence lui-même).
   const freqCounts = useMemo(() => {
     const counts: Record<string, number> = { total: 0, '•': 0 };
     FREQUENCY_ORDER.forEach(f => { counts[f] = 0; });
-    for (const row of buildAnnualMatrix(scopedBase, year, todayStr, mode).rows) {
+    for (const row of buildAnnualMatrix(scopedBase, year, todayStr, mode).rows.filter(rowPasses)) {
       for (const c of row.cells) for (const o of c.orders) {
         counts[frequencyOf(o) ?? '•'] += 1;
         counts.total += 1;
       }
     }
     return counts;
-  }, [scopedBase, year, todayStr, mode]);
+  }, [scopedBase, year, todayStr, mode, familyFilter, rowFilter, eq]); // eslint-disable-line react-hooks/exhaustive-deps
   const familyOptions = useMemo(() => buildFamilyOptions(matrix.rows), [matrix.rows]);
   const cur = matrix.currentIndex;
   const isWeek = mode === 'week';
@@ -117,15 +128,14 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
   }, [matrix.columns]);
   const colName = (i: number) => (isWeek ? `Semaine ${matrix.columns[i].label}` : MONTHS[i]);
   const CUR = 'border-l-2 border-l-blue-600';
-  const eq = equipQuery.trim().toLowerCase();
-  const rows = matrix.rows.filter(r =>
-    (familyFilter === 'all' || r.family === familyFilter) &&
-    (rowFilter === 'all' ||
-      (rowFilter === 'overdue' && r.overdue > 0) ||
-      (rowFilter === 'open' && r.done < r.total) ||
-      (rowFilter === 'closed' && r.done === r.total)) &&
-    (!eq || r.label.toLowerCase().includes(eq) || r.code.toLowerCase().includes(eq))
-  );
+  const rows = matrix.rows.filter(rowPasses);
+  // Totaux recalculés sur les équipements réellement affichés (et non sur toute la base).
+  const colTotals = matrix.columns.map((_, i) => rows.reduce(
+    (acc, r) => ({ total: acc.total + r.cells[i].total, done: acc.done + r.cells[i].done }), { total: 0, done: 0 }));
+  const grand = rows.reduce(
+    (acc, r) => ({ total: acc.total + r.total, done: acc.done + r.done, overdue: acc.overdue + r.overdue }),
+    { total: 0, done: 0, overdue: 0 });
+  const grandPercent = grand.total ? Math.round((grand.done / grand.total) * 100) : 0;
   const visible = showAll ? rows : rows.slice(0, PAGE);
   const detailRow = selected ? matrix.rows.find(r => r.key === selected.rowKey) : null;
   const detailCell = detailRow && selected ? detailRow.cells[selected.month] : null;
@@ -140,8 +150,8 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
           <h3 className="text-lg font-bold text-gray-900 w-16 text-center">{year}</h3>
           <button onClick={() => goYear(1)} className="p-1.5 rounded-md border border-gray-200 hover:bg-gray-50" aria-label="Année suivante"><ChevronRight className="w-4 h-4" /></button>
           <span className="text-xs text-gray-500 ml-2">
-            {matrix.grand.done}/{matrix.grand.total} OT clôturés ({matrix.grand.percent} %)
-            {matrix.grand.overdue > 0 && <span className="text-red-600 font-semibold"> · {matrix.grand.overdue} en retard</span>}
+            {grand.done}/{grand.total} OT clôturés ({grandPercent} %)
+            {grand.overdue > 0 && <span className="text-red-600 font-semibold"> · {grand.overdue} en retard</span>}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -277,10 +287,10 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
               ))}
               <tr>
                 <td className="sticky left-0 bottom-0 z-30 bg-gray-50 px-3 py-2 font-semibold text-gray-700">Total</td>
-                {matrix.monthTotals.map((t, m) => (
+                {colTotals.map((t, m) => (
                   <td key={m} className={`sticky bottom-0 z-20 bg-gray-50 px-1 py-2 text-center text-gray-700 font-medium ${m === cur ? CUR : ''}`}>{t.total ? (isWeek ? t.total : `${t.done}/${t.total}`) : '·'}</td>
                 ))}
-                <td className="sticky bottom-0 z-20 bg-gray-50 px-2 py-2 text-center font-semibold text-gray-800">{matrix.grand.done}/{matrix.grand.total}</td>
+                <td className="sticky bottom-0 z-20 bg-gray-50 px-2 py-2 text-center font-semibold text-gray-800">{grand.done}/{grand.total}</td>
               </tr>
             </tbody>
           </table>
