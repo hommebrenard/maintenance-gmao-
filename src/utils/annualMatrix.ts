@@ -1,4 +1,5 @@
 import type { WorkOrder } from '../types';
+import { familyLabel, lotOfFamily, type LotCode } from './equipmentFamilies';
 
 /** État d'une case équipement × mois. */
 export type CellState = 'none' | 'done' | 'reserve' | 'partial' | 'overdue' | 'pending';
@@ -50,6 +51,8 @@ export interface MatrixRow {
   code: string;
   /** Famille d'équipement : segment « type » du code (BAM-KNT_AG-ASC-01 → ASC). */
   family: string;
+  /** Lot de la famille (ELEC, FLUIDE, CIRC, DIVERS) : voir equipmentFamilies.ts. */
+  lot: LotCode;
   location: string;
   cells: MatrixCell[]; // une case par colonne (12 mois, ou 52/53 semaines)
   total: number;
@@ -148,6 +151,8 @@ export function buildFamilyOptions(rows: Pick<MatrixRow, 'family' | 'label'>[]):
   }
   const options: FamilyOption[] = [];
   for (const [key, names] of groups) {
+    const known = familyLabel(key);
+    if (known) { options.push({ key, label: `${known} (${key})`, count: names.length }); continue; }
     const freq = new Map<string, number>();
     names.filter(Boolean).forEach(n => freq.set(n, (freq.get(n) ?? 0) + 1));
     const top = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0];
@@ -203,6 +208,7 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
         label: wo.equipmentName || wo.equipmentCode || NO_EQUIPMENT,
         code: wo.equipmentCode || '',
         family: familyKeyOf(wo.equipmentCode),
+        lot: lotOfFamily(familyKeyOf(wo.equipmentCode)),
         location: wo.location || '',
         cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], anomalies: 0, freqs: [] as string[] })),
         total: 0, done: 0, overdue: 0, anomalies: 0, percent: 0,
