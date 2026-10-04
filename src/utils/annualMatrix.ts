@@ -1,7 +1,7 @@
 import type { WorkOrder } from '../types';
 
 /** État d'une case équipement × mois. */
-export type CellState = 'none' | 'done' | 'partial' | 'overdue' | 'pending';
+export type CellState = 'none' | 'done' | 'reserve' | 'partial' | 'overdue' | 'pending';
 
 export type MatrixMode = 'month' | 'week';
 
@@ -16,6 +16,8 @@ export interface MatrixCell {
   done: number;
   state: CellState;
   orders: WorkOrder[];
+  /** Nombre d'OT de la case ayant au moins une action signalée en anomalie. */
+  anomalies: number;
   /** Fréquences (H, M, T, S, A) des OT de la case, sans doublon ; « • » = fréquence inconnue. */
   freqs: string[];
 }
@@ -53,6 +55,7 @@ export interface MatrixRow {
   total: number;
   done: number;
   overdue: number;
+  anomalies: number;
   percent: number; // 0..100
 }
 
@@ -95,6 +98,25 @@ export function weekColumns(year: number): MatrixColumn[] {
     const thursday = week1Monday + (i * 7 + 3) * DAY_MS;
     return { label: String(i + 1), monthIndex: new Date(thursday).getUTCMonth() };
   });
+}
+
+/** Un OT a une anomalie dès qu'une de ses actions est signalée en anomalie (case « Anomalie » de la checklist). */
+export function hasAnomaly(wo: Pick<WorkOrder, 'tasks'>): boolean {
+  return !!wo.tasks?.some(t => t.isAnomaly);
+}
+
+/** Statut d'exécution d'un OT pour le filtre « Statut » de la matrice. */
+export type StatusBucket = 'done' | 'progress' | 'overdue' | 'planned';
+export const STATUS_ORDER: StatusBucket[] = ['done', 'progress', 'overdue', 'planned'];
+export const STATUS_LABELS: Record<StatusBucket, string> = {
+  done: 'Réalisé (clôturé)', progress: 'En cours', overdue: 'En retard', planned: 'Planifié (à venir)',
+};
+
+/** Terminé → réalisé ; sinon échéance passée → en retard ; sinon « En cours » ; sinon planifié. */
+export function statusBucketOf(wo: Pick<WorkOrder, 'status' | 'dueDate'>, today: string): StatusBucket {
+  if (wo.status === 'Terminé') return 'done';
+  if (wo.dueDate && wo.dueDate < today) return 'overdue';
+  return wo.status === 'En cours' ? 'progress' : 'planned';
 }
 
 /** Segment « type » d'un code équipement : BAM-KNT_AG-ASC-01 → ASC ; « AUTRES » si le code n'a pas ce format. */
@@ -182,8 +204,8 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
         code: wo.equipmentCode || '',
         family: familyKeyOf(wo.equipmentCode),
         location: wo.location || '',
-        cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], freqs: [] as string[] })),
-        total: 0, done: 0, overdue: 0, percent: 0,
+        cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], anomalies: 0, freqs: [] as string[] })),
+        total: 0, done: 0, overdue: 0, anomalies: 0, percent: 0,
       };
       map.set(key, row);
     }
@@ -191,6 +213,7 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
     cell.total += 1;
     cell.orders.push(wo);
     row.total += 1;
+    if (hasAnomaly(wo)) { cell.anomalies += 1; row.anomalies += 1; }
     if (wo.status === 'Terminé') {
       cell.done += 1;
       row.done += 1;
@@ -207,7 +230,7 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
     row.cells.forEach((cell, m) => {
       cell.orders.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.code.localeCompare(b.code));
       if (cell.total === 0) cell.state = 'none';
-      else if (cell.done === cell.total) cell.state = 'done';
+      else if (cell.done === cell.total) cell.state = cell.anomalies > 0 ? 'reserve' : 'done';
       else if (cell.orders.some(o => o.status !== 'Terminé' && o.dueDate < today)) cell.state = 'overdue';
       else if (cell.done > 0) cell.state = 'partial';
       else cell.state = 'pending';
