@@ -117,7 +117,52 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [category, setCategory] = useState('');
   const [notes, setNotes] = useState('');
 
-  const selectedEquipment = equipmentList.find(e => e.id === selectedId) || equipmentList[0];
+  const filteredList = equipmentList.filter(eq => {
+    const matchesSearch = eq.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          eq.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          eq.manufacturer.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    let matchesStatus = true;
+    if (statusFilter) {
+      matchesStatus = eq.status === statusFilter;
+    }
+
+    const matchesCriticality = !criticalityFilter || eq.criticality === criticalityFilter;
+    const matchesSupplier =
+      !supplierFilter ||
+      (supplierFilter === '__none__'
+        ? !eq.supplierId && isBlankField(eq.supplier)
+        : eq.supplierId === supplierFilter);
+    const matchesLocation =
+      !locationFilter ||
+      (locationFilter === '__none__'
+        ? !eq.locationId && isBlankField(eq.location)
+        : eq.locationId === locationFilter);
+
+    return matchesSearch && matchesStatus && matchesCriticality && matchesSupplier && matchesLocation;
+  });
+  const hasActiveFilter = !!(statusFilter || criticalityFilter || supplierFilter || locationFilter || searchQuery);
+  const resetFilters = () => {
+    setStatusFilter(null);
+    setCriticalityFilter('');
+    setSupplierFilter('');
+    setLocationFilter('');
+    setSearchQuery('');
+  };
+
+  // La fiche affichée doit toujours faire partie de la liste filtrée (sinon on
+  // voyait la fiche d'un équipement qui ne correspondait plus aux filtres).
+  const selectionPool = hasActiveFilter ? filteredList : equipmentList;
+  const selectedEquipment = selectionPool.find(e => e.id === selectedId) || selectionPool[0];
+
+  // Effectifs affichés dans les menus de filtre (nombre d'équipements par valeur).
+  const criticalityOptions = (() => {
+    const base = ['Critique', 'Élevée', 'Normal', 'Faible'];
+    const extra = Array.from(new Set(equipmentList.map(e => e.criticality))).filter(c => c && !base.includes(c));
+    return [...base, ...extra].map(c => ({ value: c, count: equipmentList.filter(e => e.criticality === c).length }));
+  })();
+  const countBySupplier = (id: string) => equipmentList.filter(e => e.supplierId === id).length;
+  const countByLocation = (id: string) => equipmentList.filter(e => e.locationId === id).length;
 
   // QR code de la fiche équipement : lien profond en hash (pas de React
   // Router dans l'app) vers le formulaire de saisie du Carnet de santé de cet
@@ -152,39 +197,6 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     () => (selectedEquipment ? getLinkedWorkOrders(selectedEquipment, workOrders) : []),
     [selectedEquipment, workOrders]
   );
-
-  const filteredList = equipmentList.filter(eq => {
-    const matchesSearch = eq.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          eq.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          eq.manufacturer.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    let matchesStatus = true;
-    if (statusFilter) {
-      matchesStatus = eq.status === statusFilter;
-    }
-
-    const matchesCriticality = !criticalityFilter || eq.criticality === criticalityFilter;
-    const matchesSupplier =
-      !supplierFilter ||
-      (supplierFilter === '__none__'
-        ? !eq.supplierId && isBlankField(eq.supplier)
-        : eq.supplierId === supplierFilter);
-    const matchesLocation =
-      !locationFilter ||
-      (locationFilter === '__none__'
-        ? !eq.locationId && isBlankField(eq.location)
-        : eq.locationId === locationFilter);
-
-    return matchesSearch && matchesStatus && matchesCriticality && matchesSupplier && matchesLocation;
-  });
-  const hasActiveFilter = !!(statusFilter || criticalityFilter || supplierFilter || locationFilter || searchQuery);
-  const resetFilters = () => {
-    setStatusFilter(null);
-    setCriticalityFilter('');
-    setSupplierFilter('');
-    setLocationFilter('');
-    setSearchQuery('');
-  };
 
   // Libellé d'un emplacement dans les listes déroulantes (ajoute le type quand
   // deux emplacements portent le même nom).
@@ -383,21 +395,21 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
 
           <select value={criticalityFilter} onChange={(e) => setCriticalityFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Criticité ∨</option>
-            {(['Critique', 'Élevée', 'Normal', 'Faible'] as const).map(c => (
-              <option key={c} value={c}>{c}</option>
+            {criticalityOptions.map(c => (
+              <option key={c.value} value={c.value}>{c.value} ({c.count})</option>
             ))}
           </select>
           <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Fournisseur ∨</option>
             {supplierOptions.map(o => (
-              <option key={o.id} value={o.id}>{o.name}</option>
+              <option key={o.id} value={o.id}>{o.name} ({countBySupplier(o.id)})</option>
             ))}
             <option value="__none__">Sans fournisseur</option>
           </select>
           <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Emplacement ∨</option>
             {sortedLocations.map(l => (
-              <option key={l.id} value={l.id}>{locationLabel(l)}</option>
+              <option key={l.id} value={l.id}>{locationLabel(l)} ({countByLocation(l.id)})</option>
             ))}
             <option value="__none__">Sans emplacement</option>
           </select>
@@ -416,6 +428,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
       <div className="flex-1 flex overflow-hidden bg-gray-50/20">
         {/* Left Equipment List Pane */}
         <div className={`w-full md:w-80 border-r border-gray-200 bg-white overflow-y-auto md:shrink-0 ${mobileShowFiche ? 'hidden md:block' : 'block'}`}>
+          {filteredList.length === 0 && (
+            <div className="p-6 text-center text-sm text-gray-500">
+              Aucun équipement ne correspond aux filtres.
+              {hasActiveFilter && (
+                <button onClick={resetFilters} className="block mx-auto mt-2 text-xs underline text-blue-700">
+                  Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+          )}
           {viewMode === 'list' ? (
             <div className="divide-y divide-gray-100">
               {filteredList.map(eq => {
@@ -675,7 +697,9 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-            Sélectionnez un équipement dans la liste pour afficher ses caractéristiques.
+            {hasActiveFilter && filteredList.length === 0
+              ? 'Aucun équipement ne correspond aux filtres choisis.'
+              : 'Sélectionnez un équipement dans la liste pour afficher ses caractéristiques.'}
           </div>
         )}
       </div>
