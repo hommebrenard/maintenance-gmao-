@@ -3,6 +3,7 @@ import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { WorkOrder, Equipment } from '../../types';
 import { parseWoDateTime, sortByRecentActivity } from '../../utils/reportDates';
+import { responsibleOf } from '../../utils/workOrderResponsible';
 
 interface ReportsViewProps {
   workOrders: WorkOrder[];
@@ -23,12 +24,12 @@ const addDays = (d: Date, days: number): Date => {
 };
 
 const downloadCSV = (rows: WorkOrder[]) => {
-  const headers = ['Code', 'Titre', 'Statut', 'Priorité', 'Type', 'Assigné à', 'Emplacement', 'Équipement', 'Date d\'échéance'];
+  const headers = ['Code', 'Titre', 'Statut', 'Priorité', 'Type', 'Intervenant', 'Emplacement', 'Équipement', 'Date d\'échéance'];
   const escape = (v: string) => `"${(v || '').replace(/"/g, '""')}"`;
   const lines = [
     headers.join(';'),
     ...rows.map(w => [
-      w.code, w.title, w.status, w.priority, w.type, w.assignee || '', w.location || '', w.equipmentName || '', w.dueDate
+      w.code, w.title, w.status, w.priority, w.type, responsibleOf(w), w.location || '', w.equipmentName || '', w.dueDate
     ].map(v => escape(String(v ?? ''))).join(';'))
   ];
   const csvContent = '\uFEFF' + lines.join('\r\n');
@@ -53,7 +54,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const [statusFilter, setStatusFilter] = useState('');
 
   // --- Options disponibles pour les filtres, dérivées des données réelles ---
-  const assigneeOptions = useMemo(() => Array.from(new Set(workOrders.map(w => w.assignee).filter(Boolean))) as string[], [workOrders]);
+  const assigneeOptions = useMemo(() => Array.from(new Set(workOrders.map(w => responsibleOf(w)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'fr')) as string[], [workOrders]);
   const locationOptions = useMemo(() => Array.from(new Set(workOrders.map(w => w.location).filter(Boolean))) as string[], [workOrders]);
   const typeOptions = useMemo(() => Array.from(new Set(workOrders.map(w => w.type).filter(Boolean))) as string[], [workOrders]);
   const statusOptions = ['Ouvert', 'En cours', 'En attente', 'Terminé'];
@@ -76,7 +77,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const inPrevPeriod = (wo: WorkOrder) => wo.dueDate >= prevPeriodStartStr && wo.dueDate < prevPeriodEndStr;
 
   const applyCommonFilters = (wo: WorkOrder) => {
-    if (assigneeFilter && wo.assignee !== assigneeFilter) return false;
+    if (assigneeFilter && responsibleOf(wo) !== assigneeFilter) return false;
     if (locationFilter && wo.location !== locationFilter) return false;
     if (priorityFilter && wo.priority !== priorityFilter) return false;
     if (typeFilter && wo.type !== typeFilter) return false;
@@ -227,7 +228,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
           onChange={(e) => setAssigneeFilter(e.target.value)}
           className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
         >
-          <option value="">Assigné à</option>
+          <option value="">Intervenant</option>
           {assigneeOptions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
 
@@ -462,7 +463,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                         <th className="px-4 py-2 text-left">Titre</th>
                         <th className="px-4 py-2 text-left">Statut</th>
                         <th className="px-4 py-2 text-left">Priorité</th>
-                        <th className="px-4 py-2 text-left">Assigné à</th>
+                        <th className="px-4 py-2 text-left">Intervenant</th>
                         <th className="px-4 py-2 text-left">Emplacement</th>
                         <th className="px-4 py-2 text-left">Échéance</th>
                       </tr>
@@ -474,7 +475,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                           <td className="px-4 py-2 font-medium text-gray-800 max-w-xs truncate">{w.title}</td>
                           <td className="px-4 py-2 text-gray-600">{w.status}</td>
                           <td className="px-4 py-2 text-gray-600">{w.priority}</td>
-                          <td className="px-4 py-2 text-gray-600">{w.assignee || '—'}</td>
+                          <td className="px-4 py-2 text-gray-600">{responsibleOf(w) || '—'}</td>
                           <td className="px-4 py-2 text-gray-600">{w.location || '—'}</td>
                           <td className="px-4 py-2 text-gray-600">{w.dueDate}</td>
                         </tr>
@@ -498,7 +499,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                       <div key={w.id} className="px-5 py-3 flex items-center justify-between text-xs hover:bg-gray-50">
                         <div className="min-w-0">
                           <p className="font-medium text-gray-800 truncate">{w.title}</p>
-                          <p className="text-gray-400">{w.code} · {w.assignee || 'Non assigné'}</p>
+                          <p className="text-gray-400">{w.code} · {responsibleOf(w) || 'Non assigné'}</p>
                         </div>
                         <div className="text-right shrink-0 ml-4">
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
