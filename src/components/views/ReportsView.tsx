@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { WorkOrder, Equipment } from '../../types';
+import { parseWoDateTime, sortByRecentActivity } from '../../utils/reportDates';
 
 interface ReportsViewProps {
   workOrders: WorkOrder[];
@@ -19,16 +20,6 @@ const addDays = (d: Date, days: number): Date => {
   const copy = new Date(d);
   copy.setDate(copy.getDate() + days);
   return copy;
-};
-
-// Parse "DD/MM/YYYY, HH:MM:SS" or "DD/MM/YYYY HH:MM:SS" (toLocaleString('fr-FR') output)
-const parseFrDateTime = (s?: string): Date | null => {
-  if (!s) return null;
-  const match = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})[, ]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
-  if (!match) return null;
-  const [, day, month, year, h, min, sec] = match;
-  const d = new Date(Number(year), Number(month) - 1, Number(day), Number(h), Number(min), Number(sec || '0'));
-  return isNaN(d.getTime()) ? null : d;
 };
 
 const downloadCSV = (rows: WorkOrder[]) => {
@@ -120,8 +111,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const mttrHours = useMemo(() => {
     const durations: number[] = [];
     filteredOrders.filter(w => w.status === 'Terminé').forEach(w => {
-      const start = parseFrDateTime(w.createdAt) || (w.createdAt ? new Date(w.createdAt) : null);
-      const end = parseFrDateTime(w.updatedAt) || (w.updatedAt ? new Date(w.updatedAt) : null);
+      const start = parseWoDateTime(w.createdAt);
+      const end = parseWoDateTime(w.updatedAt);
       if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime()) && end.getTime() > start.getTime()) {
         durations.push((end.getTime() - start.getTime()) / 3600000);
       }
@@ -498,11 +489,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
               <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-200">
                   <h3 className="text-sm font-bold text-gray-900">Activité récente</h3>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Les 20 OT les plus récemment modifiés, parmi les résultats filtrés.</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Les 20 OT les plus récemment modifiés, quelle que soit leur échéance (la période ne s'applique pas ici ; les autres filtres oui).</p>
                 </div>
                 <div className="divide-y divide-gray-100 max-h-[480px] overflow-y-auto">
-                  {[...filteredOrders]
-                    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+                  {sortByRecentActivity(workOrders.filter(applyCommonFilters))
                     .slice(0, 20)
                     .map(w => (
                       <div key={w.id} className="px-5 py-3 flex items-center justify-between text-xs hover:bg-gray-50">
