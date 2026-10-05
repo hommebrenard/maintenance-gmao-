@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X } from 'lucide-react';
+import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { WorkOrder, Equipment } from '../../types';
 import { parseWoDateTime, sortByRecentActivity } from '../../utils/reportDates';
 import { responsibleOf } from '../../utils/workOrderResponsible';
+import { DetailSortKey, formatDateFr, toDetailRow, sortDetailRows, matchesDetailSearch } from '../../utils/reportTable';
 
 interface ReportsViewProps {
   workOrders: WorkOrder[];
@@ -46,6 +47,9 @@ const downloadCSV = (rows: WorkOrder[]) => {
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentList }) => {
   const [activeTab, setActiveTab] = useState<'work-orders' | 'equipment' | 'details' | 'activity' | 'export'>('work-orders');
+  const [detailsSearch, setDetailsSearch] = useState('');
+  const [detailsSort, setDetailsSort] = useState<{ key: DetailSortKey; dir: 'asc' | 'desc' }>({ key: 'dueDate', dir: 'asc' });
+  const [detailsLimit, setDetailsLimit] = useState(100);
   const [period, setPeriod] = useState('365');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
@@ -447,44 +451,98 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
               </div>
             )}
 
-            {activeTab === 'details' && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-900">Détails du rapport ({filteredOrders.length} OT)</h3>
-                  {filteredOrders.length > 200 && (
-                    <span className="text-[11px] text-gray-400">Affichage limité aux 200 premiers — affinez les filtres pour cibler</span>
+            {activeTab === 'details' && (() => {
+              const rows = sortDetailRows(
+                filteredOrders.map(toDetailRow).filter(r => matchesDetailSearch(r, detailsSearch)),
+                detailsSort.key,
+                detailsSort.dir
+              );
+              const visible = rows.slice(0, detailsLimit);
+              const columns: { key: DetailSortKey; label: string }[] = [
+                { key: 'code', label: 'Code' },
+                { key: 'title', label: 'Titre' },
+                { key: 'equipment', label: 'Équipement' },
+                { key: 'lot', label: 'Lot' },
+                { key: 'family', label: 'Famille' },
+                { key: 'freq', label: 'Fréq.' },
+                { key: 'status', label: 'Statut' },
+                { key: 'priority', label: 'Priorité' },
+                { key: 'responsible', label: 'Intervenant' },
+                { key: 'location', label: 'Emplacement' },
+                { key: 'dueDate', label: 'Échéance' },
+              ];
+              const toggleSort = (key: DetailSortKey) => {
+                setDetailsSort(prev => prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+                setDetailsLimit(100);
+              };
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold text-gray-900">
+                      Détails du rapport ({rows.length}{rows.length !== filteredOrders.length ? ` sur ${filteredOrders.length}` : ''} OT)
+                    </h3>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={detailsSearch}
+                        onChange={(e) => { setDetailsSearch(e.target.value); setDetailsLimit(100); }}
+                        placeholder="Code, titre, équipement, site…"
+                        className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg w-64 max-w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-500 uppercase sticky top-0">
+                        <tr>
+                          {columns.map(c => (
+                            <th key={c.key} className="px-4 py-2 text-left whitespace-nowrap">
+                              <button type="button" onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 uppercase hover:text-gray-900">
+                                {c.label}
+                                {detailsSort.key === c.key && (detailsSort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visible.map(r => (
+                          <tr key={r.wo.id} className="border-t border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-2 font-mono text-gray-600 whitespace-nowrap">{r.wo.code}</td>
+                            <td className="px-4 py-2 font-medium text-gray-800 max-w-xs truncate">{r.wo.title}</td>
+                            <td className="px-4 py-2 text-gray-600 max-w-[200px] truncate">{r.wo.equipmentName || '—'}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.lot}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.family === 'AUTRES' ? '—' : r.family}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.freq || '—'}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.wo.status}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.wo.priority}</td>
+                            <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{r.responsible || '—'}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.wo.location || '—'}</td>
+                            <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{formatDateFr(r.wo.dueDate)}</td>
+                          </tr>
+                        ))}
+                        {visible.length === 0 && (
+                          <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-gray-400">Aucun OT ne correspond.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.length > detailsLimit && (
+                    <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                      <span>{visible.length} affichés sur {rows.length}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDetailsLimit(l => l + 200)}
+                        className="px-3 py-1.5 font-semibold text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                      >
+                        Afficher 200 de plus
+                      </button>
+                    </div>
                   )}
                 </div>
-                <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 text-gray-500 uppercase sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2 text-left">Code</th>
-                        <th className="px-4 py-2 text-left">Titre</th>
-                        <th className="px-4 py-2 text-left">Statut</th>
-                        <th className="px-4 py-2 text-left">Priorité</th>
-                        <th className="px-4 py-2 text-left">Intervenant</th>
-                        <th className="px-4 py-2 text-left">Emplacement</th>
-                        <th className="px-4 py-2 text-left">Échéance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredOrders.slice(0, 200).map(w => (
-                        <tr key={w.id} className="border-t border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2 font-mono text-gray-600">{w.code}</td>
-                          <td className="px-4 py-2 font-medium text-gray-800 max-w-xs truncate">{w.title}</td>
-                          <td className="px-4 py-2 text-gray-600">{w.status}</td>
-                          <td className="px-4 py-2 text-gray-600">{w.priority}</td>
-                          <td className="px-4 py-2 text-gray-600">{responsibleOf(w) || '—'}</td>
-                          <td className="px-4 py-2 text-gray-600">{w.location || '—'}</td>
-                          <td className="px-4 py-2 text-gray-600">{w.dueDate}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeTab === 'activity' && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
