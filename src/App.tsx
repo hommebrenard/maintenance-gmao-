@@ -22,7 +22,7 @@ import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
-import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity } from './lib/queries/work_orders';
+import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
@@ -387,8 +387,38 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   });
 };
 
+  // Depuis le 05/10/2026, la suppression est enregistrée en base (avant : état
+  // local seulement, l'OT revenait au rechargement). Réservée admin/responsable
+  // (bouton masqué sinon + RLS wo_delete_manager). Une copie JSON de l'OT est
+  // téléchargée avant la suppression ; si la base refuse, l'OT est remis en liste.
   const handleDeleteWorkOrder = (id: string) => {
+    const target = workOrders.find(wo => wo.id === id);
     setWorkOrders(prev => prev.filter(wo => wo.id !== id));
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) return; // OT jamais enregistré côté serveur : rien à supprimer en base
+
+    if (target) {
+      try {
+        const blob = new Blob([JSON.stringify(target, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${target.code}-supprime-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.warn('Export JSON avant suppression impossible:', e);
+      }
+    }
+
+    deleteWorkOrder(id).catch(err => {
+      console.error('Erreur suppression OT:', err);
+      if (target) setWorkOrders(prev => [target, ...prev]);
+      alert("La suppression n'a pas pu être enregistrée (droits ou connexion). L'ordre de travail a été remis dans la liste.");
+    });
   };
 
   const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => {
@@ -954,7 +984,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             techniciens={techniciens}
             onAddWorkOrder={handleCreateWorkOrder}
             onUpdateStatus={handleUpdateWOStatus}
-            onDeleteWorkOrder={handleDeleteWorkOrder}
+            onDeleteWorkOrder={isManager ? handleDeleteWorkOrder : undefined}
             onEditWorkOrder={handleEditWorkOrder}
             onBulkImportWorkOrders={handleBulkImportWorkOrders}
             onClearAllWorkOrders={handleClearAllWorkOrders}
@@ -1112,7 +1142,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             techniciens={techniciens}
             onAddWorkOrder={handleCreateWorkOrder}
             onUpdateStatus={handleUpdateWOStatus}
-            onDeleteWorkOrder={handleDeleteWorkOrder}
+            onDeleteWorkOrder={isManager ? handleDeleteWorkOrder : undefined}
             onEditWorkOrder={handleEditWorkOrder}
             onBulkImportWorkOrders={handleBulkImportWorkOrders}
             onClearAllWorkOrders={handleClearAllWorkOrders}
