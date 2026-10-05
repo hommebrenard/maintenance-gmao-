@@ -388,3 +388,16 @@ export async function backfillWorkOrderIdentity(id: string, patch: Partial<WorkO
 //       .finally(() => setIsLoadingWorkOrders(false));
 //   }, []);
 // ---------------------------------------------------------------------------
+
+/**
+ * Supprime définitivement un OT (politique RLS wo_delete_manager : admin ou
+ * responsable). Sans erreur mais sans ligne supprimée, la RLS a refusé :
+ * on le détecte ici pour que l'appelant puisse annuler l'affichage.
+ * Les lignes liées (historique, pièces jointes, pièces, conversations,
+ * notifications) sont supprimées en cascade par la base.
+ */
+export async function deleteWorkOrder(id: string): Promise<void> {
+  const { data, error } = await supabase.from('work_orders').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Suppression refusée ou ordre de travail introuvable.');
+}
