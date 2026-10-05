@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle } from 'lucide-react';
-import { MaintenanceRequest, RequestStatus, WorkOrderPriority, Equipment } from '../../types';
+import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien } from '../../types';
 
 interface RequestsViewProps {
   requests: MaintenanceRequest[];
@@ -8,6 +8,8 @@ interface RequestsViewProps {
   onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => void;
   onApproveRequest: (id: string) => void;
   onRejectRequest: (id: string) => void;
+  isManager?: boolean;
+  techniciens?: Technicien[];
 }
 
 export const RequestsView: React.FC<RequestsViewProps> = ({
@@ -15,7 +17,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   equipmentList,
   onAddRequest,
   onApproveRequest,
-  onRejectRequest
+  onRejectRequest,
+  isManager = false,
+  techniciens = []
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
@@ -26,13 +30,18 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<WorkOrderPriority>('Moyenne');
-  const [equipmentName, setEquipmentName] = useState('');
-  const [requestedBy, setRequestedBy] = useState('Lucie Bernard (Opératrice)');
+  const [equipmentId, setEquipmentId] = useState('');
+  const [requestedBy, setRequestedBy] = useState('');
+
+  const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
+    const eq = req.equipmentId ? equipmentList.find(e => e.id === req.equipmentId) : undefined;
+    return eq ? `${eq.name} (${eq.code})` : req.equipmentName;
+  };
 
   const filteredRequests = requests.filter(req => {
     const matchesSearch = req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           req.requestedBy.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (req.equipmentName && req.equipmentName.toLowerCase().includes(searchQuery.toLowerCase()));
+                          ((equipmentLabel(req) ?? '').toLowerCase().includes(searchQuery.toLowerCase()));
     
     let matchesStatus = true;
     if (selectedStatus) {
@@ -49,18 +58,19 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !equipmentId || !requestedBy.trim()) return;
 
     onAddRequest({
       title,
       description,
       priority,
-      equipmentName: equipmentName || undefined,
-      requestedBy
+      equipmentId,
+      requestedBy: requestedBy.trim()
     });
 
     setTitle('');
     setDescription('');
+    setEquipmentId('');
     setIsModalOpen(false);
   };
 
@@ -173,13 +183,13 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 </div>
 
                 <div className="pt-3 border-t border-gray-100 space-y-2 text-xs text-gray-500">
-                  {req.equipmentName && (
-                    <div>Équipement: <span className="font-semibold text-gray-800">{req.equipmentName}</span></div>
+                  {equipmentLabel(req) && (
+                    <div>Équipement: <span className="font-semibold text-gray-800">{equipmentLabel(req)}</span></div>
                   )}
                   <div>Demandé par: <span className="font-semibold text-gray-800">{req.requestedBy}</span></div>
                   <div className="text-[11px] text-gray-400">{req.createdAt}</div>
 
-                  {req.status === 'En attente' && (
+                  {req.status === 'En attente' && isManager && (
                     <div className="flex items-center gap-2 pt-2">
                       <button
                         onClick={() => onApproveRequest(req.id)}
@@ -255,18 +265,37 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Équipement</label>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Équipement *</label>
                   <select
-                    value={equipmentName}
-                    onChange={(e) => setEquipmentName(e.target.value)}
+                    required
+                    value={equipmentId}
+                    onChange={(e) => setEquipmentId(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Sélectionner...</option>
                     {equipmentList.map(eq => (
-                      <option key={eq.id} value={`${eq.name} (${eq.code})`}>{eq.name} ({eq.code})</option>
+                      <option key={eq.id} value={eq.id}>{eq.name} ({eq.code})</option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Demandé par (nom du rondier) *</label>
+                <input
+                  type="text"
+                  required
+                  list="rondiers-list"
+                  placeholder="Nom et prénom"
+                  value={requestedBy}
+                  onChange={(e) => setRequestedBy(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <datalist id="rondiers-list">
+                  {techniciens.filter(t => t.actif).map(t => (
+                    <option key={t.id} value={t.nom} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
