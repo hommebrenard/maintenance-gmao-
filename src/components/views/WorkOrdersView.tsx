@@ -39,6 +39,7 @@ import {
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
 import { AnnualMatrixView } from './AnnualMatrixView';
+import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
@@ -559,7 +560,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       wo.equipmentCode || '',
       wo.interventionCode || '',
       wo.title || '',
-      gammesList,
+      gammesForWorkOrder(wo, gammesList),
       wo.location || wo.entity || ''
     );
     return matchedPlan?.tasks.map((t, idx) => ({
@@ -594,7 +595,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       dispatchWO.equipmentCode || '',
       dispatchWO.interventionCode || '',
       dispatchWO.title || '',
-      gammesList,
+      gammesForWorkOrder(dispatchWO, gammesList),
       dispatchWO.location || dispatchWO.entity || ''
     );
 
@@ -920,7 +921,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         selectedWorkOrder.equipmentCode || '',
         selectedWorkOrder.interventionCode || '',
         selectedWorkOrder.title || '',
-        gammesList,
+        gammesForWorkOrder(selectedWorkOrder, gammesList),
         selectedWorkOrder.location || selectedWorkOrder.entity || ''
       );
       const activeTasks = (selectedWorkOrder.tasks && selectedWorkOrder.tasks.length > 0)
@@ -3094,7 +3095,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         selectedWorkOrder.equipmentCode || '',
                         selectedWorkOrder.interventionCode || '',
                         selectedWorkOrder.title || '',
-                        gammesList,
+                        gammesForWorkOrder(selectedWorkOrder, gammesList),
                         selectedWorkOrder.location || selectedWorkOrder.entity || ''
                       );
                       const matchedPlan = gammeMatch.plan;
@@ -3172,8 +3173,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             return {
                               wrapper: 'bg-gray-100 border-gray-200 text-gray-600',
                               Icon: XCircle,
-                              label: 'Aucune gamme trouvée',
-                              detail: gammeMatch.method
+                              label: skipsAutoGamme(selectedWorkOrder) ? 'Pas de gamme (OT correctif)' : 'Aucune gamme trouvée',
+                              detail: skipsAutoGamme(selectedWorkOrder) ? 'checklist libre : ajoutez vos actions ci-dessous' : gammeMatch.method
                             };
                         }
                       })();
@@ -3437,7 +3438,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               selectedWorkOrder.equipmentCode || '',
                               selectedWorkOrder.interventionCode || '',
                               selectedWorkOrder.title || '',
-                              gammesList,
+                              gammesForWorkOrder(selectedWorkOrder, gammesList),
                               selectedWorkOrder.location || selectedWorkOrder.entity || ''
                             );
                             const existingTasks: WorkOrderTask[] = (selectedWorkOrder.tasks && selectedWorkOrder.tasks.length > 0)
@@ -3469,7 +3470,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             selectedWorkOrder.equipmentCode || '',
                             selectedWorkOrder.interventionCode || '',
                             selectedWorkOrder.title || '',
-                            gammesList,
+                            gammesForWorkOrder(selectedWorkOrder, gammesList),
                             selectedWorkOrder.location || selectedWorkOrder.entity || ''
                           );
                           const existingTasks: WorkOrderTask[] = (selectedWorkOrder.tasks && selectedWorkOrder.tasks.length > 0)
@@ -3765,7 +3766,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     wo.equipmentCode || '',
                     wo.interventionCode || '',
                     wo.title || '',
-                    gammesList,
+                    gammesForWorkOrder(wo, gammesList),
                     wo.location || wo.entity || ''
                   );
 
