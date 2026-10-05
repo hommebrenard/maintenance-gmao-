@@ -30,7 +30,6 @@ import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLo
 
 import {
   INITIAL_WORK_ORDERS,
-  INITIAL_REQUESTS,
   INITIAL_CONVERSATIONS,
   INITIAL_MESSAGES,
   INITIAL_EQUIPMENT,
@@ -68,6 +67,7 @@ import {
 } from './types';
 import { fetchProfiles } from './lib/queries/profiles';
 import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
+import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest } from './lib/queries/maintenanceRequests';
 
 // Helper for localStorage state persistence
 function getInitialState<T extends { id: string }>(key: string, demoData: T[]): T[] {
@@ -159,9 +159,7 @@ export default function App({ session, onSignOut }: AppProps) {
   // App Centralized State with localStorage persistence
  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
 const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(true);
-  const [requests, setRequests] = useState<MaintenanceRequest[]>(() =>
-    getInitialState('gmao_requests', INITIAL_REQUESTS)
-  );
+  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     getInitialState('gmao_conversations', INITIAL_CONVERSATIONS)
   );
@@ -300,9 +298,13 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     localStorage.setItem(WO_EXTRAS_KEY, JSON.stringify(extras));
   }, [workOrders, isLoadingWorkOrders]);
 
+  // Depuis le 05/10/2026, les demandes vivent dans `maintenance_requests`
+  // (avant : localStorage de démonstration).
   React.useEffect(() => {
-    localStorage.setItem('gmao_requests', JSON.stringify(requests));
-  }, [requests]);
+    fetchMaintenanceRequests()
+      .then(setRequests)
+      .catch(err => console.error('Erreur chargement demandes:', err));
+  }, []);
 
   React.useEffect(() => {
   fetchEquipment()
@@ -608,36 +610,77 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
   // Handlers - Requests
   const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => {
-    const newReq: MaintenanceRequest = {
-      ...reqData,
-      id: `req-${Date.now()}`,
-      status: 'En attente',
-      createdAt: new Date().toLocaleString('fr-FR')
-    };
-    setRequests(prev => [newReq, ...prev]);
+    if (!reqData.equipmentId) {
+      alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
+      return;
+    }
+    const eq = equipmentList.find(e => e.id === reqData.equipmentId);
+    createMaintenanceRequest({
+      title: reqData.title,
+      description: reqData.description,
+      priority: reqData.priority,
+      equipmentId: reqData.equipmentId,
+      locationId: eq?.locationId,
+      requesterName: reqData.requestedBy,
+    }, session.user.id)
+      .then(created => setRequests(prev => [created, ...prev]))
+      .catch(err => {
+        console.error('Erreur création demande:', err);
+        alert("La demande n'a pas pu être enregistrée. Vérifie ta connexion ou tes droits.");
+      });
   };
 
+  // Approbation : l'OT est créé EN BASE d'abord (avec l'équipement de la
+  // demande), puis la demande est marquée approuvée et liée à cet OT. Le
+  // statut est basculé tout de suite à l'écran pour empêcher un double clic
+  // (un OT de plus à chaque clic) ; retour arrière si la création échoue.
   const handleApproveRequest = (reqId: string) => {
     const req = requests.find(r => r.id === reqId);
-    if (!req) return;
-
+    if (!req || req.status !== 'En attente') return;
+    if (!req.equipmentId) {
+      alert("Cette demande n'a pas d'équipement : impossible de créer un OT exploitable. Rejette-la et demande une nouvelle saisie.");
+      return;
+    }
+    const eq = equipmentList.find(e => e.id === req.equipmentId);
     setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Approuvée' } : r));
 
-    handleCreateWorkOrder({
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    createWorkOrder({
+      code: `OT-${stamp.slice(2)}-${Math.floor(1000 + Math.random() * 9000)}`,
       title: req.title,
       description: req.description,
       priority: req.priority,
       status: 'Ouvert',
       type: 'Corrective',
-      equipmentName: req.equipmentName,
-      location: req.location || 'Atelier Principal',
+      equipmentId: req.equipmentId,
+      locationId: req.locationId ?? eq?.locationId,
       dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
-      assignee: 'Équipe Maintenance'
-    });
+    }, session.user.id)
+      .then(async created => {
+        setWorkOrders(prev => [created, ...prev]);
+        try {
+          await decideMaintenanceRequest(reqId, { status: 'Approuvée', approvedBy: session.user.id, workOrderId: created.id });
+          setRequests(prev => prev.map(r => r.id === reqId ? { ...r, workOrderId: created.id } : r));
+        } catch (err) {
+          console.error('Erreur marquage demande approuvée:', err);
+          alert(`L'OT ${created.code} a été créé, mais la demande n'a pas pu être marquée « Approuvée » en base. Recharge la page et préviens-moi avant de recliquer.`);
+        }
+      })
+      .catch(err => {
+        console.error('Erreur création OT depuis demande:', err);
+        setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'En attente' } : r));
+        alert("L'OT n'a pas pu être créé : la demande reste en attente.");
+      });
   };
 
   const handleRejectRequest = (reqId: string) => {
+    const previous = requests;
     setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Rejetée' } : r));
+    decideMaintenanceRequest(reqId, { status: 'Rejetée', approvedBy: session.user.id }).catch(err => {
+      console.error('Erreur rejet demande:', err);
+      setRequests(previous);
+      alert("Le rejet n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    });
   };
 
   // Handlers - Messages
@@ -998,6 +1041,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onAddRequest={handleAddRequest}
             onApproveRequest={handleApproveRequest}
             onRejectRequest={handleRejectRequest}
+            isManager={isManager}
+            techniciens={techniciens}
           />
         );
       case 'messages':
