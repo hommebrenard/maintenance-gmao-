@@ -152,9 +152,16 @@ export interface MaintenanceRequest {
   status: RequestStatus;
   priority: WorkOrderPriority;
   equipmentName?: string;
+  /** uuid réel de l'équipement (colonne `equipment_id`). Obligatoire pour une
+   * nouvelle demande : sans lui, l'OT créé à l'approbation serait « Sans équipement ». */
+  equipmentId?: string;
+  locationId?: string;
   location?: string;
+  /** Nom du rondier (colonne `requester_name`), le compte technicien étant partagé. */
   requestedBy: string;
   createdAt: string;
+  code?: string;
+  workOrderId?: string | null;
 }
 
 export interface Message {
