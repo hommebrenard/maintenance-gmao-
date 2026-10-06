@@ -31,6 +31,7 @@ export const FAMILIES: Record<string, FamilyInfo> = {
   PTRSF: { label: 'Transformateur', lot: 'ELEC' },
   ECLIN: { label: 'Éclairage intérieur', lot: 'ELEC' },
   ECLSEC: { label: 'Éclairage de secours', lot: 'ELEC' },
+  ECLEX: { label: 'Éclairage extérieur', lot: 'ELEC' },
   GPLC: { label: 'Groupe électrogène', lot: 'ELEC' },
   OND: { label: 'Onduleur', lot: 'ELEC' },
   PRAUT: { label: 'Porte automatique', lot: 'ELEC' },
