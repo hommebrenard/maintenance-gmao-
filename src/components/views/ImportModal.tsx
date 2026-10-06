@@ -36,6 +36,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [activeTab, setActiveTab] = useState<'planning' | 'gamme'>('planning');
   const [pastedText, setPastedText] = useState('');
   const [parsedPreviewWorkOrders, setParsedPreviewWorkOrders] = useState<WorkOrder[]>([]);
+  // Filtre de l'aperçu par statut de rattachement Gamme (clic sur un badge du bandeau). null = tout.
+  const [previewGammeFilter, setPreviewGammeFilter] = useState<string | null>(null);
   const [parsedPreviewGammes, setParsedPreviewGammes] = useState<GammePlan[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -802,9 +804,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   seulement les 10 lignes affichées ci-dessous). */}
               {gammeMatchSummary && (
                 <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
+                  <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'exact' ? null : 'exact')} className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium ${previewGammeFilter === 'exact' ? 'ring-2 ring-green-400' : ''}`}>
                     <CheckCircle2 size={12} /> {gammeMatchSummary.exact} certaine(s)
-                  </span>
+                  </button>
                   {gammeMatchSummary.plan_type > 0 && (
                     <span
                       title="Le plan de ce site n'existe pas, mais le même code de plan a exactement les mêmes actions sur plusieurs autres sites : checklist standard, non bloquante"
@@ -813,21 +815,21 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                       <CheckCircle2 size={12} /> {gammeMatchSummary.plan_type} plan(s) type
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium">
+                  <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'approximatif' ? null : 'approximatif')} title="Cliquer pour n'afficher que ces lignes ; survoler le badge « À vérifier » d'une ligne indique la méthode de rapprochement" className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium ${previewGammeFilter === 'approximatif' ? 'ring-2 ring-orange-400' : ''}`}>
                     <AlertTriangle size={12} /> {gammeMatchSummary.approximatif} à vérifier
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 text-red-700 font-medium">
+                  </button>
+                  <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'conflit' ? null : 'conflit')} className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 text-red-700 font-medium ${previewGammeFilter === 'conflit' ? 'ring-2 ring-red-400' : ''}`}>
                     <ShieldAlert size={12} /> {gammeMatchSummary.conflit} en conflit de site
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-600 font-medium">
+                  </button>
+                  <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'non_trouve' ? null : 'non_trouve')} className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-600 font-medium ${previewGammeFilter === 'non_trouve' ? 'ring-2 ring-gray-400' : ''}`}>
                     <XCircle size={12} /> {gammeMatchSummary.non_trouve} sans gamme trouvée
-                  </span>
+                  </button>
                 </div>
               )}
 
-              <div className="border border-gray-200 rounded-lg overflow-x-auto max-h-48">
+              <div className="border border-gray-200 rounded-lg overflow-auto max-h-64">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-100 font-semibold text-gray-700">
+                  <thead className="bg-gray-100 font-semibold text-gray-700 sticky top-0">
                     <tr>
                       <th className="p-2">Code</th>
                       <th className="p-2">Titre</th>
@@ -839,7 +841,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {parsedPreviewWorkOrders.slice(0, 10).map((wo, i) => (
+                    {parsedPreviewWorkOrders.filter(wo => !previewGammeFilter || (wo.gammeMatchStatus || 'non_trouve') === previewGammeFilter).map((wo, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="p-2 font-mono font-medium text-gray-600">{wo.code}</td>
                         <td className="p-2 font-medium text-gray-900">{wo.title}</td>
