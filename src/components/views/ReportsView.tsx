@@ -398,8 +398,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
             )}
 
             {activeTab === 'equipment' && (() => {
-              // Rattachement OT → équipement calculé UNE fois (id puis code), sur tous les équipements.
-              const { rows: allRows, orphanWoCount } = buildEquipmentRows(equipmentList, workOrders);
+              // Rattachement OT → équipement calculé UNE fois (id puis code). Les OT pris en compte sont ceux de
+              // la période et des filtres du haut (Intervenant, Emplacement, Priorité, Type, Statut).
+              const { rows: allRows, orphanWoCount } = buildEquipmentRows(equipmentList, filteredOrders);
               const siteRows = locationFilter ? allRows.filter(r => r.eq.location === locationFilter) : allRows;
               const summary = summarizeEquipment(siteRows);
               const filtered = filterEquipmentRows(siteRows, equipFilters);
@@ -431,10 +432,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                     <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
                       <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                       <span>
-                        {orphanWoCount} OT sur {workOrders.length} ne sont rattachés à aucun équipement connu : ils ne sont comptés dans aucune ligne du tableau ci-dessous.
+                        {orphanWoCount} OT sur {filteredOrders.length} ne sont rattachés à aucun équipement connu : ils ne sont comptés dans aucune ligne du tableau ci-dessous.
                       </span>
                     </div>
                   )}
+
+                  <p className="text-[11px] text-gray-500 -mb-3">
+                    Les colonnes « OT ouverts », « OT total » et le filtre « Sans OT » tiennent compte de la période et des filtres du haut
+                    (Intervenant, Priorité, Type, Statut). Le statut et la criticité des équipements, eux, ne dépendent pas de ces filtres.
+                  </p>
 
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">

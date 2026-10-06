@@ -684,8 +684,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     return matchesSearch && matchesStatus && matchesPriority && matchesLocation && matchesMonth;
   };
   const filteredOrders = workOrders.filter(wo => passesFilters(wo, true));
-  // Vue annuelle : mêmes filtres que la page, sauf « Mois » (elle affiche déjà toute l'année).
-  const annualOrders = workOrders.filter(wo => passesFilters(wo, false));
+  // Vue annuelle : exactement les mêmes filtres que la page, « Mois » compris (retour terrain 06/10/2026 :
+  // avec « Janvier 2026 » sélectionné, la matrice affichait encore février et mai). Pour voir toute l'année,
+  // choisir « Tous les mois ».
+  const annualOrders = filteredOrders;
 
   // Reset Create Form
   const resetForm = () => {
