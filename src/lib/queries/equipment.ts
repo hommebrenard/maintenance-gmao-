@@ -127,13 +127,32 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
 
 /** Récupère tous les équipements, avec le nom d'emplacement et de fournisseur déjà résolus. */
 export async function fetchEquipment(): Promise<Equipment[]> {
-  const { data, error } = await supabase
-    .from('equipment')
-    .select('*, locations(name), suppliers(name)')
-    .order('created_at', { ascending: false });
+  // Supabase/PostgREST plafonne à 1000 lignes par requête : sans pagination, tout équipement au-delà du
+  // 1000e était silencieusement absent (constaté le 06/10/2026 : liste figée à 1000, 1640 OT « orphelins »).
+  // Tri secondaire sur `id` : created_at est identique pour un import en lot, l'ordre doit rester stable
+  // d'une page à l'autre pour ne ni sauter ni doubler de lignes.
+  const PAGE_SIZE = 1000;
+  const allRows: EquipmentRow[] = [];
+  let page = 0;
 
-  if (error) throw error;
-  return (data as unknown as EquipmentRow[]).map(row => rowToEquipment(row));
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await supabase
+      .from('equipment')
+      .select('*, locations(name), suppliers(name)')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    const rows = (data as unknown as EquipmentRow[]) || [];
+    allRows.push(...rows);
+
+    if (rows.length < PAGE_SIZE) break;
+    page += 1;
+  }
+
+  return allRows.map(row => rowToEquipment(row));
 }
 
 // ---------------------------------------------------------------------------
