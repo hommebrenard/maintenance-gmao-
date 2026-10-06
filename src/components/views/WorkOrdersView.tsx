@@ -646,7 +646,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Filter Logic
   const todayStr = formatLocalDate(new Date());
 
-  const passesFilters = (wo: WorkOrder, withMonth: boolean): boolean => {
+  const passesFilters = (wo: WorkOrder, withMonth: boolean, skipLocation = false): boolean => {
     const matchesSearch = wo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           wo.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -672,7 +672,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     }
 
     let matchesLocation = true;
-    if (selectedLocationFilter !== 'all') {
+    if (!skipLocation && selectedLocationFilter !== 'all') {
       matchesLocation = matchesSiteFilter(wo, selectedLocationFilter, locations);
     }
 
@@ -688,6 +688,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // avec « Janvier 2026 » sélectionné, la matrice affichait encore février et mai). Pour voir toute l'année,
   // choisir « Tous les mois ».
   const annualOrders = filteredOrders;
+
+  // Nombre d'OT par site (et total), selon tous les filtres SAUF le site lui-même : affiché entre parenthèses
+  // dans les listes de sites / zones, comme les autres filtres affichent leur compteur. Aucun site n'est retiré.
+  const { siteCounts, siteCountsTotal } = useMemo(() => {
+    const base = workOrders.filter(wo => passesFilters(wo, true, true));
+    const counts: Record<string, number> = {};
+    availableSiteNames.forEach(site => {
+      counts[site] = base.filter(wo => matchesSiteFilter(wo, site, locations)).length;
+    });
+    return { siteCounts: counts, siteCountsTotal: base.length };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrders, availableSiteNames, locations, searchQuery, selectedStatusFilter, selectedPriorityFilter, selectedMonthFilter, todayStr]);
 
   // Reset Create Form
   const resetForm = () => {
@@ -1405,9 +1417,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 onChange={(e) => setSelectedLocationFilter(e.target.value)}
                 className="bg-transparent focus:outline-none cursor-pointer pr-1 font-semibold text-gray-800"
               >
-                <option value="all">Tous les sites (Global)</option>
+                <option value="all">Tous les sites (Global) ({siteCountsTotal})</option>
                 {availableSiteNames.map((site) => (
-                  <option key={site} value={site}>{site}</option>
+                  <option key={site} value={site}>{site} ({siteCounts[site] ?? 0})</option>
                 ))}
               </select>
               <button
@@ -2210,6 +2222,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             onOpenOrder={(wo) => { setSelectedWorkOrder(wo); setIsEditMode(false); }}
             siteFilter={selectedLocationFilter}
             siteNames={availableSiteNames}
+            siteCounts={siteCounts}
+            siteCountsTotal={siteCountsTotal}
             onSiteChange={setSelectedLocationFilter}
             zoneOf={(wo) => getSiteZone(wo.location || '', locations)}
             siteZoneOf={(name) => getSiteZone(name, locations)}
