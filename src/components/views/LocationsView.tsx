@@ -135,36 +135,42 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Search */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher des emplacements..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          {availableYears.length > 0 && (
-            <label className="flex items-center gap-2 text-xs text-gray-600">
-              Année affichée
-              <select
-                value={displayYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                className="py-1.5 px-2 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </label>
-          )}
-        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 p-6 bg-gray-50/30">
+        <div className="max-w-5xl mx-auto bg-white border border-gray-200 rounded-xl shadow-2xs overflow-hidden flex flex-col">
+          {/* En-tête du panneau : titre + recherche + année (comme « Détails du rapport ») */}
+          <div className="px-5 py-3.5 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-gray-900">Sites chargés ({locations.length})</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              {availableYears.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  Année affichée
+                  <select
+                    value={displayYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                    className="py-1.5 px-2 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </label>
+              )}
+              <div className="relative w-64 max-w-full">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Rechercher des emplacements..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Zone défilante : hauteur bornée à l'écran, la page elle-même ne défile plus */}
+          <div className="overflow-y-auto p-4 max-h-[calc(100vh-17rem)] min-h-[16rem]">
         {filtered.length === 0 ? (
           /* Empty state */
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto shadow-2xs">
@@ -258,6 +264,13 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             })}
           </div>
         )}
+          </div>
+
+          {/* Pied du panneau */}
+          <div className="px-5 py-3 border-t border-gray-200 text-xs text-gray-500">
+            {filtered.length} affiché(s) sur {locations.length}
+          </div>
+        </div>
       </div>
 
       {/* Clear All Modal */}
