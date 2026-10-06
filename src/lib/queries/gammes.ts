@@ -43,13 +43,31 @@ function rowToGammePlan(row: GammePlanRow): GammePlan {
 }
 
 export async function fetchGammePlans(): Promise<GammePlan[]> {
-  const { data, error } = await supabase
-    .from('gamme_plans')
-    .select('*')
-    .order('created_at', { ascending: true });
+  // Pagination par lots de 1000 (plafond Supabase par requête). Sans elle, au-delà du 1000e plan, les plans
+  // manquaient silencieusement et des OT tombaient à tort en « à vérifier » / « sans gamme ». Tri secondaire
+  // sur `id` pour garder un ordre stable d'une page à l'autre (created_at identique pour un import en lot).
+  const PAGE_SIZE = 1000;
+  const allRows: GammePlanRow[] = [];
+  let page = 0;
 
-  if (error) throw error;
-  return (data as GammePlanRow[]).map(rowToGammePlan);
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await supabase
+      .from('gamme_plans')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    const rows = (data as GammePlanRow[]) || [];
+    allRows.push(...rows);
+
+    if (rows.length < PAGE_SIZE) break;
+    page += 1;
+  }
+
+  return allRows.map(rowToGammePlan);
 }
 
 // Upsert par lots de 200 (même précaution que fetchExistingWorkOrderCodes) :
