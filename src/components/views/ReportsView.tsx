@@ -1,10 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X, ArrowUp, ArrowDown, Search } from 'lucide-react';
+import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X, ArrowUp, ArrowDown, Search, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { WorkOrder, Equipment } from '../../types';
 import { parseWoDateTime, sortByRecentActivity } from '../../utils/reportDates';
 import { responsibleOf } from '../../utils/workOrderResponsible';
 import { DetailSortKey, formatDateFr, toDetailRow, sortDetailRows, matchesDetailSearch } from '../../utils/reportTable';
+import {
+  EquipSortKey, EquipmentFilters, EMPTY_EQUIPMENT_FILTERS, buildEquipmentRows, summarizeEquipment,
+  filterEquipmentRows, sortEquipmentRows,
+} from '../../utils/reportEquipment';
+import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel } from '../../utils/equipmentFamilies';
 
 interface ReportsViewProps {
   workOrders: WorkOrder[];
@@ -50,6 +55,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const [detailsSearch, setDetailsSearch] = useState('');
   const [detailsSort, setDetailsSort] = useState<{ key: DetailSortKey; dir: 'asc' | 'desc' }>({ key: 'dueDate', dir: 'asc' });
   const [detailsLimit, setDetailsLimit] = useState(100);
+  // Onglet « État des équipements » : filtres propres, tri et pagination (comme « Détails »).
+  const [equipFilters, setEquipFilters] = useState<EquipmentFilters>(EMPTY_EQUIPMENT_FILTERS);
+  const [equipSort, setEquipSort] = useState<{ key: EquipSortKey; dir: 'asc' | 'desc' }>({ key: 'criticality', dir: 'desc' });
+  const [equipLimit, setEquipLimit] = useState(100);
   const [period, setPeriod] = useState('365');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
@@ -388,68 +397,187 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
               </>
             )}
 
-            {activeTab === 'equipment' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">En service</span>
-                    <div className="text-3xl font-bold text-green-600 mt-2">{activeEquipmentCount}</div>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Arrêt planifié</span>
-                    <div className="text-3xl font-bold text-amber-600 mt-2">{plannedStopCount}</div>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Arrêt non planifié</span>
-                    <div className="text-3xl font-bold text-rose-600 mt-2">{unplannedStopCount}</div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-200">
-                    <h3 className="text-sm font-bold text-gray-900">Liste des équipements ({filteredEquipmentList.length})</h3>
-                  </div>
-                  {filteredEquipmentList.length === 0 ? (
-                    <p className="text-sm text-gray-400 p-6 text-center">Aucun équipement enregistré.</p>
-                  ) : (
-                    <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-gray-50 text-gray-500 uppercase sticky top-0">
-                          <tr>
-                            <th className="px-4 py-2 text-left">Nom</th>
-                            <th className="px-4 py-2 text-left">Emplacement</th>
-                            <th className="px-4 py-2 text-left">Statut</th>
-                            <th className="px-4 py-2 text-left">Criticité</th>
-                            <th className="px-4 py-2 text-right">OT liés</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredEquipmentList.map(eq => {
-                            const linkedCount = workOrders.filter(w => w.equipmentId === eq.id || (eq.code && w.equipmentCode === eq.code)).length;
-                            return (
-                              <tr key={eq.id} className="border-t border-gray-100 hover:bg-gray-50">
-                                <td className="px-4 py-2 font-medium text-gray-800">{eq.name}</td>
-                                <td className="px-4 py-2 text-gray-500">{eq.location || '—'}</td>
-                                <td className="px-4 py-2">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                    eq.status === 'En service' ? 'bg-green-100 text-green-700' :
-                                    eq.status === 'Arrêt planifié' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
-                                  }`}>
-                                    {eq.status}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2 text-gray-500">{eq.criticality}</td>
-                                <td className="px-4 py-2 text-right font-semibold text-gray-700">{linkedCount}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+            {activeTab === 'equipment' && (() => {
+              // Rattachement OT → équipement calculé UNE fois (id puis code), sur tous les équipements.
+              const { rows: allRows, orphanWoCount } = buildEquipmentRows(equipmentList, workOrders);
+              const siteRows = locationFilter ? allRows.filter(r => r.eq.location === locationFilter) : allRows;
+              const summary = summarizeEquipment(siteRows);
+              const filtered = filterEquipmentRows(siteRows, equipFilters);
+              const rows = sortEquipmentRows(filtered, equipSort.key, equipSort.dir);
+              const visible = rows.slice(0, equipLimit);
+              const families = Array.from(new Set(siteRows.map(r => r.family))).sort();
+              const setFilter = (patch: Partial<EquipmentFilters>) => { setEquipFilters(prev => ({ ...prev, ...patch })); setEquipLimit(100); };
+              const toggleQuick = (q: 'withoutWo' | 'criticalDown') => setFilter({ quick: equipFilters.quick === q ? '' : q });
+              const hasFilter = JSON.stringify(equipFilters) !== JSON.stringify(EMPTY_EQUIPMENT_FILTERS);
+              const columns: { key: EquipSortKey; label: string; hide?: boolean; right?: boolean }[] = [
+                { key: 'code', label: 'Code' },
+                { key: 'name', label: 'Équipement' },
+                { key: 'family', label: 'Famille', hide: true },
+                { key: 'lot', label: 'Lot', hide: true },
+                { key: 'location', label: 'Site' },
+                { key: 'status', label: 'Statut actuel' },
+                { key: 'criticality', label: 'Criticité' },
+                { key: 'openWo', label: 'OT ouverts', right: true },
+                { key: 'totalWo', label: 'OT total', hide: true, right: true },
+              ];
+              const toggleSort = (key: EquipSortKey) => {
+                setEquipSort(prev => prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+                setEquipLimit(100);
+              };
+              const selectCls = 'py-1.5 px-2 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none';
+              return (
+                <div className="space-y-6">
+                  {orphanWoCount > 0 && (
+                    <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>
+                        {orphanWoCount} OT sur {workOrders.length} ne sont rattachés à aucun équipement connu : ils ne sont comptés dans aucune ligne du tableau ci-dessous.
+                      </span>
                     </div>
                   )}
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Équipements</span>
+                      <div className="text-3xl font-bold text-gray-900 mt-2">{summary.total}</div>
+                      <div className="text-[11px] text-gray-400 mt-1">{summary.withoutWo} sans OT</div>
+                    </div>
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">En service</span>
+                      <div className="text-3xl font-bold text-green-600 mt-2">{summary.inService}</div>
+                      <div className="text-[11px] text-gray-400 mt-1">statut actuel</div>
+                    </div>
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Arrêt planifié</span>
+                      <div className="text-3xl font-bold text-amber-600 mt-2">{summary.plannedStop}</div>
+                    </div>
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Arrêt non planifié</span>
+                      <div className="text-3xl font-bold text-rose-600 mt-2">{summary.unplannedStop}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleQuick('criticalDown')}
+                      title="Criticité Élevée ou Critique et arrêt non planifié. Cliquer pour filtrer le tableau."
+                      className={`text-left bg-white p-5 rounded-xl border shadow-2xs hover:bg-rose-50/40 ${equipFilters.quick === 'criticalDown' ? 'border-rose-400 ring-2 ring-rose-200' : 'border-gray-200'}`}
+                    >
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Critiques à l'arrêt</span>
+                      <div className="text-3xl font-bold text-rose-700 mt-2">{summary.criticalDown}</div>
+                      <div className="text-[11px] text-gray-400 mt-1">Élevée / Critique</div>
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-sm font-bold text-gray-900">
+                        Liste des équipements ({rows.length}{rows.length !== siteRows.length ? ` sur ${siteRows.length}` : ''})
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select value={equipFilters.lot} onChange={(e) => setFilter({ lot: e.target.value })} className={selectCls} aria-label="Lot">
+                          <option value="">Tous les lots</option>
+                          {LOT_ORDER.map(l => <option key={l} value={l}>{LOT_LABELS[l]}</option>)}
+                        </select>
+                        <select value={equipFilters.family} onChange={(e) => setFilter({ family: e.target.value })} className={selectCls} aria-label="Famille">
+                          <option value="">Toutes les familles</option>
+                          {families.map(f => <option key={f} value={f}>{f === 'AUTRES' ? 'Autres (code non reconnu)' : `${f}${familyLabel(f) ? ` — ${familyLabel(f)}` : ''}`}</option>)}
+                        </select>
+                        <select value={equipFilters.status} onChange={(e) => setFilter({ status: e.target.value })} className={selectCls} aria-label="Statut">
+                          <option value="">Tous les statuts</option>
+                          <option value="En service">En service</option>
+                          <option value="Arrêt planifié">Arrêt planifié</option>
+                          <option value="Arrêt non planifié">Arrêt non planifié</option>
+                        </select>
+                        <select value={equipFilters.criticality} onChange={(e) => setFilter({ criticality: e.target.value })} className={selectCls} aria-label="Criticité">
+                          <option value="">Toutes criticités</option>
+                          <option value="Critique">Critique</option>
+                          <option value="Élevée">Élevée</option>
+                          <option value="Normal">Normal</option>
+                          <option value="Faible">Faible</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => toggleQuick('withoutWo')}
+                          title="Équipements sans aucun OT rattaché : trous possibles dans le plan préventif"
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${equipFilters.quick === 'withoutWo' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          Sans OT ({summary.withoutWo})
+                        </button>
+                        <div className="relative">
+                          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={equipFilters.search}
+                            onChange={(e) => setFilter({ search: e.target.value })}
+                            placeholder="Code, équipement, site…"
+                            className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg w-52 max-w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        {hasFilter && (
+                          <button type="button" onClick={() => { setEquipFilters(EMPTY_EQUIPMENT_FILTERS); setEquipLimit(100); }} className="text-xs font-semibold text-blue-700 hover:underline">
+                            Réinitialiser
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {siteRows.length === 0 ? (
+                      <p className="text-sm text-gray-400 p-6 text-center">Aucun équipement enregistré.</p>
+                    ) : (
+                      <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-500 uppercase sticky top-0">
+                            <tr>
+                              {columns.map(c => (
+                                <th key={c.key} className={`px-4 py-2 whitespace-nowrap ${c.right ? 'text-right' : 'text-left'} ${c.hide ? 'hidden md:table-cell' : ''}`}>
+                                  <button type="button" onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 uppercase hover:text-gray-900">
+                                    {c.label}
+                                    {equipSort.key === c.key && (equipSort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                                  </button>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visible.map(r => (
+                              <tr key={r.eq.id} className="border-t border-gray-100 hover:bg-gray-50">
+                                <td className="px-4 py-2 font-mono text-gray-600 whitespace-nowrap">{r.eq.code || '—'}</td>
+                                <td className="px-4 py-2 font-medium text-gray-800 max-w-[260px] truncate">{r.eq.name}</td>
+                                <td className="px-4 py-2 text-gray-600 hidden md:table-cell">{r.family === 'AUTRES' ? '—' : r.family}</td>
+                                <td className="px-4 py-2 hidden md:table-cell">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${LOT_BADGE[r.lot]}`}>{LOT_LABELS[r.lot].split(' (')[0]}</span>
+                                </td>
+                                <td className="px-4 py-2 text-gray-500">{r.eq.location || '—'}</td>
+                                <td className="px-4 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${
+                                    r.eq.status === 'En service' ? 'bg-green-100 text-green-700' :
+                                    r.eq.status === 'Arrêt planifié' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                                  }`}>
+                                    {r.eq.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-gray-500">{r.eq.criticality}</td>
+                                <td className="px-4 py-2 text-right font-semibold text-gray-700">{r.openWo}</td>
+                                <td className="px-4 py-2 text-right text-gray-500 hidden md:table-cell">{r.totalWo}</td>
+                              </tr>
+                            ))}
+                            {visible.length === 0 && (
+                              <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-gray-400">Aucun équipement ne correspond.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {rows.length > equipLimit && (
+                      <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                        <span>{visible.length} affichés sur {rows.length}</span>
+                        <button type="button" onClick={() => setEquipLimit(l => l + 200)} className="px-3 py-1.5 font-semibold text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100">
+                          Afficher 200 de plus
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeTab === 'details' && (() => {
               const rows = sortDetailRows(
