@@ -12,6 +12,9 @@ interface Props {
   /** Filtre de site de la page (partagé : changer ici change aussi le filtre du haut de page). */
   siteFilter: string;
   siteNames: string[];
+  /** Nombre d'OT par site selon les filtres de la page (sauf le site) ; total = tous sites. Affiché entre parenthèses. */
+  siteCounts: Record<string, number>;
+  siteCountsTotal: number;
   onSiteChange: (site: string) => void;
   /** Zone Nord/Sud du site de l'OT (undefined si le site n'a pas de zone). */
   zoneOf: (wo: WorkOrder) => 'Nord' | 'Sud' | undefined;
@@ -33,7 +36,7 @@ const CELL_STYLE: Record<CellState, string> = {
   pending: 'bg-blue-50 text-blue-700 border-blue-200',
 };
 
-export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrder, siteFilter, siteNames, onSiteChange, zoneOf, siteZoneOf }) => {
+export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrder, siteFilter, siteNames, siteCounts, siteCountsTotal, onSiteChange, zoneOf, siteZoneOf }) => {
   const years = useMemo(() => availableYears(orders), [orders]);
   const currentYear = Number(todayStr.slice(0, 4));
   const [year, setYear] = useState<number>(() => (years.includes(currentYear) ? currentYear : years[0] ?? currentYear));
@@ -132,6 +135,7 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
     () => (zone === 'all' ? siteNames : siteNames.filter(n => siteZoneOf(n) === zone)),
     [siteNames, zone, siteZoneOf]
   );
+  const zoneCount = (z: 'Nord' | 'Sud') => siteNames.filter(n => siteZoneOf(n) === z).reduce((sum, n) => sum + (siteCounts[n] ?? 0), 0);
   const changeZone = (z: 'all' | 'Nord' | 'Sud') => {
     setZone(z);
     if (z !== 'all' && siteFilter !== 'all' && siteZoneOf(siteFilter) !== z) onSiteChange('all');
@@ -200,13 +204,13 @@ export const AnnualMatrixView: React.FC<Props> = ({ orders, todayStr, onOpenOrde
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <select value={siteFilter} onChange={e => { onSiteChange(e.target.value); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white font-medium">
-          <option value="all">{zone === 'all' ? 'Tous les sites' : `Tous les sites (Zone ${zone})`}</option>
-          {zoneSiteNames.map(n => <option key={n} value={n}>{n}</option>)}
+          <option value="all">{zone === 'all' ? `Tous les sites (${siteCountsTotal})` : `Tous les sites (Zone ${zone}) (${zoneCount(zone)})`}</option>
+          {zoneSiteNames.map(n => <option key={n} value={n}>{n} ({siteCounts[n] ?? 0})</option>)}
         </select>
         <select value={zone} onChange={e => changeZone(e.target.value as 'all' | 'Nord' | 'Sud')} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-          <option value="all">Toutes zones</option>
-          <option value="Nord">Zone Nord</option>
-          <option value="Sud">Zone Sud</option>
+          <option value="all">Toutes zones ({siteCountsTotal})</option>
+          <option value="Nord">Zone Nord ({zoneCount('Nord')})</option>
+          <option value="Sud">Zone Sud ({zoneCount('Sud')})</option>
         </select>
         <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setSelected(null); }} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="all">Tous types d'OT</option>
