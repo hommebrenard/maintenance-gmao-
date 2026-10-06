@@ -103,7 +103,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-white min-h-screen flex flex-col">
+    <div className="flex-1 bg-white flex flex-col">
       {/* Header */}
       <div className="px-6 py-5 border-b border-gray-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
