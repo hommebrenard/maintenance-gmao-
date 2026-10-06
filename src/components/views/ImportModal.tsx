@@ -808,12 +808,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     <CheckCircle2 size={12} /> {gammeMatchSummary.exact} certaine(s)
                   </button>
                   {gammeMatchSummary.plan_type > 0 && (
-                    <span
-                      title="Le plan de ce site n'existe pas, mais le même code de plan a exactement les mêmes actions sur plusieurs autres sites : checklist standard, non bloquante"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 font-medium"
+                    <button
+                      type="button"
+                      onClick={() => setPreviewGammeFilter(f => f === 'plan_type' ? null : 'plan_type')}
+                      title="Le plan de ce site n'existe pas, mais le même code de plan a exactement les mêmes actions sur plusieurs autres sites : checklist standard, non bloquante. Cliquer pour n'afficher que ces lignes."
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 font-medium ${previewGammeFilter === 'plan_type' ? 'ring-2 ring-blue-400' : ''}`}
                     >
                       <CheckCircle2 size={12} /> {gammeMatchSummary.plan_type} plan(s) type
-                    </span>
+                    </button>
                   )}
                   <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'approximatif' ? null : 'approximatif')} title="Cliquer pour n'afficher que ces lignes ; survoler le badge « À vérifier » d'une ligne indique la méthode de rapprochement" className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium ${previewGammeFilter === 'approximatif' ? 'ring-2 ring-orange-400' : ''}`}>
                     <AlertTriangle size={12} /> {gammeMatchSummary.approximatif} à vérifier
