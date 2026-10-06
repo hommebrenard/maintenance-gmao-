@@ -139,7 +139,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
 
       {/* Content */}
       <div className="flex-1 p-6 bg-gray-50/30">
-        <div className="max-w-5xl mx-auto bg-white border border-gray-200 rounded-xl shadow-2xs overflow-hidden flex flex-col">
+        <div className="w-full bg-white border border-gray-200 rounded-xl shadow-2xs overflow-hidden flex flex-col">
           {/* En-tête du panneau : titre + recherche + année (comme « Détails du rapport ») */}
           <div className="px-5 py-3.5 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-bold text-gray-900">Sites chargés ({locations.length})</h2>
@@ -190,7 +190,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 w-full">
           {filtered.map(loc => {
               const months = monthBreakdown(loc);
               const total = months.reduce((sum, m) => sum + m.count, 0);
