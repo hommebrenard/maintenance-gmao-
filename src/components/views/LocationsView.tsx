@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Building2, Trash2, CheckCircle2, Circle } from 'lucide-react';
 import { LocationItem, WorkOrder } from '../../types';
 
@@ -30,6 +30,9 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
   // confirmation avant d'activer le bouton de suppression.
   const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
   const DELETE_ALL_CONFIRM_WORD = 'SUPPRIMER';
+  // Année affichée dans la grille des 12 mois de chaque carte (null = la plus récente
+  // présente dans les OT). Garde la carte de taille FIXE, quel que soit le nombre de mois chargés.
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [parentLocation, setParentLocation] = useState('');
@@ -67,6 +70,19 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([ym, count]) => ({ ym, label: ym === 'Sans date' ? 'Sans date' : formatMonthLabel(ym), count }));
   };
+
+  const availableYears = useMemo(() => {
+    const ys = new Set<number>();
+    workOrders.forEach(w => {
+      const y = w.dueDate && w.dueDate.length >= 4 ? parseInt(w.dueDate.slice(0, 4), 10) : NaN;
+      if (!Number.isNaN(y)) ys.add(y);
+    });
+    return Array.from(ys).sort((a, b) => b - a);
+  }, [workOrders]);
+  const displayYear = selectedYear !== null && availableYears.includes(selectedYear)
+    ? selectedYear
+    : (availableYears[0] ?? new Date().getFullYear());
+  const MONTH_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,8 +137,8 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
         </div>
 
         {/* Search */}
-        <div className="mt-5 max-w-sm">
-          <div className="relative">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <div className="relative w-full max-w-sm">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -132,6 +148,18 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
               className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          {availableYears.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              Année affichée
+              <select
+                value={displayYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                className="py-1.5 px-2 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
@@ -190,22 +218,33 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
 
                   <div className="pt-2 border-t text-xs">
                     {isLoaded ? (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Chargé ({total} OT)</span>
                         </div>
-                        <div className="flex flex-wrap gap-1.5 pl-5">
-                          {months.map(m => (
-                            <span
-                              key={m.ym}
-                              className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium"
-                              title={`${m.count} OT`}
-                            >
-                              {m.label} ({m.count})
-                            </span>
-                          ))}
+                        <div className="grid grid-cols-6 gap-1">
+                          {MONTH_SHORT.map((label, idx) => {
+                            const ym = `${displayYear}-${String(idx + 1).padStart(2, '0')}`;
+                            const count = months.find(m => m.ym === ym)?.count || 0;
+                            return (
+                              <div
+                                key={ym}
+                                title={count > 0 ? `${MONTH_NAMES[idx]} ${displayYear} : ${count} OT` : `${MONTH_NAMES[idx]} ${displayYear} : pas encore chargé`}
+                                className={`rounded-md px-1 py-1 text-center leading-tight ${count > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-50 text-gray-300 border border-gray-100'}`}
+                              >
+                                <div className="text-[10px] font-medium">{label}</div>
+                                <div className="text-[11px] font-bold">{count > 0 ? count : '·'}</div>
+                              </div>
+                            );
+                          })}
                         </div>
+                        {(() => {
+                          const outside = months.filter(m => m.ym.slice(0, 4) !== String(displayYear));
+                          if (outside.length === 0) return null;
+                          const n = outside.reduce((sum, m) => sum + m.count, 0);
+                          return <p className="text-[11px] text-gray-500">{n} OT hors {displayYear} (autres années ou sans date)</p>;
+                        })()}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-gray-400 font-medium">
