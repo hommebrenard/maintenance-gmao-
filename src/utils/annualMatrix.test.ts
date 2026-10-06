@@ -188,11 +188,15 @@ describe('lots (equipmentFamilies)', () => {
     expect(lotOfFamily('NOUVELLE')).toBe('DIVERS');
   });
 
-  it('les 30 familles actuelles sont toutes dans le référentiel (9 ELEC, 17 FLUIDE, 3 CIRC, 1 DIVERS)', () => {
+  it('les 31 familles actuelles sont toutes dans le référentiel (10 ELEC, 17 FLUIDE, 3 CIRC, 1 DIVERS)', () => {
     const keys = Object.keys(FAMILIES);
-    expect(keys).toHaveLength(30);
+    expect(keys).toHaveLength(31);
     const count = (l: string) => keys.filter(k => FAMILIES[k].lot === l).length;
-    expect([count('ELEC'), count('FLUIDE'), count('CIRC'), count('DIVERS')]).toEqual([9, 17, 3, 1]);
+    expect([count('ELEC'), count('FLUIDE'), count('CIRC'), count('DIVERS')]).toEqual([10, 17, 3, 1]);
+  });
+
+  it('l\'éclairage extérieur (ECLEX) est classé en Électricité, pas en Divers', () => {
+    expect(lotOfFamily('ECLEX')).toBe('ELEC');
   });
 
   it('chaque ligne de la matrice porte le lot de sa famille', () => {
