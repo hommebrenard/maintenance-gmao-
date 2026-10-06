@@ -437,7 +437,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                     </div>
                   )}
 
-                  <p className="text-[11px] text-gray-500 -mb-3">
+                  <p className="text-[11px] text-gray-500">
                     Les colonnes « OT ouverts », « OT total » et le filtre « Sans OT » tiennent compte de la période et des filtres du haut
                     (Intervenant, Priorité, Type, Statut). Le statut et la criticité des équipements, eux, ne dépendent pas de ces filtres.
                   </p>
