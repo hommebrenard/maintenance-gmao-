@@ -169,8 +169,8 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
             </div>
           </div>
 
-          {/* Zone défilante : hauteur bornée à l'écran, la page elle-même ne défile plus */}
-          <div className="overflow-y-auto p-4 max-h-[calc(100vh-17rem)] min-h-[16rem]">
+          {/* Zone défilante : hauteur fixe liée à l'écran + barre de défilement toujours visible (comme « Détails du rapport ») */}
+          <div className="overflow-y-scroll p-4 h-[calc(100vh-17rem)] min-h-[16rem]">
         {filtered.length === 0 ? (
           /* Empty state */
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto shadow-2xs">
