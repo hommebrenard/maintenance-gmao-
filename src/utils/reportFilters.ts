@@ -22,7 +22,7 @@ export function matchesClassFilters(wo: WorkOrder, f: ClassFilters): boolean {
 }
 
 /** Familles et fréquences réellement présentes dans les OT ; les familles se restreignent au lot choisi. */
-export function classOptions(orders: WorkOrder[], lot: string): {
+export function classOptions(orders: WorkOrder[], lot: string, equipmentCodes: (string | undefined)[] = []): {
   families: { key: string; label: string }[];
   freqs: { key: string; label: string }[];
 } {
@@ -34,9 +34,17 @@ export function classOptions(orders: WorkOrder[], lot: string): {
     const fq = frequencyOf(wo);
     if (fq) freqKeys.add(fq);
   }
+  // Familles d'équipements sans aucun OT : elles doivent aussi être filtrables dans « État des équipements ».
+  for (const code of equipmentCodes) {
+    const fam = familyKeyOf(code);
+    if (!lot || lotOfFamily(fam) === lot) familyKeys.add(fam);
+  }
   const families = Array.from(familyKeys)
     .sort((a, b) => a.localeCompare(b, 'fr'))
-    .map(key => ({ key, label: familyLabel(key) ? `${key} — ${familyLabel(key)}` : key }));
+    .map(key => ({
+      key,
+      label: key === 'AUTRES' ? 'Autres (code non reconnu)' : familyLabel(key) ? `${key} — ${familyLabel(key)}` : key,
+    }));
   const freqs = FREQUENCY_ORDER.filter(k => freqKeys.has(k)).map(k => ({ key: k, label: FREQUENCY_LABELS[k] }));
   return { families, freqs };
 }
