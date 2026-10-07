@@ -64,7 +64,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const [familyFilter, setFamilyFilter] = useState('');
   const [freqFilter, setFreqFilter] = useState('');
   const classFilters: ClassFilters = { lot: lotFilter, family: familyFilter, freq: freqFilter };
-  const { families: familyOptions, freqs: freqOptions } = useMemo(() => classOptions(workOrders, lotFilter), [workOrders, lotFilter]);
+  const { families: familyOptions, freqs: freqOptions } = useMemo(() => classOptions(workOrders, lotFilter, equipmentList.map(e => e.code)), [workOrders, lotFilter, equipmentList]);
 
   // --- Options disponibles pour les filtres, dérivées des données réelles ---
   const assigneeOptions = useMemo(() => Array.from(new Set(workOrders.map(w => responsibleOf(w)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'fr')) as string[], [workOrders]);
@@ -527,14 +527,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                         Liste des équipements ({rows.length}{rows.length !== siteRows.length ? ` sur ${siteRows.length}` : ''})
                       </h3>
                       <div className="flex flex-wrap items-center gap-2">
-                        <select value={equipFilters.lot} onChange={(e) => setFilter({ lot: e.target.value })} className={selectCls} aria-label="Lot">
-                          <option value="">Tous les lots</option>
-                          {LOT_ORDER.map(l => <option key={l} value={l}>{LOT_LABELS[l]}</option>)}
-                        </select>
-                        <select value={equipFilters.family} onChange={(e) => setFilter({ family: e.target.value })} className={selectCls} aria-label="Famille">
-                          <option value="">Toutes les familles</option>
-                          {families.map(f => <option key={f} value={f}>{f === 'AUTRES' ? 'Autres (code non reconnu)' : `${f}${familyLabel(f) ? ` — ${familyLabel(f)}` : ''}`}</option>)}
-                        </select>
                         <select value={equipFilters.status} onChange={(e) => setFilter({ status: e.target.value })} className={selectCls} aria-label="Statut">
                           <option value="">Tous les statuts</option>
                           <option value="En service">En service</option>
