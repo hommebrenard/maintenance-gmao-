@@ -72,6 +72,7 @@ interface WorkOrderRow extends WorkOrderExtrasRow, WorkOrderIdentityRow {
   due_date: string;
   created_at: string;
   updated_at: string;
+  closed_at: string | null;
   assigned_to: string | null;
   equipment: { code: string; name: string } | null;
   locations: { name: string } | null;
@@ -138,6 +139,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
         createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
+    closedAt: row.closed_at ?? undefined,
     // Checklist, intervenants, visa, dates/heures : NULL en base => absent.
     ...rowToExtras(row),
     // Code d'intervention, n° de plan, entité : NULL en base => absent.
@@ -160,6 +162,7 @@ export async function fetchWorkOrders(): Promise<WorkOrder[]> {
       .from('work_orders')
       .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
       .order('due_date', { ascending: false })
+      .order('id', { ascending: true }) // tri stable entre les pages (évite doublons/oublis)
       .range(from, to);
 
     if (error) throw error;
