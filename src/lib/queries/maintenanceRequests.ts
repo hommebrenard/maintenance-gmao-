@@ -43,6 +43,7 @@ interface RequestRow {
   location_id: string | null;
   requester_name: string | null;
   work_order_id: string | null;
+  approval_date?: string | null;
   created_at: string;
 }
 
@@ -58,6 +59,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     locationId: row.location_id ?? undefined,
     requestedBy: row.requester_name ?? '',
     workOrderId: row.work_order_id,
+    decidedAt: row.approval_date ?? undefined,
     createdAt: new Date(row.created_at).toLocaleString('fr-FR'),
   };
 }
