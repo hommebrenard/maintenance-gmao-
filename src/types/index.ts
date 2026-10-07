@@ -166,6 +166,8 @@ export interface MaintenanceRequest {
   createdAt: string;
   code?: string;
   workOrderId?: string | null;
+  /** Date de décision (approbation ou rejet), ISO — colonne `approval_date`. */
+  decidedAt?: string;
 }
 
 export interface Message {
