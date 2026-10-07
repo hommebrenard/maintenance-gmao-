@@ -16,6 +16,7 @@ describe('reportExport', () => {
   it('N° OT Coswin : rempli pour OT-…, vide pour NC-…', () => {
     expect(coswinNumber('OT-89521')).toBe('OT-89521');
     expect(coswinNumber('NC-Fès-JUIN2026-001')).toBe('');
+    expect(coswinNumber('OT-261007-4821')).toBe(''); // OT créé dans l'application
     expect(coswinNumber(undefined)).toBe('');
   });
   it('famille, lot, fréquence, site, échéance au format français', () => {
