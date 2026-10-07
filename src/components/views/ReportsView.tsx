@@ -11,7 +11,8 @@ import {
 } from '../../utils/reportEquipment';
 import { buildCsv, exportFileName } from '../../utils/reportExport';
 import { ClassFilters, matchesClassFilters, classOptions, LOT_OPTIONS } from '../../utils/reportFilters';
-import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel } from '../../utils/equipmentFamilies';
+import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel, lotOfFamily } from '../../utils/equipmentFamilies';
+import { familyKeyOf } from '../../utils/annualMatrix';
 
 interface ReportsViewProps {
   workOrders: WorkOrder[];
@@ -142,8 +143,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   // "priorité", ni "statut d'OT"). Sans ce filtrage, changer de site dans les
   // filtres ne changeait jamais la liste/les compteurs d'équipements affichés.
   const filteredEquipmentList = useMemo(
-    () => locationFilter ? equipmentList.filter(e => e.location === locationFilter) : equipmentList,
-    [equipmentList, locationFilter]
+    () => equipmentList.filter(e => {
+      if (locationFilter && e.location !== locationFilter) return false;
+      if (lotFilter || familyFilter) {
+        const fam = familyKeyOf(e.code);
+        if (familyFilter && fam !== familyFilter) return false;
+        if (lotFilter && lotOfFamily(fam) !== lotFilter) return false;
+      }
+      return true;
+    }),
+    [equipmentList, locationFilter, lotFilter, familyFilter]
   );
 
   const activeEquipmentCount = filteredEquipmentList.filter(e => e.status === 'En service').length;
@@ -437,7 +446,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
               // Rattachement OT → équipement calculé UNE fois (id puis code). Les OT pris en compte sont ceux de
               // la période et des filtres du haut (Intervenant, Emplacement, Priorité, Type, Statut).
               const { rows: allRows, orphanWoCount } = buildEquipmentRows(equipmentList, filteredOrders);
-              const siteRows = locationFilter ? allRows.filter(r => r.eq.location === locationFilter) : allRows;
+              const siteRows = allRows.filter(r =>
+                (!locationFilter || r.eq.location === locationFilter) &&
+                (!lotFilter || r.lot === lotFilter) &&
+                (!familyFilter || r.family === familyFilter));
               const summary = summarizeEquipment(siteRows);
               const filtered = filterEquipmentRows(siteRows, equipFilters);
               const rows = sortEquipmentRows(filtered, equipSort.key, equipSort.dir);
@@ -475,7 +487,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
 
                   <p className="text-[11px] text-gray-500">
                     Les colonnes « OT ouverts », « OT total » et le filtre « Sans OT » tiennent compte de la période et des filtres du haut
-                    (Intervenant, Priorité, Type, Statut). Le statut et la criticité des équipements, eux, ne dépendent pas de ces filtres.
+                    (Intervenant, Priorité, Type, Statut, Fréquence). Les filtres Emplacement, Lot et Famille du haut s'appliquent aussi à la liste. Le statut et la criticité des équipements, eux, ne dépendent pas des autres filtres.
                   </p>
 
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
