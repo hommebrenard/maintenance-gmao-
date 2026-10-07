@@ -106,6 +106,10 @@ export interface WorkOrder {
   dueDate: string;
   createdAt: string;
   updatedAt: string;
+  /** Date de clôture ISO, posée UNIQUEMENT par la base (déclencheur trg_wo_closure,
+   * 07/10/2026). Jamais écrite par l'app ; absente si l'OT n'est pas « Terminé »
+   * ou a été clos avant l'horodatage automatique. */
+  closedAt?: string;
   planner?: string;
   planNumber?: string;
   interventionCode?: string;
