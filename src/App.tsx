@@ -1043,6 +1043,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onRejectRequest={handleRejectRequest}
             isManager={isManager}
             techniciens={techniciens}
+            workOrders={workOrders}
           />
         );
       case 'messages':
