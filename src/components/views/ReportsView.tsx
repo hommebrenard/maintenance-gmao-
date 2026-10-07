@@ -543,7 +543,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                         <button
                           type="button"
                           onClick={() => toggleQuick('withoutWo')}
-                          title="Équipements sans aucun OT rattaché : trous possibles dans le plan préventif"
+                          title="Équipements sans aucun OT dans la sélection actuelle (période + filtres du haut : fréquence, statut, priorité, type, intervenant). Pour savoir s'ils n'ont vraiment aucun OT, retirez ces filtres et ne gardez que site, lot et famille."
                           className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${equipFilters.quick === 'withoutWo' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                         >
                           Sans OT ({summary.withoutWo})
