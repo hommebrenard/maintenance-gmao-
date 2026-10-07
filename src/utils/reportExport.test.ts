@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { WorkOrder } from '../types';
-import { EXPORT_HEADERS, toExportRow, buildCsv, coswinNumber, formatDateTimeFr } from './reportExport';
+import { EXPORT_HEADERS, toExportRow, buildCsv, coswinNumber, formatDateTimeFr, slugify, exportFileName } from './reportExport';
 
 const base = (over: Partial<WorkOrder> = {}): WorkOrder => ({
   id: '1', code: 'OT-89521', title: 'MENSUEL TD', description: '', status: 'Ouvert', priority: 'Moyenne',
@@ -39,5 +39,11 @@ describe('reportExport', () => {
     expect(csv.startsWith('\uFEFF"Code OT";')).toBe(true);
     expect(csv).toContain('"Test ""cité""; avec point-virgule"');
     expect(csv.split('\r\n')).toHaveLength(2);
+  });
+  it('nom de fichier : seuls les filtres actifs, sans accents ni espaces', () => {
+    expect(slugify(' AG Type A AL HOCEIMA')).toBe('ag-type-a-al-hoceima');
+    expect(exportFileName({}, '2026-10-07')).toBe('rapport-ot-2026-10-07.csv');
+    expect(exportFileName({ site: 'Succursale régionale Type A FES', lot: 'Électricité', freq: 'M' }, '2026-10-07'))
+      .toBe('rapport-ot-succursale-regionale-type-a-fes-electricite-m-2026-10-07.csv');
   });
 });
