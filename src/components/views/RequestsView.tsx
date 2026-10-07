@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle } from 'lucide-react';
-import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien } from '../../types';
+import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder } from '../../types';
+import { RequestDetailModal } from './RequestDetailModal';
+import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 
 interface RequestsViewProps {
   requests: MaintenanceRequest[];
@@ -10,6 +12,7 @@ interface RequestsViewProps {
   onRejectRequest: (id: string) => void;
   isManager?: boolean;
   techniciens?: Technicien[];
+  workOrders?: WorkOrder[];
 }
 
 export const RequestsView: React.FC<RequestsViewProps> = ({
@@ -19,12 +22,16 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   onApproveRequest,
   onRejectRequest,
   isManager = false,
-  techniciens = []
+  techniciens = [],
+  workOrders = []
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
+  const selectedRequest = selectedId ? requests.find(r => r.id === selectedId) : undefined;
 
   // Form
   const [title, setTitle] = useState('');
@@ -157,62 +164,80 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredRequests.map(req => (
-              <div key={req.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
-                      req.priority === 'Urgente' ? 'bg-red-100 text-red-700 border-red-200' :
-                      req.priority === 'Élevée' ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                      'bg-blue-100 text-blue-700 border-blue-200'
-                    }`}>
-                      {req.priority}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-                      req.status === 'En attente' ? 'bg-amber-50 text-amber-700' :
-                      req.status === 'Approuvée' ? 'bg-green-50 text-green-700' :
-                      'bg-red-50 text-red-700'
-                    }`}>
-                      {req.status}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-gray-900 text-base">{req.title}</h3>
-                  <p className="text-xs text-gray-600 line-clamp-2">{req.description}</p>
-                </div>
-
-                <div className="pt-3 border-t border-gray-100 space-y-2 text-xs text-gray-500">
-                  {equipmentLabel(req) && (
-                    <div>Équipement: <span className="font-semibold text-gray-800">{equipmentLabel(req)}</span></div>
-                  )}
-                  <div>Demandé par: <span className="font-semibold text-gray-800">{req.requestedBy}</span></div>
-                  <div className="text-[11px] text-gray-400">{req.createdAt}</div>
-
-                  {req.status === 'En attente' && isManager && (
-                    <div className="flex items-center gap-2 pt-2">
-                      <button
-                        onClick={() => onApproveRequest(req.id)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Approuver & Créer OT</span>
-                      </button>
-                      <button
-                        onClick={() => onRejectRequest(req.id)}
-                        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-gray-200"
-                        title="Rejeter"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto border border-gray-200 rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-[11px] uppercase text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-2.5 font-semibold">N° DI</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Déclarée le</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Équipement</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Description</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Priorité</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Demandeur</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">État</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">N° OT</th>
+                  {isManager && <th className="px-3 py-2.5" />}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRequests.map(req => {
+                  const wo = req.workOrderId ? woByRequest.get(req.workOrderId) : undefined;
+                  const state = displayState(req, wo);
+                  return (
+                    <tr key={req.id} onClick={() => setSelectedId(req.id)}
+                      className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer">
+                      <td className="px-3 py-2.5 font-mono text-xs text-gray-700 whitespace-nowrap">{req.code}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{req.createdAt}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-800 max-w-[220px] truncate">{equipmentLabel(req) ?? '—'}</td>
+                      <td className="px-3 py-2.5 font-medium text-gray-900 max-w-[260px] truncate">{req.title}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                          req.priority === 'Urgente' ? 'bg-red-100 text-red-700 border-red-200' :
+                          req.priority === 'Élevée' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                          'bg-blue-100 text-blue-700 border-blue-200'
+                        }`}>{req.priority}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.requestedBy}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{wo?.code ?? '—'}</td>
+                      {isManager && (
+                        <td className="px-3 py-2.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                          {req.status === 'En attente' && (
+                            <div className="inline-flex items-center gap-1.5">
+                              <button onClick={() => onApproveRequest(req.id)} title="Approuver & Créer OT"
+                                className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold">
+                                <CheckCircle2 className="w-3.5 h-3.5" /><span>Approuver</span>
+                              </button>
+                              <button onClick={() => onRejectRequest(req.id)} title="Rejeter"
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-gray-200">
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      {selectedRequest && (
+        <RequestDetailModal
+          request={selectedRequest}
+          equipment={selectedRequest.equipmentId ? equipmentList.find(e => e.id === selectedRequest.equipmentId) : undefined}
+          workOrder={selectedRequest.workOrderId ? woByRequest.get(selectedRequest.workOrderId) : undefined}
+          isManager={isManager}
+          onClose={() => setSelectedId(null)}
+          onApprove={onApproveRequest}
+          onReject={onRejectRequest}
+        />
+      )}
 
       {/* Modal */}
       {isModalOpen && (
