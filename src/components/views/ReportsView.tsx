@@ -9,6 +9,7 @@ import {
   EquipSortKey, EquipmentFilters, EMPTY_EQUIPMENT_FILTERS, buildEquipmentRows, summarizeEquipment,
   filterEquipmentRows, sortEquipmentRows,
 } from '../../utils/reportEquipment';
+import { buildCsv } from '../../utils/reportExport';
 import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel } from '../../utils/equipmentFamilies';
 
 interface ReportsViewProps {
@@ -30,15 +31,7 @@ const addDays = (d: Date, days: number): Date => {
 };
 
 const downloadCSV = (rows: WorkOrder[]) => {
-  const headers = ['Code', 'Titre', 'Statut', 'Priorité', 'Type', 'Intervenant', 'Emplacement', 'Équipement', 'Date d\'échéance'];
-  const escape = (v: string) => `"${(v || '').replace(/"/g, '""')}"`;
-  const lines = [
-    headers.join(';'),
-    ...rows.map(w => [
-      w.code, w.title, w.status, w.priority, w.type, responsibleOf(w), w.location || '', w.equipmentName || '', w.dueDate
-    ].map(v => escape(String(v ?? ''))).join(';'))
-  ];
-  const csvContent = '\uFEFF' + lines.join('\r\n');
+  const csvContent = buildCsv(rows);
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -716,7 +709,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                 </div>
                 <h3 className="text-base font-bold text-gray-900">Exporter les résultats filtrés</h3>
                 <p className="text-sm text-gray-500 mt-1 mb-5">
-                  {filteredOrders.length} ordre(s) de travail seront exportés au format CSV, en tenant compte de la période et des filtres actuellement appliqués.
+                  {filteredOrders.length} ordre(s) de travail seront exportés au format CSV (19 colonnes : site, famille, lot, fréquence, N° OT Coswin, dates…), en tenant compte de la période et des filtres actuellement appliqués. La date de clôture est posée automatiquement par la base ; elle est vide pour un OT non clos.
                 </p>
                 <button
                   onClick={() => downloadCSV(filteredOrders)}
