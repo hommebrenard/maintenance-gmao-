@@ -27,9 +27,10 @@ export function formatDateTimeFr(iso?: string | null): string {
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** N° d'OT Coswin = vrai numéro (OT-…). Les codes NC-… (non communiqué) n'en ont pas : vide. */
+/** N° d'OT Coswin = OT- suivi de chiffres seuls (ex. OT-89521). Vide pour les NC-… (non communiqué)
+ * et pour les OT créés dans l'application (OT-261007-4821, avec un second tiret). */
 export function coswinNumber(code?: string): string {
-  return code && /^OT-/i.test(code) ? code : '';
+  return code && /^OT-\d+$/i.test(code) ? code : '';
 }
 
 export function toExportRow(wo: WorkOrder): string[] {
