@@ -9,7 +9,8 @@ import {
   EquipSortKey, EquipmentFilters, EMPTY_EQUIPMENT_FILTERS, buildEquipmentRows, summarizeEquipment,
   filterEquipmentRows, sortEquipmentRows,
 } from '../../utils/reportEquipment';
-import { buildCsv } from '../../utils/reportExport';
+import { buildCsv, exportFileName } from '../../utils/reportExport';
+import { ClassFilters, matchesClassFilters, classOptions, LOT_OPTIONS } from '../../utils/reportFilters';
 import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel } from '../../utils/equipmentFamilies';
 
 interface ReportsViewProps {
@@ -30,13 +31,13 @@ const addDays = (d: Date, days: number): Date => {
   return copy;
 };
 
-const downloadCSV = (rows: WorkOrder[]) => {
+const downloadCSV = (rows: WorkOrder[], fileName: string) => {
   const csvContent = buildCsv(rows);
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `rapport-ordres-de-travail-${formatLocalDate(new Date())}.csv`;
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -58,6 +59,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const [priorityFilter, setPriorityFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [lotFilter, setLotFilter] = useState('');
+  const [familyFilter, setFamilyFilter] = useState('');
+  const [freqFilter, setFreqFilter] = useState('');
+  const classFilters: ClassFilters = { lot: lotFilter, family: familyFilter, freq: freqFilter };
+  const { families: familyOptions, freqs: freqOptions } = useMemo(() => classOptions(workOrders, lotFilter), [workOrders, lotFilter]);
 
   // --- Options disponibles pour les filtres, dérivées des données réelles ---
   const assigneeOptions = useMemo(() => Array.from(new Set(workOrders.map(w => responsibleOf(w)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'fr')) as string[], [workOrders]);
@@ -66,9 +72,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
   const statusOptions = ['Ouvert', 'En cours', 'En attente', 'Terminé'];
   const priorityOptions = ['Faible', 'Moyenne', 'Élevée', 'Urgente'];
 
-  const hasActiveFilters = !!(assigneeFilter || locationFilter || priorityFilter || typeFilter || statusFilter);
+  const hasActiveFilters = !!(assigneeFilter || locationFilter || priorityFilter || typeFilter || statusFilter || lotFilter || familyFilter || freqFilter);
   const clearFilters = () => {
     setAssigneeFilter(''); setLocationFilter(''); setPriorityFilter(''); setTypeFilter(''); setStatusFilter('');
+    setLotFilter(''); setFamilyFilter(''); setFreqFilter('');
   };
 
   // --- Fenêtre de dates selon la période choisie (basée sur la date d'échéance) ---
@@ -88,17 +95,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
     if (priorityFilter && wo.priority !== priorityFilter) return false;
     if (typeFilter && wo.type !== typeFilter) return false;
     if (statusFilter && wo.status !== statusFilter) return false;
+    if (!matchesClassFilters(wo, classFilters)) return false;
     return true;
   };
 
   const filteredOrders = useMemo(
     () => workOrders.filter(w => inPeriod(w) && applyCommonFilters(w)),
-    [workOrders, periodStartStr, todayStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter]
+    [workOrders, periodStartStr, todayStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, familyFilter, freqFilter]
   );
 
   const prevPeriodOrders = useMemo(
     () => workOrders.filter(w => inPrevPeriod(w) && applyCommonFilters(w)),
-    [workOrders, prevPeriodStartStr, prevPeriodEndStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter]
+    [workOrders, prevPeriodStartStr, prevPeriodEndStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, familyFilter, freqFilter]
   );
 
   // --- KPIs ---
@@ -274,6 +282,33 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
+        <select
+          value={lotFilter}
+          onChange={(e) => { setLotFilter(e.target.value); setFamilyFilter(''); }}
+          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
+        >
+          <option value="">Lot</option>
+          {LOT_OPTIONS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+        </select>
+
+        <select
+          value={familyFilter}
+          onChange={(e) => setFamilyFilter(e.target.value)}
+          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none max-w-[200px]"
+        >
+          <option value="">Famille</option>
+          {familyOptions.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </select>
+
+        <select
+          value={freqFilter}
+          onChange={(e) => setFreqFilter(e.target.value)}
+          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
+        >
+          <option value="">Fréquence</option>
+          {freqOptions.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </select>
+
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
@@ -308,17 +343,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
               <>
                 {/* Metric KPI cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                  <button type="button" onClick={() => setActiveTab('details')} title="Voir la liste de ces OT"
+                    className="text-left bg-white p-5 rounded-xl border border-gray-200 shadow-2xs hover:border-blue-400 hover:shadow-md transition cursor-pointer">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Total Ordres de travail</span>
                     <div className="text-3xl font-bold text-gray-900 mt-2">{totalCount}</div>
                     <TrendBadge value={totalTrendPct} />
-                  </div>
+                  </button>
 
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                  <button type="button" onClick={() => { setStatusFilter('Terminé'); setActiveTab('details'); }} title="Voir les OT terminés"
+                    className="text-left bg-white p-5 rounded-xl border border-gray-200 shadow-2xs hover:border-blue-400 hover:shadow-md transition cursor-pointer">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Taux de résolution</span>
                     <div className="text-3xl font-bold text-gray-900 mt-2">{resolutionRate}%</div>
                     <TrendBadge value={resolutionTrendPts} suffix=" pts" />
-                  </div>
+                  </button>
 
                   <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Temps moyen de réparation (MTTR)</span>
@@ -330,7 +367,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                     </span>
                   </div>
 
-                  <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs">
+                  <button type="button" onClick={() => setActiveTab('equipment')} title="Voir l'état des équipements"
+                    className="text-left bg-white p-5 rounded-xl border border-gray-200 shadow-2xs hover:border-blue-400 hover:shadow-md transition cursor-pointer">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Équipements actifs</span>
                     <div className="text-3xl font-bold text-gray-900 mt-2">
                       {activeEquipmentCount}/{filteredEquipmentList.length}
@@ -340,27 +378,30 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                         ? `${plannedStopCount} en arrêt planifié, ${unplannedStopCount} en arrêt non planifié`
                         : 'Aucun arrêt en cours'}
                     </div>
-                  </div>
+                  </button>
                 </div>
 
                 {/* Charts section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs">
-                    <h3 className="text-sm font-bold text-gray-900 mb-4">Répartition par statut</h3>
+                    <h3 className="text-sm font-bold text-gray-900">Répartition par statut</h3>
+                    <p className="text-xs text-gray-400 mb-4">Cliquer sur une barre pour voir les OT.</p>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={statusData}>
                           <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
                           <YAxis stroke="#9CA3AF" fontSize={12} allowDecimals={false} />
                           <Tooltip />
-                          <Bar dataKey="count" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="count" fill="#3B82F6" radius={[4, 4, 0, 0]} cursor="pointer"
+                            onClick={(d: { name?: string }) => { if (d?.name) { setStatusFilter(d.name); setActiveTab('details'); } }} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
                   <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-2xs">
-                    <h3 className="text-sm font-bold text-gray-900 mb-4">Répartition par priorité</h3>
+                    <h3 className="text-sm font-bold text-gray-900">Répartition par priorité</h3>
+                    <p className="text-xs text-gray-400 mb-4">Cliquer sur une part pour voir les OT.</p>
                     <div className="h-64 flex items-center justify-center">
                       {priorityData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
@@ -373,6 +414,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                               cy="50%"
                               outerRadius={80}
                               label
+                              cursor="pointer"
+                              onClick={(d: { name?: string }) => { if (d?.name) { setPriorityFilter(d.name); setActiveTab('details'); } }}
                             >
                               {priorityData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} />
@@ -712,7 +755,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
                   {filteredOrders.length} ordre(s) de travail seront exportés au format CSV (19 colonnes : site, famille, lot, fréquence, N° OT Coswin, dates…), en tenant compte de la période et des filtres actuellement appliqués. La date de clôture est posée automatiquement par la base ; elle est vide pour un OT non clos.
                 </p>
                 <button
-                  onClick={() => downloadCSV(filteredOrders)}
+                  onClick={() => downloadCSV(filteredOrders, exportFileName({ site: locationFilter, lot: lotFilter ? LOT_OPTIONS.find(l => l.key === lotFilter)?.label : '', family: familyFilter, freq: freqFilter }, formatLocalDate(new Date())))}
                   disabled={filteredOrders.length === 0}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
                 >
