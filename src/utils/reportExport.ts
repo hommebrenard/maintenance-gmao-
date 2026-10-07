@@ -49,3 +49,16 @@ export function buildCsv(rows: WorkOrder[]): string {
   const lines = [EXPORT_HEADERS, ...rows.map(toExportRow)].map(cols => cols.map(esc).join(';'));
   return '\uFEFF' + lines.join('\r\n');
 }
+
+/** "Fès — Sud" → "fes-sud" : sans accents, minuscules, tirets. */
+export function slugify(v: string): string {
+  return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/** Nom du fichier : rapport-ot[-site][-lot][-famille][-frequence]-AAAA-MM-JJ.csv (seuls les filtres actifs y figurent). */
+export function exportFileName(parts: { site?: string; lot?: string; family?: string; freq?: string }, isoDate: string): string {
+  const bits = ['rapport-ot', parts.site, parts.lot, parts.family, parts.freq]
+    .map(v => (v ? slugify(v) : ''))
+    .filter(Boolean);
+  return `${bits.join('-')}-${isoDate}.csv`;
+}
