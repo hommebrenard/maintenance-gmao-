@@ -17,6 +17,10 @@ describe('requestDisplay', () => {
     expect(displayState({ status: 'Approuvée' }, wo('1', 'En cours'))).toBe('En cours');
     expect(displayState({ status: 'Approuvée' }, wo('1', 'Terminé'))).toBe('Clôturée');
   });
+  it('demande importée sans OT dans l\'application : suit l\'état OT Coswin', () => {
+    expect(displayState({ status: 'Approuvée', otState: 'T' })).toBe('Clôturée');
+    expect(displayState({ status: 'Approuvée', otState: 'A' })).toBe('Prise en charge');
+  });
   it('index : uniquement les OT liés à une demande', () => {
     const m = indexWorkOrders([wo('a', 'Ouvert'), wo('b', 'Terminé'), wo('c', 'Ouvert')], [req('Approuvée', 'b'), req('En attente')]);
     expect([...m.keys()]).toEqual(['b']);
