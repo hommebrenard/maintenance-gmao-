@@ -168,6 +168,29 @@ export interface MaintenanceRequest {
   workOrderId?: string | null;
   /** Date de décision (approbation ou rejet), ISO — colonne `approval_date`. */
   decidedAt?: string;
+  /** « coswin » pour une demande importée de Coswin (colonnes ajoutées le 08/10/2026), sinon « app ». */
+  origin?: 'app' | 'coswin';
+  coswinState?: string;
+  interventionType?: string;
+  qseType?: string;
+  dafNumber?: string;
+  declaredAt?: string;
+  dueDate?: string;
+  priorityCode?: string;
+  otNumber?: string;
+  otState?: string;
+  otStateLabel?: string;
+  functionLabel?: string;
+  functionCode?: string;
+  supervisorName?: string;
+  costCenter?: string;
+  plannedStart?: string;
+  otEndDate?: string;
+  coswinCreatedAt?: string;
+  visa?: string;
+  equipmentCode?: string;
+  interventionCode?: string;
+  siteCode?: string;
 }
 
 export interface Message {
