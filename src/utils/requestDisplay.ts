@@ -3,10 +3,10 @@ import type { MaintenanceRequest, WorkOrder } from '../types';
 /** État affiché d'une DI : les 3 états stockés + l'avancement de l'OT lié (jamais dupliqué en base). */
 export type RequestDisplayState = 'En attente' | 'Rejetée' | 'Prise en charge' | 'En cours' | 'Clôturée';
 
-export function displayState(req: Pick<MaintenanceRequest, 'status'>, wo?: Pick<WorkOrder, 'status'> | null): RequestDisplayState {
+export function displayState(req: Pick<MaintenanceRequest, 'status'> & { otState?: string }, wo?: Pick<WorkOrder, 'status'> | null): RequestDisplayState {
   if (req.status === 'En attente') return 'En attente';
   if (req.status === 'Rejetée') return 'Rejetée';
-  if (!wo) return 'Prise en charge';
+  if (!wo) return req.otState === 'T' ? 'Clôturée' : 'Prise en charge'; // demande importée : OT Coswin hors application
   if (wo.status === 'Terminé') return 'Clôturée';
   if (wo.status === 'En cours') return 'En cours';
   return 'Prise en charge';
