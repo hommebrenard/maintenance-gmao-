@@ -67,7 +67,8 @@ import {
 } from './types';
 import { fetchProfiles } from './lib/queries/profiles';
 import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
-import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest } from './lib/queries/maintenanceRequests';
+import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, importMaintenanceRequests } from './lib/queries/maintenanceRequests';
+import type { RequestInsertRow } from './utils/importRequests';
 
 // Helper for localStorage state persistence
 function getInitialState<T extends { id: string }>(key: string, demoData: T[]): T[] {
@@ -609,6 +610,16 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   };
 
   // Handlers - Requests
+  // Import Coswin (option B) : n'ajoute que les N° de DI absents ; renvoie le nombre de demandes réellement créées.
+  const handleImportRequests = async (rows: RequestInsertRow[]): Promise<number> => {
+    const before = new Set(requests.map(r => r.code));
+    await importMaintenanceRequests(rows, session.user.id);
+    const fresh = await fetchMaintenanceRequests();
+    setRequests(fresh);
+    const after = new Set(fresh.map(r => r.code));
+    return rows.filter(r => !before.has(r.code) && after.has(r.code)).length;
+  };
+
   const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => {
     if (!reqData.equipmentId) {
       alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
@@ -1044,6 +1055,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             isManager={isManager}
             techniciens={techniciens}
             workOrders={workOrders}
+            locations={locations}
+            onImportRequests={handleImportRequests}
           />
         );
       case 'messages':
