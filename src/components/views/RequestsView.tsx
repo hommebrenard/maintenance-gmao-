@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle } from 'lucide-react';
-import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder } from '../../types';
+import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
+import { RequestImportModal } from './RequestImportModal';
+import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 
 interface RequestsViewProps {
@@ -13,6 +15,8 @@ interface RequestsViewProps {
   isManager?: boolean;
   techniciens?: Technicien[];
   workOrders?: WorkOrder[];
+  locations?: LocationItem[];
+  onImportRequests?: (rows: RequestInsertRow[]) => Promise<number>;
 }
 
 export const RequestsView: React.FC<RequestsViewProps> = ({
@@ -23,13 +27,20 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   onRejectRequest,
   isManager = false,
   techniciens = [],
-  workOrders = []
+  workOrders = [],
+  locations = [],
+  onImportRequests
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const importContext = React.useMemo(
+    () => (isImportOpen ? buildImportContext({ requests, equipment: equipmentList, locations, workOrders }) : null),
+    [isImportOpen, requests, equipmentList, locations, workOrders]
+  );
   const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
   const selectedRequest = selectedId ? requests.find(r => r.id === selectedId) : undefined;
 
@@ -42,13 +53,15 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
   const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
     const eq = req.equipmentId ? equipmentList.find(e => e.id === req.equipmentId) : undefined;
-    return eq ? `${eq.name} (${eq.code})` : req.equipmentName;
+    return eq ? `${eq.name} (${eq.code})` : req.equipmentName ?? req.equipmentCode;
   };
 
   const filteredRequests = requests.filter(req => {
     const matchesSearch = req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           req.requestedBy.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ((equipmentLabel(req) ?? '').toLowerCase().includes(searchQuery.toLowerCase()));
+                          ((equipmentLabel(req) ?? '').toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (req.code ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (req.dafNumber ?? '').toLowerCase().includes(searchQuery.toLowerCase());
     
     let matchesStatus = true;
     if (selectedStatus) {
@@ -93,6 +106,12 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             </p>
           </div>
 
+          {isManager && onImportRequests && (
+            <button onClick={() => setIsImportOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <span>Importer depuis Coswin</span>
+            </button>
+          )}
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-xs transition-colors self-start md:self-auto"
@@ -173,6 +192,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                   <th className="text-left px-3 py-2.5 font-semibold">Équipement</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Description</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Priorité</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Type</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">N° DAF</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Demandeur</th>
                   <th className="text-left px-3 py-2.5 font-semibold">État</th>
                   <th className="text-left px-3 py-2.5 font-semibold">N° OT</th>
@@ -197,11 +218,13 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                           'bg-blue-100 text-blue-700 border-blue-200'
                         }`}>{req.priority}</span>
                       </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.interventionType ?? '—'}</td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-gray-700 whitespace-nowrap">{req.dafNumber ?? '—'}</td>
                       <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.requestedBy}</td>
                       <td className="px-3 py-2.5">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{wo?.code ?? '—'}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{wo?.code ?? (req.otNumber ? `OT-${req.otNumber}` : '—')}</td>
                       {isManager && (
                         <td className="px-3 py-2.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                           {req.status === 'En attente' && (
@@ -226,6 +249,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
           </div>
         )}
       </div>
+
+      {isImportOpen && importContext && onImportRequests && (
+        <RequestImportModal context={importContext} onClose={() => setIsImportOpen(false)} onImport={onImportRequests} />
+      )}
 
       {selectedRequest && (
         <RequestDetailModal
