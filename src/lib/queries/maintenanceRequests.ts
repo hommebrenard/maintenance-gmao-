@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import type { MaintenanceRequest, RequestStatus, WorkOrderPriority } from '../../types';
+import type { RequestInsertRow } from '../../utils/importRequests';
 
 // Table `maintenance_requests` (RLS : INSERT si requested_by = auth.uid(),
 // SELECT si demandeur ou is_manager(), UPDATE is_manager() ; pas de DELETE).
@@ -45,6 +46,13 @@ interface RequestRow {
   work_order_id: string | null;
   approval_date?: string | null;
   created_at: string;
+  origin?: 'app' | 'coswin' | null;
+  coswin_state?: string | null; intervention_type?: string | null; qse_type?: string | null; daf_number?: string | null;
+  declared_at?: string | null; due_date?: string | null; priority_code?: string | null; ot_number?: string | null;
+  ot_state?: string | null; ot_state_label?: string | null; function_label?: string | null; function_code?: string | null;
+  supervisor_name?: string | null; cost_center?: string | null; planned_start?: string | null; ot_end_date?: string | null;
+  coswin_created_at?: string | null; visa?: string | null; equipment_code?: string | null; intervention_code?: string | null;
+  site_code?: string | null;
 }
 
 function rowToRequest(row: RequestRow): MaintenanceRequest {
@@ -60,6 +68,17 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     requestedBy: row.requester_name ?? '',
     workOrderId: row.work_order_id,
     decidedAt: row.approval_date ?? undefined,
+    origin: row.origin ?? 'app',
+    coswinState: row.coswin_state ?? undefined, interventionType: row.intervention_type ?? undefined,
+    qseType: row.qse_type ?? undefined, dafNumber: row.daf_number ?? undefined, declaredAt: row.declared_at ?? undefined,
+    dueDate: row.due_date ?? undefined, priorityCode: row.priority_code ?? undefined, otNumber: row.ot_number ?? undefined,
+    otState: row.ot_state ?? undefined, otStateLabel: row.ot_state_label ?? undefined,
+    functionLabel: row.function_label ?? undefined, functionCode: row.function_code ?? undefined,
+    supervisorName: row.supervisor_name ?? undefined, costCenter: row.cost_center ?? undefined,
+    plannedStart: row.planned_start ?? undefined, otEndDate: row.ot_end_date ?? undefined,
+    coswinCreatedAt: row.coswin_created_at ?? undefined, visa: row.visa ?? undefined,
+    equipmentCode: row.equipment_code ?? undefined, interventionCode: row.intervention_code ?? undefined,
+    siteCode: row.site_code ?? undefined,
     createdAt: new Date(row.created_at).toLocaleString('fr-FR'),
   };
 }
@@ -129,4 +148,17 @@ export async function decideMaintenanceRequest(id: string, d: RequestDecision): 
     .select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('Modification refusée ou demande introuvable.');
+}
+
+/**
+ * Import Coswin (option B) : INSERT ... ON CONFLICT (code) DO NOTHING par lots de 200. Une demande déjà présente
+ * n'est jamais modifiée. Droits : INSERT si requested_by = auth.uid() (le responsable qui importe).
+ */
+export async function importMaintenanceRequests(rows: RequestInsertRow[], userId: string): Promise<void> {
+  const importedAt = new Date().toISOString();
+  for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200).map(r => ({ ...r, requested_by: userId, imported_at: importedAt }));
+    const { error } = await supabase.from('maintenance_requests').upsert(batch, { onConflict: 'code', ignoreDuplicates: true });
+    if (error) throw error;
+  }
 }
