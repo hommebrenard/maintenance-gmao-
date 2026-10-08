@@ -64,13 +64,14 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOr
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <Field label="Équipement source" highlight value={equipment ? `${equipment.code} — ${equipment.name}` : request.equipmentName} />
+              <Field label="Équipement source" highlight value={equipment ? `${equipment.code} — ${equipment.name}` : (request.equipmentName ?? (request.equipmentCode ? `${request.equipmentCode} (non rattaché à un équipement de l'application)` : ''))} />
             </div>
-            <Field label="Site" value={equipment?.location || request.location} />
+            <Field label="Site" value={equipment?.location || request.location || (request.siteCode ? `${request.siteCode} (hors application)` : '')} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Field label="Date de déclaration" value={request.createdAt} />
+            <Field label="Date de déclaration" value={request.declaredAt ? formatDateTimeFr(request.declaredAt) : request.createdAt} />
+            {request.dueDate && <Field label="Date de fin prévue" value={formatDateFr(request.dueDate)} />}
             <Field label="Date de décision" value={formatDateTimeFr(request.decidedAt)} />
           </div>
 
@@ -84,6 +85,16 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOr
                 <Field label="Échéance" value={workOrder.dueDate ? formatDateFr(workOrder.dueDate) : ''} />
                 <Field label="Date de clôture (système)" value={formatDateTimeFr(workOrder.closedAt)} />
               </div>
+            ) : request.otNumber ? (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Field label="N° d'OT (Coswin)" value={`OT-${request.otNumber}`} mono />
+                  <Field label="État OT" value={request.otStateLabel ?? request.otState} />
+                  <Field label="Début prévu" value={request.plannedStart ? formatDateFr(request.plannedStart) : ''} />
+                  <Field label="Date de fin" value={request.otEndDate ? formatDateFr(request.otEndDate) : ''} />
+                </div>
+                <p className="mt-3 text-xs text-gray-500">Cet OT vient de Coswin : il n'existe pas dans l'application, les informations sont celles du fichier importé.</p>
+              </div>
             ) : (
               <p className="text-sm text-gray-500">
                 {request.status === 'En attente' ? "Aucun OT : la demande n'est pas encore décidée." :
@@ -92,6 +103,25 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOr
               </p>
             )}
           </fieldset>
+
+          {request.origin === 'coswin' && (
+            <fieldset className="border border-gray-200 rounded-lg p-4">
+              <legend className="px-2 text-xs font-semibold text-gray-500 uppercase">Données Coswin (import)</legend>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="État Coswin" value={request.coswinState} />
+                <Field label="Type d'intervention" value={request.interventionType} />
+                <Field label="N° DAF" value={request.dafNumber} mono />
+                <Field label="QSE - type" value={request.qseType} />
+                <Field label="Priorité Coswin" value={request.priorityCode} />
+                <Field label="Fonction" value={[request.functionLabel, request.functionCode].filter(Boolean).join(' · ')} />
+                <Field label="Superviseur" value={request.supervisorName} />
+                <Field label="Centre de charges" value={request.costCenter} />
+                <Field label="N° d'intervention" value={request.interventionCode} mono />
+                <Field label="Date de création Coswin" value={formatDateTimeFr(request.coswinCreatedAt)} />
+                <Field label="Visa" value={request.visa} />
+              </div>
+            </fieldset>
+          )}
         </div>
 
         {canDecide && (
