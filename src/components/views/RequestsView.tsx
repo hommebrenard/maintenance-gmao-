@@ -6,7 +6,7 @@ import { RequestImportModal } from './RequestImportModal';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 import {
-  EMPTY_FILTERS, STATE_ORDER, applyFilters, countByState, hasActiveFilters, paginate, sortRows, typeLabel,
+  EMPTY_FILTERS, STATE_ORDER, applyFilters, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
   type RequestFilters, type RequestRowView, type SortKey, type SortSpec,
 } from '../../utils/requestFilters';
 
@@ -78,12 +78,11 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       req, wo, state: displayState(req, wo), equipmentLabel: label,
       siteKey: req.siteCode ?? eq?.location ?? '', matched: !!eq,
       day: iso.slice(0, 10), ts: Date.parse(iso) || 0,
-      hay: [req.title, req.requestedBy, label, req.code, req.dafNumber, req.otNumber, req.equipmentCode, req.interventionType, req.siteCode, wo?.code]
-        .filter(Boolean).join(' ').toLowerCase(),
+      hay: buildSearchText(req, label, wo?.code),
     };
   }), [requests, woByRequest, equipmentById, equipmentByCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stateCounts = React.useMemo(() => countByState(rows), [rows]);
+  const stateCounts = React.useMemo(() => stateCountsFor(rows, filters), [rows, filters]);
   const typeOptions = React.useMemo(() => Array.from(new Set(rows.map(r => r.req.interventionType).filter((v): v is string => !!v))).sort(), [rows]);
   const siteOptions = React.useMemo(() => Array.from(new Set(rows.map(r => r.siteKey).filter(Boolean))).sort(), [rows]);
   const filteredRows = React.useMemo(() => sortRows(applyFilters(rows, filters), sort), [rows, filters, sort]);
