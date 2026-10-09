@@ -79,18 +79,28 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     coswinCreatedAt: row.coswin_created_at ?? undefined, visa: row.visa ?? undefined,
     equipmentCode: row.equipment_code ?? undefined, interventionCode: row.intervention_code ?? undefined,
     siteCode: row.site_code ?? undefined,
-    createdAt: new Date(row.created_at).toLocaleString('fr-FR'),
+    createdAt: new Date(row.created_at).toLocaleString('fr-FR', row.origin === 'coswin' ? { timeZone: 'UTC' } : undefined),
   };
 }
 
 /** Demandes visibles par l'utilisateur (la RLS filtre), plus récentes d'abord. */
 export async function fetchMaintenanceRequests(): Promise<MaintenanceRequest[]> {
-  const { data, error } = await supabase
-    .from('maintenance_requests')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return ((data as RequestRow[]) || []).map(rowToRequest);
+  // Plafond Supabase de 1000 lignes par requête : lecture paginée (ordre stable created_at puis id).
+  const PAGE = 1000;
+  const all: RequestRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('maintenance_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data as RequestRow[]) || [];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return all.map(rowToRequest);
 }
 
 /** Code lisible DEM-AAAAMMJJ-NNNN (colonne `code` obligatoire en base). */
