@@ -170,6 +170,8 @@ export interface MaintenanceRequest {
   decidedAt?: string;
   /** « coswin » pour une demande importée de Coswin (colonnes ajoutées le 08/10/2026), sinon « app ». */
   origin?: 'app' | 'coswin';
+  /** created_at brut (ISO), pour trier et filtrer par date. */
+  createdAtIso?: string;
   coswinState?: string;
   interventionType?: string;
   qseType?: string;
