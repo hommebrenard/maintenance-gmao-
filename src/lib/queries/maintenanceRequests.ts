@@ -79,6 +79,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     coswinCreatedAt: row.coswin_created_at ?? undefined, visa: row.visa ?? undefined,
     equipmentCode: row.equipment_code ?? undefined, interventionCode: row.intervention_code ?? undefined,
     siteCode: row.site_code ?? undefined,
+    createdAtIso: row.created_at,
     createdAt: new Date(row.created_at).toLocaleString('fr-FR', row.origin === 'coswin' ? { timeZone: 'UTC' } : undefined),
   };
 }
