@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceRequest } from '../types';
-import { EMPTY_FILTERS, applyFilters, countByState, hasActiveFilters, paginate, sortRows, typeLabel, type RequestRowView } from './requestFilters';
+import { EMPTY_FILTERS, applyFilters, buildSearchText, countByState, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel, type RequestRowView } from './requestFilters';
 
 type Opts = Omit<Partial<RequestRowView>, 'req'> & { req?: Partial<MaintenanceRequest> };
 
@@ -53,5 +53,17 @@ describe('requestFilters', () => {
     expect(typeLabel('CSR')).toBe('CSR — Correctif - Suite ronde');
     expect(typeLabel('XYZ')).toBe('XYZ');
     expect(typeLabel(undefined)).toBe('');
+  });
+  it('compteurs : suivent les autres filtres, ignorent le filtre d\'état', () => {
+    expect(stateCountsFor(rows, EMPTY_FILTERS)).toMatchObject({ 'En attente': 2, 'Clôturée': 1 });
+    expect(stateCountsFor(rows, { ...EMPTY_FILTERS, type: 'CSP' })).toMatchObject({ 'En attente': 0, 'Clôturée': 1 });
+    expect(stateCountsFor(rows, { ...EMPTY_FILTERS, state: 'Clôturée', site: 'S2' })).toMatchObject({ 'En attente': 1, 'Clôturée': 0 });
+  });
+  it('recherche : « OT-80437 » et « 80437 » trouvent la même demande', () => {
+    const req = { code: 'DI1', title: 'x', requestedBy: 'a', otNumber: '80437' } as MaintenanceRequest;
+    const hay = buildSearchText(req, 'Eq (E1)');
+    expect(hay).toContain('ot-80437');
+    expect(hay).toContain('80437');
+    expect(buildSearchText({ code: 'DI2', title: 'y', requestedBy: 'b' } as MaintenanceRequest)).not.toContain('ot-');
   });
 });
