@@ -9,6 +9,7 @@ import { formatDateTimeFr } from '../../utils/reportExport';
 interface Props {
   request: MaintenanceRequest;
   equipment?: Equipment;
+  locationName?: string;
   workOrder?: WorkOrder;
   isManager: boolean;
   onClose: () => void;
@@ -26,7 +27,7 @@ const Field: React.FC<{ label: string; value?: React.ReactNode; highlight?: bool
 );
 
 /** Fiche de demande d'intervention (lecture) : champs de la demande + bloc « Informations OT ». */
-export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOrder, isManager, onClose, onApprove, onReject }) => {
+export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locationName, workOrder, isManager, onClose, onApprove, onReject }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -66,11 +67,11 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOr
             <div className="md:col-span-2">
               <Field label="Équipement source" highlight value={equipment ? `${equipment.code} — ${equipment.name}` : (request.equipmentName ?? (request.equipmentCode ? `${request.equipmentCode} (non rattaché à un équipement de l'application)` : ''))} />
             </div>
-            <Field label="Site" value={equipment?.location || request.location || (request.siteCode ? `${request.siteCode} (hors application)` : '')} />
+            <Field label="Site" value={equipment?.location || locationName || request.location || (request.siteCode ? `${request.siteCode} (hors application)` : '')} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Field label="Date de déclaration" value={request.declaredAt ? formatDateTimeFr(request.declaredAt) : request.createdAt} />
+            <Field label="Date de déclaration" value={request.declaredAt ? formatDateTimeFr(request.declaredAt, request.origin === 'coswin') : request.createdAt} />
             {request.dueDate && <Field label="Date de fin prévue" value={formatDateFr(request.dueDate)} />}
             <Field label="Date de décision" value={formatDateTimeFr(request.decidedAt)} />
           </div>
@@ -117,7 +118,7 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, workOr
                 <Field label="Superviseur" value={request.supervisorName} />
                 <Field label="Centre de charges" value={request.costCenter} />
                 <Field label="N° d'intervention" value={request.interventionCode} mono />
-                <Field label="Date de création Coswin" value={formatDateTimeFr(request.coswinCreatedAt)} />
+                <Field label="Date de création Coswin" value={formatDateTimeFr(request.coswinCreatedAt, true)} />
                 <Field label="Visa" value={request.visa} />
               </div>
             </fieldset>

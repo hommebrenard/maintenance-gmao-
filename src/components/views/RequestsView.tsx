@@ -42,6 +42,12 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     [isImportOpen, requests, equipmentList, locations, workOrders]
   );
   const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
+  // Rapprochement à l'affichage : une demande importée avant l'équipement/le site est retrouvée par son code.
+  const equipmentByCode = React.useMemo(() => new Map(equipmentList.map(e => [e.code, e] as [string, Equipment])), [equipmentList]);
+  const locationByCode = React.useMemo(() => new Map(locations.filter(l => l.code).map(l => [l.code as string, l] as [string, LocationItem])), [locations]);
+  const equipmentById = React.useMemo(() => new Map(equipmentList.map(e => [e.id, e] as [string, Equipment])), [equipmentList]);
+  const findEquipment = (req: MaintenanceRequest): Equipment | undefined =>
+    (req.equipmentId ? equipmentList.find(e => e.id === req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
   const selectedRequest = selectedId ? requests.find(r => r.id === selectedId) : undefined;
 
   // Form
@@ -52,7 +58,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [requestedBy, setRequestedBy] = useState('');
 
   const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
-    const eq = req.equipmentId ? equipmentList.find(e => e.id === req.equipmentId) : undefined;
+    const eq = (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
     return eq ? `${eq.name} (${eq.code})` : req.equipmentName ?? req.equipmentCode;
   };
 
@@ -257,7 +263,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       {selectedRequest && (
         <RequestDetailModal
           request={selectedRequest}
-          equipment={selectedRequest.equipmentId ? equipmentList.find(e => e.id === selectedRequest.equipmentId) : undefined}
+          equipment={findEquipment(selectedRequest)}
+          locationName={selectedRequest.siteCode ? locationByCode.get(selectedRequest.siteCode)?.name : undefined}
           workOrder={selectedRequest.workOrderId ? woByRequest.get(selectedRequest.workOrderId) : undefined}
           isManager={isManager}
           onClose={() => setSelectedId(null)}
