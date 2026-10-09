@@ -36,6 +36,17 @@ export interface RequestFilters {
   to: string;
   unmatchedOnly: boolean;
 }
+/** Texte de recherche d'une demande : on y met aussi « OT-<n°> » tel qu'affiché (la base stocke le n° sans préfixe). */
+export function buildSearchText(req: MaintenanceRequest, equipmentLabel?: string, woCode?: string): string {
+  return [req.title, req.requestedBy, equipmentLabel, req.code, req.dafNumber, req.otNumber, req.otNumber ? `OT-${req.otNumber}` : '',
+    req.equipmentCode, req.interventionType, req.siteCode, woCode].filter(Boolean).join(' ').toLowerCase();
+}
+
+/** Compteurs par état : suivent tous les filtres actifs SAUF le filtre d'état lui-même. */
+export function stateCountsFor(rows: RequestRowView[], f: RequestFilters): Record<RequestDisplayState, number> {
+  return countByState(applyFilters(rows, { ...f, state: 'all' }));
+}
+
 export const EMPTY_FILTERS: RequestFilters = {
   search: '', state: 'all', priority: 'all', type: 'all', site: 'all', origin: 'all', from: '', to: '', unmatchedOnly: false,
 };
