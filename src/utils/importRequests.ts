@@ -29,13 +29,19 @@ export const COSWIN_HEADERS: [string, Field][] = [
 const REQUIRED: Field[] = ['code', 'title', 'state'];
 
 /** États Coswin connus (numéro avant le point) → statut de l'application. À compléter avec la liste complète. */
-export const COSWIN_STATE_MAP: Record<string, StatusRow> = { '3': 'approuvee' };
+export const COSWIN_STATE_MAP: Record<string, StatusRow> = {
+  '0': 'en_attente', '1': 'en_attente', '14': 'en_attente', // Créée, Révisée, Waiting : pas encore traitées
+  '3': 'approuvee', '17': 'approuvee', // OT créé ; Clôturée sans OT (affichée « Clôturée » via coswin_state)
+  '5': 'rejetee', // Annulée
+}; // « 8. Signed off » : sens non confirmé, volontairement non importé
 
 /** Priorités Coswin → priorités de l'application (U0 = urgent confirmé par l'écran Coswin ; U1 à U3 : hypothèse). */
 export const COSWIN_PRIORITY_MAP: Record<string, PriorityRow> = { U0: 'urgente', U1: 'haute', U2: 'moyenne', U3: 'basse' };
 
-/** Les heures Coswin sont des heures locales (Maroc) : on les enregistre avec le décalage +01:00. */
-const LOCAL_OFFSET = '+01:00';
+/** Heure murale Coswin enregistrée telle quelle (sans conversion de fuseau) : stockée comme UTC, affichée avec timeZone UTC. */
+const LOCAL_OFFSET = '+00:00';
+/** Écart (jours) entre déclaration et création au-delà duquel on suspecte une année erronée. */
+const MAX_DECL_GAP_DAYS = 180;
 
 export const norm = (s: string): string =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -181,7 +187,7 @@ export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: Impo
 
     const prioCode = g('priority').toUpperCase();
     const priority = COSWIN_PRIORITY_MAP[prioCode];
-    if (!priority) report.warnings.push({ code, message: `Priorité « ${g('priority') || '(vide)'} » inconnue : « moyenne » appliquée` });
+    if (!priority && prioCode) report.warnings.push({ code, message: `Priorité « ${g('priority') || '(vide)'} » inconnue : « moyenne » appliquée` });
 
     const dateField = (f: Field, label: string, withTime: boolean): string | null => {
       const raw = rec[f];
@@ -197,9 +203,9 @@ export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: Impo
     const dueDate = dateField('dueDate', 'Date de fin prévue', false);
     const plannedStart = dateField('plannedStart', 'Date de début prévue', false);
     const otEndDate = dateField('otEndDate', 'Date de fin', false);
-    const incoherent = !!(declP && creaP && Math.abs(dayNumber(declP) - dayNumber(creaP)) > 31);
+    const incoherent = !!(declP && creaP && Math.abs(dayNumber(declP) - dayNumber(creaP)) > MAX_DECL_GAP_DAYS);
     if (declP && creaP && incoherent) {
-      report.warnings.push({ code, message: `Date de déclaration (${p2(declP.d)}/${p2(declP.m)}/${declP.y}) très éloignée de la date de création (${p2(creaP.d)}/${p2(creaP.m)}/${creaP.y}) : année probablement erronée dans Coswin` });
+      report.warnings.push({ code, message: `Date de déclaration (${p2(declP.d)}/${p2(declP.m)}/${declP.y}) très éloignée de la date de création (${p2(creaP.d)}/${p2(creaP.m)}/${creaP.y}) : année probablement erronée dans Coswin (la date de création est retenue)` });
     }
 
     const equipmentCode = g('equipment') || g('plannedEquipment');

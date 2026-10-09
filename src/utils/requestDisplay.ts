@@ -1,12 +1,22 @@
 import type { MaintenanceRequest, WorkOrder } from '../types';
 
 /** État affiché d'une DI : les 3 états stockés + l'avancement de l'OT lié (jamais dupliqué en base). */
-export type RequestDisplayState = 'En attente' | 'Rejetée' | 'Prise en charge' | 'En cours' | 'Clôturée';
+export type RequestDisplayState = 'En attente' | 'Rejetée' | 'Prise en charge' | 'En cours' | 'Clôturée' | 'OT annulé';
 
-export function displayState(req: Pick<MaintenanceRequest, 'status'> & { otState?: string }, wo?: Pick<WorkOrder, 'status'> | null): RequestDisplayState {
+/** États d'OT Coswin : E, T, U = Terminé ; V, Z = Archivable (donc terminés) ; N, X = Annulé. */
+const OT_DONE = new Set(['E', 'T', 'U', 'V', 'Z']);
+const OT_CANCELLED = new Set(['N', 'X']);
+
+export function displayState(req: Pick<MaintenanceRequest, 'status'> & { otState?: string; coswinState?: string }, wo?: Pick<WorkOrder, 'status'> | null): RequestDisplayState {
   if (req.status === 'En attente') return 'En attente';
   if (req.status === 'Rejetée') return 'Rejetée';
-  if (!wo) return req.otState === 'T' ? 'Clôturée' : 'Prise en charge'; // demande importée : OT Coswin hors application
+  if (!wo) { // demande importée : OT Coswin hors application
+    const ot = (req.otState ?? '').trim().toUpperCase();
+    if (OT_DONE.has(ot)) return 'Clôturée';
+    if (OT_CANCELLED.has(ot)) return 'OT annulé';
+    if (/^\s*17\s*[.\-)]/.test(req.coswinState ?? '')) return 'Clôturée'; // « 17. Clôturée sans OT »
+    return 'Prise en charge';
+  }
   if (wo.status === 'Terminé') return 'Clôturée';
   if (wo.status === 'En cours') return 'En cours';
   return 'Prise en charge';
@@ -18,6 +28,7 @@ export const DISPLAY_STATE_CLASS: Record<RequestDisplayState, string> = {
   'Prise en charge': 'bg-blue-50 text-blue-700',
   'En cours': 'bg-indigo-50 text-indigo-700',
   'Clôturée': 'bg-green-50 text-green-700',
+  'OT annulé': 'bg-gray-100 text-gray-600',
 };
 
 /** Index id → OT, pour retrouver l'OT lié à chaque demande sans parcourir 6749 OT par ligne. */

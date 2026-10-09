@@ -19,11 +19,12 @@ export const EXPORT_HEADERS = [
 const dateFr = (v?: string | null): string => (v ? formatDateFr(v) : '');
 
 /** Horodatage ISO → "07/10/2026 08:41" (heure locale du navigateur) ; vide ou invalide → "". */
-export function formatDateTimeFr(iso?: string | null): string {
+export function formatDateTimeFr(iso?: string | null, utc = false): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const p = (n: number) => String(n).padStart(2, '0');
+  if (utc) return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; // heure murale Coswin
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
