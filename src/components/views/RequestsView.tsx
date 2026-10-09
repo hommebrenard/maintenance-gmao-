@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
 import { RequestImportModal } from './RequestImportModal';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
+import {
+  EMPTY_FILTERS, STATE_ORDER, applyFilters, countByState, hasActiveFilters, paginate, sortRows, typeLabel,
+  type RequestFilters, type RequestRowView, type SortKey, type SortSpec,
+} from '../../utils/requestFilters';
 
 interface RequestsViewProps {
   requests: MaintenanceRequest[];
@@ -31,9 +35,12 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   locations = [],
   onImportRequests
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [selectedPriority, setSelectedPriority] = useState<string>('all');
+  const [filters, setFilters] = useState<RequestFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<SortSpec>({ key: 'date', dir: 'desc' });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const updateFilters = (patch: Partial<RequestFilters>) => { setFilters(f => ({ ...f, ...patch })); setPage(1); };
+  const toggleSort = (key: SortKey) => { setSort(prev => prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' || key === 'priority' ? 'desc' : 'asc' }); setPage(1); };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -47,7 +54,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const locationByCode = React.useMemo(() => new Map(locations.filter(l => l.code).map(l => [l.code as string, l] as [string, LocationItem])), [locations]);
   const equipmentById = React.useMemo(() => new Map(equipmentList.map(e => [e.id, e] as [string, Equipment])), [equipmentList]);
   const findEquipment = (req: MaintenanceRequest): Equipment | undefined =>
-    (req.equipmentId ? equipmentList.find(e => e.id === req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
+    (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
   const selectedRequest = selectedId ? requests.find(r => r.id === selectedId) : undefined;
 
   // Form
@@ -62,25 +69,34 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     return eq ? `${eq.name} (${eq.code})` : req.equipmentName ?? req.equipmentCode;
   };
 
-  const filteredRequests = requests.filter(req => {
-    const matchesSearch = req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          req.requestedBy.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ((equipmentLabel(req) ?? '').toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (req.code ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (req.dafNumber ?? '').toLowerCase().includes(searchQuery.toLowerCase());
-    
-    let matchesStatus = true;
-    if (selectedStatus) {
-      matchesStatus = req.status === selectedStatus;
-    }
+  const rows = React.useMemo<RequestRowView[]>(() => requests.map(req => {
+    const wo = req.workOrderId ? woByRequest.get(req.workOrderId) : undefined;
+    const eq = findEquipment(req);
+    const label = equipmentLabel(req);
+    const iso = req.createdAtIso ?? '';
+    return {
+      req, wo, state: displayState(req, wo), equipmentLabel: label,
+      siteKey: req.siteCode ?? eq?.location ?? '', matched: !!eq,
+      day: iso.slice(0, 10), ts: Date.parse(iso) || 0,
+      hay: [req.title, req.requestedBy, label, req.code, req.dafNumber, req.otNumber, req.equipmentCode, req.interventionType, req.siteCode, wo?.code]
+        .filter(Boolean).join(' ').toLowerCase(),
+    };
+  }), [requests, woByRequest, equipmentById, equipmentByCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    let matchesPriority = true;
-    if (selectedPriority !== 'all') {
-      matchesPriority = req.priority === selectedPriority;
-    }
-
-    return matchesSearch && matchesStatus && matchesPriority;
-  });
+  const stateCounts = React.useMemo(() => countByState(rows), [rows]);
+  const typeOptions = React.useMemo(() => Array.from(new Set(rows.map(r => r.req.interventionType).filter((v): v is string => !!v))).sort(), [rows]);
+  const siteOptions = React.useMemo(() => Array.from(new Set(rows.map(r => r.siteKey).filter(Boolean))).sort(), [rows]);
+  const filteredRows = React.useMemo(() => sortRows(applyFilters(rows, filters), sort), [rows, filters, sort]);
+  const paged = paginate(filteredRows, page, pageSize);
+  const pageRows = paged.items;
+  const siteLabel = (key: string) => { const n = locationByCode.get(key)?.name; return n && n !== key ? `${n} (${key})` : key; };
+  const sortTh = (key: SortKey, label: string) => (
+    <th className="text-left px-3 py-2.5 font-semibold">
+      <button onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 uppercase hover:text-gray-800">
+        {label}<span className="text-[10px]">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,49 +144,69 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
         </div>
 
         {/* Filter bar */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[240px] max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher des demandes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {['En attente', 'Approuvée', 'Rejetée'].map(status => (
-            <button
-              key={status}
-              onClick={() => setSelectedStatus(selectedStatus === status ? null : status)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                selectedStatus === status
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {status}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {STATE_ORDER.map(st => (
+            <button key={st} onClick={() => updateFilters({ state: filters.state === st ? 'all' : st })}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${filters.state === st ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+              {st} <span className={filters.state === st ? 'opacity-90' : 'text-gray-400'}>({stateCounts[st]})</span>
             </button>
           ))}
-
-          <select
-            value={selectedPriority}
-            onChange={(e) => setSelectedPriority(e.target.value)}
-            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
-          >
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] max-w-sm flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="N° DI, N° OT, équipement, demandeur, N° DAF…" value={filters.search}
+              onChange={(e) => updateFilters({ search: e.target.value })}
+              className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <select value={filters.priority} onChange={(e) => updateFilters({ priority: e.target.value as RequestFilters['priority'] })}
+            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="all">Priorité (Toutes)</option>
-            <option value="Faible">Faible</option>
-            <option value="Moyenne">Moyenne</option>
-            <option value="Élevée">Élevée</option>
-            <option value="Urgente">Urgente</option>
+            <option value="Faible">Faible</option><option value="Moyenne">Moyenne</option>
+            <option value="Élevée">Élevée</option><option value="Urgente">Urgente</option>
           </select>
+          <select value={filters.type} onChange={(e) => updateFilters({ type: e.target.value })}
+            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none max-w-[220px]">
+            <option value="all">Type (Tous)</option>
+            {typeOptions.map(t => <option key={t} value={t}>{typeLabel(t)}</option>)}
+          </select>
+          <select value={filters.site} onChange={(e) => updateFilters({ site: e.target.value })}
+            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none max-w-[220px]">
+            <option value="all">Site (Tous)</option>
+            {siteOptions.map(k => <option key={k} value={k}>{siteLabel(k)}</option>)}
+          </select>
+          <select value={filters.origin} onChange={(e) => updateFilters({ origin: e.target.value as RequestFilters['origin'] })}
+            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
+            <option value="all">Origine (Toutes)</option><option value="coswin">Coswin</option><option value="app">Application</option>
+          </select>
+          <label className="flex items-center gap-1 text-xs text-gray-600">Du
+            <input type="date" value={filters.from} onChange={(e) => updateFilters({ from: e.target.value })} className="px-2 py-1 text-xs border border-gray-300 rounded-lg" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-gray-600">au
+            <input type="date" value={filters.to} onChange={(e) => updateFilters({ to: e.target.value })} className="px-2 py-1 text-xs border border-gray-300 rounded-lg" />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input type="checkbox" checked={filters.unmatchedOnly} onChange={(e) => updateFilters({ unmatchedOnly: e.target.checked })} />
+            Équipement non rapproché
+          </label>
+          {hasActiveFilters(filters) && (
+            <button onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <RotateCcw className="w-3.5 h-3.5" />Réinitialiser
+            </button>
+          )}
+          <span className="text-xs text-gray-500 ml-auto">{filteredRows.length} demande(s) sur {requests.length}</span>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 p-6 bg-gray-50/50">
-        {filteredRequests.length === 0 ? (
+        {requests.length > 0 && filteredRows.length === 0 ? (
+          <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center bg-white my-6 max-w-3xl mx-auto">
+            <h3 className="text-base font-semibold text-gray-900">Aucune demande ne correspond aux filtres</h3>
+            <button onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); }} className="mt-4 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Réinitialiser les filtres</button>
+          </div>
+        ) : requests.length === 0 ? (
           /* Empty State Box matching Screenshot 2 */
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto shadow-2xs">
             <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 text-blue-500">
@@ -193,29 +229,27 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-[11px] uppercase text-gray-500">
                 <tr>
-                  <th className="text-left px-3 py-2.5 font-semibold">N° DI</th>
-                  <th className="text-left px-3 py-2.5 font-semibold">Déclarée le</th>
+                  {sortTh('code', 'N° DI')}
+                  {sortTh('date', 'Déclarée le')}
                   <th className="text-left px-3 py-2.5 font-semibold">Équipement</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Description</th>
-                  <th className="text-left px-3 py-2.5 font-semibold">Priorité</th>
+                  {sortTh('priority', 'Priorité')}
                   <th className="text-left px-3 py-2.5 font-semibold">Type</th>
                   <th className="text-left px-3 py-2.5 font-semibold">N° DAF</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Demandeur</th>
-                  <th className="text-left px-3 py-2.5 font-semibold">État</th>
+                  {sortTh('state', 'État')}
                   <th className="text-left px-3 py-2.5 font-semibold">N° OT</th>
                   {isManager && <th className="px-3 py-2.5" />}
                 </tr>
               </thead>
               <tbody>
-                {filteredRequests.map(req => {
-                  const wo = req.workOrderId ? woByRequest.get(req.workOrderId) : undefined;
-                  const state = displayState(req, wo);
+                {pageRows.map(({ req, wo, state, equipmentLabel: eqLabel }) => {
                   return (
                     <tr key={req.id} onClick={() => setSelectedId(req.id)}
                       className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer">
                       <td className="px-3 py-2.5 font-mono text-xs text-gray-700 whitespace-nowrap">{req.code}</td>
                       <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{req.createdAt}</td>
-                      <td className="px-3 py-2.5 text-xs text-gray-800 max-w-[220px] truncate">{equipmentLabel(req) ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-800 max-w-[220px] truncate">{eqLabel ?? '—'}</td>
                       <td className="px-3 py-2.5 font-medium text-gray-900 max-w-[260px] truncate">{req.title}</td>
                       <td className="px-3 py-2.5">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
@@ -224,7 +258,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                           'bg-blue-100 text-blue-700 border-blue-200'
                         }`}>{req.priority}</span>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.interventionType ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap" title={typeLabel(req.interventionType)}>{req.interventionType ?? '—'}</td>
                       <td className="px-3 py-2.5 font-mono text-[11px] text-gray-700 whitespace-nowrap">{req.dafNumber ?? '—'}</td>
                       <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.requestedBy}</td>
                       <td className="px-3 py-2.5">
@@ -252,6 +286,23 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 })}
               </tbody>
             </table>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 border-t border-gray-100 bg-white text-xs text-gray-600">
+              <span>
+                {filteredRows.length === 0 ? 0 : (paged.page - 1) * pageSize + 1}–{Math.min(paged.page * pageSize, filteredRows.length)} sur {filteredRows.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1">Lignes
+                  <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="px-2 py-1 border border-gray-300 rounded-lg">
+                    {[50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                <button disabled={paged.page <= 1} onClick={() => setPage(1)} className="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40">«</button>
+                <button disabled={paged.page <= 1} onClick={() => setPage(paged.page - 1)} className="p-1 border border-gray-300 rounded-lg disabled:opacity-40"><ChevronLeft className="w-4 h-4" /></button>
+                <span>Page {paged.page} / {paged.pages}</span>
+                <button disabled={paged.page >= paged.pages} onClick={() => setPage(paged.page + 1)} className="p-1 border border-gray-300 rounded-lg disabled:opacity-40"><ChevronRight className="w-4 h-4" /></button>
+                <button disabled={paged.page >= paged.pages} onClick={() => setPage(paged.pages)} className="px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40">»</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
