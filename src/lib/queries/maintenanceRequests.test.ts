@@ -11,6 +11,7 @@ vi.mock('../supabaseClient', () => {
     const chain: any = {
       eq: () => chain,
       order: () => chain,
+      range: (from: number, to: number) => Promise.resolve({ data: state.rows.slice(from, to + 1), error: state.error }),
       select: () => chain,
       single: () => Promise.resolve({ data: state.rows[0] ?? null, error: state.error }),
       then: (res: any, rej: any) => Promise.resolve({ data: state.rows, error: state.error }).then(res, rej),
@@ -43,6 +44,13 @@ const ROW = {
 
 describe('maintenanceRequests', () => {
   beforeEach(() => { calls.length = 0; state.rows = []; state.error = null; });
+
+  it('lecture paginée : plus de 1000 demandes toutes récupérées (heure Coswin affichée telle quelle)', async () => {
+    state.rows = Array.from({ length: 2354 }, (_, i) => ({ ...ROW, id: 'r' + i, code: 'DI' + i, origin: 'coswin', created_at: '2026-01-05T16:39:00+00:00' }));
+    const res = await fetchMaintenanceRequests();
+    expect(res).toHaveLength(2354);
+    expect(res[0].createdAt).toContain('16:39');
+  });
 
   it('lecture : enums base → libellés app, nom du rondier', async () => {
     state.rows = [ROW];
