@@ -21,6 +21,13 @@ describe('requestDisplay', () => {
     expect(displayState({ status: 'Approuvée', otState: 'T' })).toBe('Clôturée');
     expect(displayState({ status: 'Approuvée', otState: 'A' })).toBe('Prise en charge');
   });
+  it('états OT Coswin : E/T/U/V/Z clôturée, N/X annulé, autres en cours ; DI 17 clôturée sans OT', () => {
+    for (const c of ['E', 'T', 'U', 'V', 'Z']) expect(displayState({ status: 'Approuvée', otState: c })).toBe('Clôturée');
+    for (const c of ['N', 'X']) expect(displayState({ status: 'Approuvée', otState: c })).toBe('OT annulé');
+    for (const c of ['A', 'G', 'B', 'C', 'P']) expect(displayState({ status: 'Approuvée', otState: c })).toBe('Prise en charge');
+    expect(displayState({ status: 'Approuvée', coswinState: '17. Clôturée sans OT' })).toBe('Clôturée');
+    expect(displayState({ status: 'Approuvée', coswinState: '3. OT créé' })).toBe('Prise en charge');
+  });
   it('index : uniquement les OT liés à une demande', () => {
     const m = indexWorkOrders([wo('a', 'Ouvert'), wo('b', 'Terminé'), wo('c', 'Ouvert')], [req('Approuvée', 'b'), req('En attente')]);
     expect([...m.keys()]).toEqual(['b']);

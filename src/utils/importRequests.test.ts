@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeRequestRows, buildImportContext, parseCoswinDate, toIsoTimestamp, toIsoDate, coswinStateNumber, norm } from './importRequests';
+import { analyzeRequestRows, COSWIN_STATE_MAP, buildImportContext, parseCoswinDate, toIsoTimestamp, toIsoDate, coswinStateNumber, norm } from './importRequests';
 
 const ctx = buildImportContext({
   requests: [{ code: 'DI00000001' }],
@@ -22,11 +22,11 @@ describe('importRequests : dates', () => {
   it('numéro de série Excel → date et heure sans décalage', () => {
     const p = parseCoswinDate(46027.69375)!; // 05/01/2026 16:39
     expect(toIsoDate(p)).toBe('2026-01-05');
-    expect(toIsoTimestamp(p)).toBe('2026-01-05T16:39:00+01:00');
+    expect(toIsoTimestamp(p)).toBe('2026-01-05T16:39:00+00:00');
   });
   it('textes jj/mm/aaaa et aaaa-mm-jj', () => {
     expect(toIsoDate(parseCoswinDate('05/01/2026 16:39')!)).toBe('2026-01-05');
-    expect(toIsoTimestamp(parseCoswinDate('2026-01-05 16:39')!)).toBe('2026-01-05T16:39:00+01:00');
+    expect(toIsoTimestamp(parseCoswinDate('2026-01-05 16:39')!)).toBe('2026-01-05T16:39:00+00:00');
     expect(parseCoswinDate('n\'importe quoi')).toBeNull();
     expect(parseCoswinDate('')).toBeNull();
   });
@@ -46,8 +46,8 @@ describe('importRequests : analyse', () => {
       intervention_type: 'DAF', daf_number: '173-N-CTA-01-26', ot_number: '80437', ot_state: 'T', site_code: 'BAM_TNG_CV',
       equipment_code: 'BAM-TNG_CV-SANT-26', equipment_id: null, location_id: null, work_order_id: null, due_date: '2026-01-05',
       intervention_code: 'CO00001435', supervisor_name: null, qse_type: null });
-    expect(r.declared_at).toBe('2026-01-05T16:39:00+01:00');
-    expect(r.created_at).toBe('2026-01-05T16:39:00+01:00');
+    expect(r.declared_at).toBe('2026-01-05T16:39:00+00:00');
+    expect(r.created_at).toBe('2026-01-05T16:39:00+00:00');
     expect(report.equipmentUnmatched).toBe(1);
     expect(report.siteUnmatched).toBe(1);
     expect(report.otUnlinked).toBe(1);
@@ -90,5 +90,10 @@ describe('importRequests : analyse', () => {
     const { report, rows } = analyzeRequestRows([{ 'Colonne': 'x' }], ctx);
     expect(report.missingHeaders).toEqual(['N° de DI', "Description de la demande d'intervention", 'État']);
     expect(rows).toHaveLength(0);
+  });
+
+  it('mapping des états Coswin', () => {
+    expect(COSWIN_STATE_MAP).toMatchObject({ '0': 'en_attente', '1': 'en_attente', '14': 'en_attente', '3': 'approuvee', '17': 'approuvee', '5': 'rejetee' });
+    expect(COSWIN_STATE_MAP['8']).toBeUndefined();
   });
 });
