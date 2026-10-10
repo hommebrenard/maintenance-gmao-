@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceRequest } from '../types';
 import { EMPTY_FILTERS, type RequestRowView } from './requestFilters';
-import { EXPORT_COLUMNS, buildExportRows, describeFilters, formatRequestDate, periodLabel } from './requestExport';
+import { EXPORT_COLUMNS, buildExportRows, describeFilters, formatRequestDate, formatRequestDateFr, periodLabel } from './requestExport';
 
 const row = (o: Partial<MaintenanceRequest>, extra: Partial<RequestRowView> = {}): RequestRowView => ({
   req: { id: 'x', code: 'DI00000001', title: 'Fuite', description: 'd', priority: 'Moyenne', requestedBy: 'A', status: 'En attente', createdAt: '', origin: 'coswin', ...o } as MaintenanceRequest,
@@ -34,5 +34,10 @@ describe('requestExport', () => {
     expect(periodLabel(rs, { from: '2026-01-01', to: '' })).toBe('du 01/01/2026 au 07/10/2026');
     expect(periodLabel([], { from: '2026-01-01', to: '' })).toBe('à partir du 01/01/2026');
     expect(periodLabel([], { from: '', to: '' })).toBe('');
+  });
+  it('date au format français pour le PDF, même pour une demande de l\'application', () => {
+    expect(formatRequestDateFr('2026-01-05T16:39:00+00:00', 'coswin')).toBe('05/01/2026 16:39');
+    expect(formatRequestDateFr(undefined, 'coswin')).toBe('');
+    expect(formatRequestDateFr('2026-10-07T12:00:00', 'app')).toMatch(/^07\/10\/2026 \d{2}:\d{2}$/);
   });
 });

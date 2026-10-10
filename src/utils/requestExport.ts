@@ -2,12 +2,20 @@ import * as XLSX from 'xlsx';
 import type { RequestFilters, RequestRowView } from './requestFilters';
 import { typeLabel } from './requestFilters';
 
-/** Date « murale » Coswin (offset +00:00, jamais convertie) ou date locale pour les demandes de l'application. */
+/** Date « murale » Coswin (offset +00:00, jamais convertie) ; heure locale pour les demandes de l'application.
+ *  Format AAAA-MM-JJ HH:mm (triable dans Excel). */
 export function formatRequestDate(iso: string | undefined, origin?: 'app' | 'coswin'): string {
   if (!iso) return '';
   if (origin === 'coswin') return iso.slice(0, 16).replace('T', ' ');
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('fr-FR');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('sv-SE').slice(0, 16);
+}
+
+/** Même date au format français JJ/MM/AAAA HH:mm (PDF, comme à l'écran). */
+export function formatRequestDateFr(iso: string | undefined, origin?: 'app' | 'coswin'): string {
+  const v = formatRequestDate(iso, origin);
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/.exec(v);
+  return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : v;
 }
 
 export const EXPORT_COLUMNS = [

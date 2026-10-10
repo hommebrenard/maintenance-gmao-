@@ -1,11 +1,11 @@
 import { jsPDF } from 'jspdf';
 import type { RequestFilters, RequestRowView } from './requestFilters';
-import { describeFilters, formatRequestDate, periodLabel } from './requestExport';
+import { describeFilters, formatRequestDateFr, periodLabel } from './requestExport';
 
 const W = 297, H = 210, M = 10, CW = W - 2 * M, BOTTOM = H - 14, FS = 7.5, LH = 3.3;
 const COLS: { label: string; w: number; get: (r: RequestRowView) => string }[] = [
   { label: 'N° DI', w: 30, get: r => r.req.code ?? '' },
-  { label: 'Déclarée le', w: 25, get: r => formatRequestDate(r.req.createdAtIso, r.req.origin) },
+  { label: 'Déclarée le', w: 25, get: r => formatRequestDateFr(r.req.createdAtIso, r.req.origin) },
   { label: 'État', w: 20, get: r => r.state },
   { label: 'Priorité', w: 15, get: r => r.req.priority },
   { label: 'Type', w: 11, get: r => r.req.interventionType ?? '' },
@@ -71,7 +71,7 @@ export function renderRequestListPdf(rows: RequestRowView[], filters: RequestFil
     const cells = COLS.map(c => wrapCell(doc, c.get(r), c.w));
     const h = Math.max(...cells.map(l => l.length)) * LH + 2;
     if (y + h > BOTTOM) newPage();
-    doc.setTextColor(20);
+    doc.setFont('helvetica', 'normal').setFontSize(FS).setTextColor(20); // newPage() dessine l'en-tête en gras : on rétablit le texte normal
     let x = M;
     COLS.forEach((c, i) => { doc.text(cells[i], x + 1, y + 3.3); x += c.w; });
     y += h;
