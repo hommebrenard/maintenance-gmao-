@@ -31,7 +31,6 @@ interface SidebarProps {
   onSelectTab: (tab: NavigationItem) => void;
   onOpenHelp: () => void;
   unreadMessagesCount?: number;
-  pendingRequestsCount?: number;
   /** Tiroir mobile (étape 2 bis, 25/09) : masqué par défaut sous `md`, ouvert
    *  via le bouton ☰ du bandeau (App.tsx). Ignoré à partir de `md` (≥768px),
    *  où le menu reste affiché en permanence comme avant. */
@@ -44,7 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   onOpenHelp,
   unreadMessagesCount = 0,
-  pendingRequestsCount = 0,
   isOpen,
   onClose
 }) => {
@@ -123,11 +121,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Inbox className={`w-4 h-4 ${isActive('requests') ? 'text-blue-600' : 'text-gray-500'}`} />
                 <span>Demandes</span>
               </div>
-              {pendingRequestsCount > 0 && (
-                <span className="px-1.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full">
-                  {pendingRequestsCount}
-                </span>
-              )}
             </button>
 
             <button
