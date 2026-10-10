@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
 import { RequestImportModal } from './RequestImportModal';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
+import { exportRequestsToXlsx } from '../../utils/requestExport';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 import {
   EMPTY_FILTERS, STATE_ORDER, applyFilters, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
@@ -194,7 +195,11 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               <RotateCcw className="w-3.5 h-3.5" />Réinitialiser
             </button>
           )}
-          <span className="text-xs text-gray-500 ml-auto">{filteredRows.length} demande(s) sur {requests.length}</span>
+          <button onClick={() => exportRequestsToXlsx(filteredRows, filters, requests.length)} disabled={filteredRows.length === 0}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 ml-auto">
+            <Download className="w-3.5 h-3.5" />Exporter Excel ({filteredRows.length})
+          </button>
+          <span className="text-xs text-gray-500">{filteredRows.length} demande(s) sur {requests.length}</span>
         </div>
       </div>
 
