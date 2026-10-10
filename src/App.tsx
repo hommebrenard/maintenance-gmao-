@@ -1243,7 +1243,6 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           currentTab={currentTab}
           onSelectTab={setCurrentTab}
           onOpenHelp={() => setIsHelpModalOpen(true)}
-          pendingRequestsCount={requests.filter(r => r.status === 'En attente').length}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
         />
