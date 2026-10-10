@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download } from 'lucide-react';
+import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
 import { RequestImportModal } from './RequestImportModal';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
+import { exportRequestListToPdf, printRequestList } from '../../utils/requestListPdf';
 import { exportRequestsToXlsx } from '../../utils/requestExport';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 import {
@@ -125,6 +126,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Demandes</h1>
             <p className="text-sm text-gray-500 mt-1">
               Examinez les demandes de maintenance entrantes avant de les convertir en ordres de travail.
+              <span className="font-medium text-gray-700"> {requests.length} demande(s) au total.</span>
             </p>
           </div>
 
@@ -145,6 +147,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
         {/* Filter bar */}
         <div className="mt-5 flex flex-wrap items-center gap-2">
+          <button onClick={() => updateFilters({ state: 'all' })}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${filters.state === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+            Toutes <span className={filters.state === 'all' ? 'opacity-90' : 'text-gray-400'}>({STATE_ORDER.reduce((n, st) => n + stateCounts[st], 0)})</span>
+          </button>
           {STATE_ORDER.map(st => (
             <button key={st} onClick={() => updateFilters({ state: filters.state === st ? 'all' : st })}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${filters.state === st ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
@@ -197,7 +203,15 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
           )}
           <button onClick={() => exportRequestsToXlsx(filteredRows, filters, requests.length)} disabled={filteredRows.length === 0}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 ml-auto">
-            <Download className="w-3.5 h-3.5" />Exporter Excel ({filteredRows.length})
+            <Download className="w-3.5 h-3.5" />Excel ({filteredRows.length})
+          </button>
+          <button onClick={() => exportRequestListToPdf(filteredRows, filters, requests.length)} disabled={filteredRows.length === 0}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            <FileText className="w-3.5 h-3.5" />PDF
+          </button>
+          <button onClick={() => printRequestList(filteredRows, filters, requests.length)} disabled={filteredRows.length === 0}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            <Printer className="w-3.5 h-3.5" />Imprimer
           </button>
           <span className="text-xs text-gray-500">{filteredRows.length} demande(s) sur {requests.length}</span>
         </div>

@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
-import { X, CheckCircle2, XCircle } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Printer, Download } from 'lucide-react';
 import type { MaintenanceRequest, Equipment, WorkOrder } from '../../types';
 import { displayState, DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { responsibleOf } from '../../utils/workOrderResponsible';
 import { formatDateFr } from '../../utils/reportTable';
 import { formatDateTimeFr } from '../../utils/reportExport';
+import { exportRequestToPdf, printRequestPdf } from '../../utils/requestPdf';
 
 interface Props {
   request: MaintenanceRequest;
@@ -46,7 +47,17 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <span className="font-mono text-sm text-gray-600">{request.code}</span>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Fermer"><X className="w-5 h-5" /></button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => exportRequestToPdf({ request, equipment, locationName, workOrder })}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <Download className="w-3.5 h-3.5" /><span>Télécharger PDF</span>
+            </button>
+            <button onClick={() => printRequestPdf({ request, equipment, locationName, workOrder })}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <Printer className="w-3.5 h-3.5" /><span>Imprimer</span>
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Fermer"><X className="w-5 h-5" /></button>
+          </div>
         </div>
 
         <div className="p-6 space-y-5">
