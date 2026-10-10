@@ -110,6 +110,7 @@ const VISA_BLOCK_H = 6 + 5 + VISA_BOX_H + 2;
 export function renderRequestPdf(input: RequestPdfInput, printedAt = new Date()): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const state = displayState(input.request, input.workOrder);
+  doc.setProperties({ title: `Demande d'intervention ${input.request.code ?? ''}`.trim(), subject: state });
   let y = M;
 
   doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(20);

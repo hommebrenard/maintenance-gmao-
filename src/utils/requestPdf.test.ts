@@ -31,4 +31,7 @@ describe('requestPdf', () => {
     const doc = renderRequestPdf({ request: req() });
     expect(doc.getNumberOfPages()).toBe(1);
   });
+  it('titre interne du PDF = « Demande d\'intervention <N° DI> »', () => {
+    expect(String(renderRequestPdf({ request: req() }).output()).includes("/Title (Demande d'intervention DI00001819)")).toBe(true);
+  });
 });
