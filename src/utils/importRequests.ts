@@ -143,18 +143,25 @@ export interface ImportReport {
 
 const nul = (s: string): string | null => (s === '' ? null : s);
 
-export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: ImportContext): { report: ImportReport; rows: RequestInsertRow[] } {
+/**
+ * Analyse un export Coswin. Par défaut (import) : seules les DI nouvelles sont retenues dans `rows`.
+ * Avec `syncExisting` (synchronisation) : les DI déjà présentes sont retenues dans `existingRows`, `rows` reste celui des nouvelles.
+ */
+export function analyzeRequestRows(
+  rawRows: Record<string, unknown>[], ctx: ImportContext, opts: { syncExisting?: boolean } = {},
+): { report: ImportReport; rows: RequestInsertRow[]; existingRows: RequestInsertRow[] } {
   const report: ImportReport = {
     missingHeaders: [], totalRows: 0, blankRows: 0, newCount: 0, alreadyCount: 0, invalid: [], skippedUnknownState: [],
     equipmentMatched: 0, equipmentUnmatched: 0, siteMatched: 0, siteUnmatched: 0, otLinked: 0, otUnlinked: 0,
     unmatchedEquipment: [], unmatchedSites: [], warnings: [],
   };
   const rows: RequestInsertRow[] = [];
+  const existingRows: RequestInsertRow[] = [];
 
   const present = new Set<Field>();
   for (const k of Object.keys(rawRows[0] ?? {})) { const f = HEADER_BY_NORM.get(norm(k)); if (f) present.add(f); }
   report.missingHeaders = COSWIN_HEADERS.filter(([, f]) => REQUIRED.includes(f) && !present.has(f)).map(([h]) => h);
-  if (report.missingHeaders.length > 0) return { report, rows };
+  if (report.missingHeaders.length > 0) return { report, rows, existingRows };
 
   const seen = new Set<string>();
   const unknownStates = new Map<string, number>();
@@ -171,7 +178,8 @@ export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: Impo
     if (!code) { report.invalid.push({ code: '(sans N° de DI)', reason: 'N° de DI manquant' }); continue; }
     if (seen.has(code)) { report.warnings.push({ code, message: 'N° de DI en double dans le fichier : seule la première ligne est retenue' }); continue; }
     seen.add(code);
-    if (ctx.existingCodes.has(code)) { report.alreadyCount += 1; continue; }
+    const isExisting = ctx.existingCodes.has(code);
+    if (isExisting) { report.alreadyCount += 1; if (!opts.syncExisting) continue; }
 
     const title = g('title');
     if (!title) { report.invalid.push({ code, reason: 'Description manquante' }); continue; }
@@ -223,7 +231,7 @@ export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: Impo
     const workOrderId = otNumber ? ctx.workOrderIdByCode.get(`OT-${otNumber}`) ?? null : null;
     if (otNumber) { if (workOrderId) report.otLinked += 1; else report.otUnlinked += 1; }
 
-    rows.push({
+    (isExisting ? existingRows : rows).push({
       code, title, description: null, priority: priority ?? 'moyenne', status,
       equipment_id: equipmentId, location_id: locationId, requester_name: nul(g('requester')), work_order_id: workOrderId,
       ...((incoherent ? coswinCreatedAt : (declaredAt ?? coswinCreatedAt)) ? { created_at: (incoherent ? coswinCreatedAt : (declaredAt ?? coswinCreatedAt)) as string } : {}),
@@ -240,5 +248,21 @@ export function analyzeRequestRows(rawRows: Record<string, unknown>[], ctx: Impo
   report.skippedUnknownState = Array.from(unknownStates, ([state, count]) => ({ state, count })).sort((a, b) => b.count - a.count);
   report.unmatchedEquipment = Array.from(unmatchedEq).sort();
   report.unmatchedSites = Array.from(unmatchedSite).sort();
-  return { report, rows };
+  return { report, rows, existingRows };
+}
+
+/** Champs envoyés à la fonction SQL de synchronisation (noms de colonnes ; Coswin fait foi pour ces champs). */
+export const SYNC_FIELDS = [
+  'coswin_state', 'ot_number', 'ot_state', 'ot_state_label', 'supervisor_name', 'cost_center', 'function_label', 'function_code',
+  'visa', 'intervention_code', 'intervention_type', 'qse_type', 'daf_number', 'priority_code', 'planned_equipment_code',
+  'equipment_code', 'site_code', 'ot_end_date', 'planned_start', 'due_date',
+] as const;
+
+export function toSyncPayload(rows: RequestInsertRow[]): Record<string, string | null>[] {
+  return rows.map(r => {
+    const o: Record<string, string | null> = { code: r.code, status: r.status };
+    const rec = r as unknown as Record<string, string | null | undefined>;
+    for (const f of SYNC_FIELDS) o[f] = rec[f] ?? null;
+    return o;
+  });
 }
