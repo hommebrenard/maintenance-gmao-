@@ -173,3 +173,20 @@ export async function importMaintenanceRequests(rows: RequestInsertRow[], userId
     if (error) throw error;
   }
 }
+
+export interface SyncChangeDetail { code: string; champ: string; ancienne: string | null; nouvelle: string | null }
+export interface SyncResult {
+  lot: string; applique: boolean; lignes_recues: number; absentes_en_base: number; di_modifiees: number; champs_modifies: number;
+  statuts_modifies: number; en_attente_resolues: number; regressions_vers_en_attente: number; statuts_proteges_decision_locale: number;
+  detail_300_premiers: SyncChangeDetail[];
+}
+
+/**
+ * Synchronisation Coswin des DI EXISTANTES (fonction SQL réservée au responsable, une seule transaction).
+ * apply = false : aperçu chiffré sans aucune écriture ; apply = true : écrit + historique des modifications.
+ */
+export async function syncMaintenanceRequests(payload: Record<string, string | null>[], batchId: string, apply: boolean): Promise<SyncResult> {
+  const { data, error } = await supabase.rpc('sync_maintenance_requests', { p_rows: payload, p_batch_id: batchId, p_apply: apply });
+  if (error) throw error;
+  return data as SyncResult;
+}
