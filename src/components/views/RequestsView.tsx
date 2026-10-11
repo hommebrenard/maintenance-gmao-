@@ -8,7 +8,7 @@ import { exportRequestListToPdf, printRequestList } from '../../utils/requestLis
 import { exportRequestsToXlsx } from '../../utils/requestExport';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
 import {
-  EMPTY_FILTERS, STATE_ORDER, applyFilters, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
+  EMPTY_FILTERS, NO_SITE, STATE_ORDER, applyFilters, canonicalSiteKey, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
   type RequestFilters, type RequestRowView, type SortKey, type SortSpec,
 } from '../../utils/requestFilters';
 
@@ -53,7 +53,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
   // Rapprochement à l'affichage : une demande importée avant l'équipement/le site est retrouvée par son code.
   const equipmentByCode = React.useMemo(() => new Map(equipmentList.map(e => [e.code, e] as [string, Equipment])), [equipmentList]);
-  const locationByCode = React.useMemo(() => new Map(locations.filter(l => l.code).map(l => [l.code as string, l] as [string, LocationItem])), [locations]);
+  const locationByKey = React.useMemo(() => new Map(locations.filter(l => l.code).map(l => [canonicalSiteKey(l.code), l] as [string, LocationItem])), [locations]);
   const equipmentById = React.useMemo(() => new Map(equipmentList.map(e => [e.id, e] as [string, Equipment])), [equipmentList]);
   const findEquipment = (req: MaintenanceRequest): Equipment | undefined =>
     (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
@@ -78,7 +78,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     const iso = req.createdAtIso ?? '';
     return {
       req, wo, state: displayState(req, wo), equipmentLabel: label,
-      siteKey: req.siteCode ?? eq?.location ?? '', matched: !!eq,
+      siteKey: canonicalSiteKey(req.siteCode || eq?.location), matched: !!eq,
       day: iso.slice(0, 10), ts: Date.parse(iso) || 0,
       hay: buildSearchText(req, label, wo?.code),
     };
@@ -90,7 +90,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const filteredRows = React.useMemo(() => sortRows(applyFilters(rows, filters), sort), [rows, filters, sort]);
   const paged = paginate(filteredRows, page, pageSize);
   const pageRows = paged.items;
-  const siteLabel = (key: string) => { const n = locationByCode.get(key)?.name; return n && n !== key ? `${n} (${key})` : key; };
+  const hasNoSite = React.useMemo(() => rows.some(r => !r.siteKey), [rows]);
+  const siteLabel = (key: string) => { const n = locationByKey.get(key)?.name; return n && n !== key ? `${n} (${key})` : key; };
   const sortTh = (key: SortKey, label: string) => (
     <th className="text-left px-3 py-2.5 font-semibold">
       <button onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 uppercase hover:text-gray-800">
@@ -180,6 +181,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none max-w-[220px]">
             <option value="all">Site (Tous)</option>
             {siteOptions.map(k => <option key={k} value={k}>{siteLabel(k)}</option>)}
+            {hasNoSite && <option value={NO_SITE}>Site non précisé</option>}
           </select>
           <select value={filters.origin} onChange={(e) => updateFilters({ origin: e.target.value as RequestFilters['origin'] })}
             className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
@@ -333,7 +335,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
         <RequestDetailModal
           request={selectedRequest}
           equipment={findEquipment(selectedRequest)}
-          locationName={selectedRequest.siteCode ? locationByCode.get(selectedRequest.siteCode)?.name : undefined}
+          locationName={selectedRequest.siteCode ? locationByKey.get(canonicalSiteKey(selectedRequest.siteCode))?.name : undefined}
           workOrder={selectedRequest.workOrderId ? woByRequest.get(selectedRequest.workOrderId) : undefined}
           isManager={isManager}
           onClose={() => setSelectedId(null)}
