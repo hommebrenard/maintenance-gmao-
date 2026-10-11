@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeRequestRows, COSWIN_STATE_MAP, buildImportContext, parseCoswinDate, toIsoTimestamp, toIsoDate, coswinStateNumber, norm } from './importRequests';
+import { analyzeRequestRows, toSyncPayload, SYNC_FIELDS, COSWIN_STATE_MAP, buildImportContext, parseCoswinDate, toIsoTimestamp, toIsoDate, coswinStateNumber, norm } from './importRequests';
 
 const ctx = buildImportContext({
   requests: [{ code: 'DI00000001' }],
@@ -95,5 +95,37 @@ describe('importRequests : analyse', () => {
   it('mapping des états Coswin', () => {
     expect(COSWIN_STATE_MAP).toMatchObject({ '0': 'en_attente', '1': 'en_attente', '14': 'en_attente', '3': 'approuvee', '17': 'approuvee', '5': 'rejetee' });
     expect(COSWIN_STATE_MAP['8']).toBeUndefined();
+  });
+});
+
+describe('importRequests : synchronisation des DI existantes', () => {
+  const existing = row({ 'N° de DI': 'DI00000001', 'État': '3. OT créé', "N° d'OT": 80437 });
+  const fresh = row({ 'N° de DI': 'DI00009999' });
+
+  it("mode import : une DI existante n'est jamais retenue", () => {
+    const a = analyzeRequestRows([existing, fresh], ctx);
+    expect(a.rows.map(r => r.code)).toEqual(['DI00009999']);
+    expect(a.existingRows).toEqual([]);
+  });
+  it('mode synchronisation : les DI existantes sont retenues à part, les nouvelles restent dans rows', () => {
+    const a = analyzeRequestRows([existing, fresh], ctx, { syncExisting: true });
+    expect(a.existingRows.map(r => r.code)).toEqual(['DI00000001']);
+    expect(a.rows.map(r => r.code)).toEqual(['DI00009999']);
+    expect(a.report.alreadyCount).toBe(1);
+  });
+  it('payload : code, statut et uniquement les champs Coswin, jamais titre / demandeur / priorité', () => {
+    const a = analyzeRequestRows([existing], ctx, { syncExisting: true });
+    const [p] = toSyncPayload(a.existingRows);
+    expect(Object.keys(p).sort()).toEqual(['code', 'status', ...SYNC_FIELDS].sort());
+    expect(p.code).toBe('DI00000001');
+    expect(p.status).toBe('approuvee');
+    expect(p.ot_number).toBe('80437');
+    expect(p.due_date).toBe('2026-01-05');
+    expect(p.supervisor_name).toBeNull();
+  });
+  it('un état Coswin inconnu exclut la DI de la synchronisation', () => {
+    const a = analyzeRequestRows([row({ 'N° de DI': 'DI00000001', 'État': '99. Inconnu' })], ctx, { syncExisting: true });
+    expect(a.existingRows).toEqual([]);
+    expect(a.report.skippedUnknownState[0].state).toBe('99. Inconnu');
   });
 });
