@@ -67,7 +67,7 @@ import {
 } from './types';
 import { fetchProfiles } from './lib/queries/profiles';
 import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
-import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, importMaintenanceRequests } from './lib/queries/maintenanceRequests';
+import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, importMaintenanceRequests, syncMaintenanceRequests, type SyncResult } from './lib/queries/maintenanceRequests';
 import type { RequestInsertRow } from './utils/importRequests';
 
 // Helper for localStorage state persistence
@@ -620,6 +620,13 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     return rows.filter(r => !before.has(r.code) && after.has(r.code)).length;
   };
 
+  // Synchronisation Coswin des DI existantes : aperçu (apply = false) ou écriture atomique (apply = true), puis rechargement.
+  const handleSyncRequests = async (payload: Record<string, string | null>[], batchId: string, apply: boolean): Promise<SyncResult> => {
+    const res = await syncMaintenanceRequests(payload, batchId, apply);
+    if (apply && res.applique) setRequests(await fetchMaintenanceRequests());
+    return res;
+  };
+
   const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => {
     if (!reqData.equipmentId) {
       alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
@@ -1057,6 +1064,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             workOrders={workOrders}
             locations={locations}
             onImportRequests={handleImportRequests}
+            onSyncRequests={handleSyncRequests}
           />
         );
       case 'messages':
