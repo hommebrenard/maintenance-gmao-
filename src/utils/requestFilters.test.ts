@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceRequest } from '../types';
-import { EMPTY_FILTERS, applyFilters, buildSearchText, countByState, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel, type RequestRowView } from './requestFilters';
+import { EMPTY_FILTERS, NO_SITE, canonicalSiteKey, applyFilters, buildSearchText, countByState, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel, type RequestRowView } from './requestFilters';
 
 type Opts = Omit<Partial<RequestRowView>, 'req'> & { req?: Partial<MaintenanceRequest> };
 
@@ -65,5 +65,22 @@ describe('requestFilters', () => {
     expect(hay).toContain('ot-80437');
     expect(hay).toContain('80437');
     expect(buildSearchText({ code: 'DI2', title: 'y', requestedBy: 'b' } as MaintenanceRequest)).not.toContain('ot-');
+  });
+
+  it('canonicalSiteKey : une seule clé par site, « BAM » seul et vide = non précisé', () => {
+    expect(canonicalSiteKey('BAM_AGD-AG')).toBe('BAM_AGD_AG');
+    expect(canonicalSiteKey('BAM_AGD_AG')).toBe('BAM_AGD_AG');
+    expect(canonicalSiteKey('BAM-MRN_CV')).toBe('BAM_MRN_CV');
+    expect(canonicalSiteKey('bam-cas_st')).toBe('BAM_CAS_ST');
+    expect(canonicalSiteKey(' BAM-OLD_CV ')).toBe('BAM_OLD_CV');
+    expect(canonicalSiteKey('BAM')).toBe('');
+    expect(canonicalSiteKey('')).toBe('');
+    expect(canonicalSiteKey(undefined)).toBe('');
+    expect(canonicalSiteKey('Succursale Fès')).toBe('Succursale Fès');
+  });
+  it('filtre « site non précisé »', () => {
+    const rs = [row('D1', { siteKey: '' }), row('D2', { siteKey: 'S1' })];
+    expect(applyFilters(rs, { ...EMPTY_FILTERS, site: NO_SITE }).map(r => r.req.code)).toEqual(['D1']);
+    expect(applyFilters(rs, { ...EMPTY_FILTERS, site: 'S1' }).map(r => r.req.code)).toEqual(['D2']);
   });
 });
