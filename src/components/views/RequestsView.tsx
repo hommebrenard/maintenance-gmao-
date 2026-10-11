@@ -3,6 +3,8 @@ import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, Ch
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
 import { RequestImportModal } from './RequestImportModal';
+import { RequestSyncModal } from './RequestSyncModal';
+import type { SyncResult } from '../../lib/queries/maintenanceRequests';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
 import { exportRequestListToPdf, printRequestList } from '../../utils/requestListPdf';
 import { exportRequestsToXlsx } from '../../utils/requestExport';
@@ -23,6 +25,7 @@ interface RequestsViewProps {
   workOrders?: WorkOrder[];
   locations?: LocationItem[];
   onImportRequests?: (rows: RequestInsertRow[]) => Promise<number>;
+  onSyncRequests?: (payload: Record<string, string | null>[], batchId: string, apply: boolean) => Promise<SyncResult>;
 }
 
 export const RequestsView: React.FC<RequestsViewProps> = ({
@@ -35,7 +38,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   techniciens = [],
   workOrders = [],
   locations = [],
-  onImportRequests
+  onImportRequests,
+  onSyncRequests
 }) => {
   const [filters, setFilters] = useState<RequestFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortSpec>({ key: 'date', dir: 'desc' });
@@ -46,9 +50,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isSyncOpen, setIsSyncOpen] = useState(false);
   const importContext = React.useMemo(
-    () => (isImportOpen ? buildImportContext({ requests, equipment: equipmentList, locations, workOrders }) : null),
-    [isImportOpen, requests, equipmentList, locations, workOrders]
+    () => ((isImportOpen || isSyncOpen) ? buildImportContext({ requests, equipment: equipmentList, locations, workOrders }) : null),
+    [isImportOpen, isSyncOpen, requests, equipmentList, locations, workOrders]
   );
   const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
   // Rapprochement à l'affichage : une demande importée avant l'équipement/le site est retrouvée par son code.
@@ -135,6 +140,12 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             <button onClick={() => setIsImportOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
               <span>Importer depuis Coswin</span>
+            </button>
+          )}
+          {isManager && onSyncRequests && (
+            <button onClick={() => setIsSyncOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              <span>Synchroniser avec Coswin</span>
             </button>
           )}
           <button
@@ -329,6 +340,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
       {isImportOpen && importContext && onImportRequests && (
         <RequestImportModal context={importContext} onClose={() => setIsImportOpen(false)} onImport={onImportRequests} />
+      )}
+      {isSyncOpen && importContext && onSyncRequests && (
+        <RequestSyncModal context={importContext} requests={requests} onClose={() => setIsSyncOpen(false)} onSync={onSyncRequests} />
       )}
 
       {selectedRequest && (
