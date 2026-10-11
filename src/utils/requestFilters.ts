@@ -9,6 +9,25 @@ export const INTERVENTION_TYPE_LABELS: Record<string, string> = {
 };
 export const typeLabel = (code?: string): string => (!code ? '' : INTERVENTION_TYPE_LABELS[code] ? `${code} — ${INTERVENTION_TYPE_LABELS[code]}` : code);
 
+/** Valeur du filtre « Site » pour les demandes dont le site n'est pas précisé. */
+export const NO_SITE = '__none__';
+
+/**
+ * Clé de site unique : les codes Coswin d'un même site sont parfois écrits avec un tiret ou un
+ * souligné (BAM_AGD-AG / BAM_AGD_AG, BAM-MRN_CV / BAM_MRN_CV). On les ramène à une seule forme
+ * (majuscules, tirets → soulignés). « BAM » seul ou une valeur vide = site non précisé (''). Une
+ * valeur qui n'est pas un code BAM (nom de site) est conservée telle quelle.
+ */
+export function canonicalSiteKey(raw?: string | null): string {
+  const s = (raw ?? '').trim();
+  if (!s) return '';
+  if (/^BAM([-_]|$)/i.test(s)) {
+    const k = s.toUpperCase().replace(/-/g, '_');
+    return k === 'BAM' ? '' : k;
+  }
+  return s;
+}
+
 export const STATE_ORDER: RequestDisplayState[] = ['En attente', 'Prise en charge', 'En cours', 'Clôturée', 'Rejetée', 'OT annulé'];
 const PRIORITY_RANK: Record<WorkOrderPriority, number> = { Faible: 0, Moyenne: 1, Élevée: 2, Urgente: 3 };
 
@@ -30,7 +49,7 @@ export interface RequestFilters {
   state: RequestDisplayState | 'all';
   priority: WorkOrderPriority | 'all';
   type: string;          // code ou 'all'
-  site: string;          // siteKey ou 'all'
+  site: string;          // siteKey, NO_SITE (site non précisé) ou 'all'
   origin: 'app' | 'coswin' | 'all';
   from: string;          // AAAA-MM-JJ ou ''
   to: string;
@@ -59,7 +78,7 @@ export function applyFilters(rows: RequestRowView[], f: RequestFilters): Request
     (f.state === 'all' || r.state === f.state) &&
     (f.priority === 'all' || r.req.priority === f.priority) &&
     (f.type === 'all' || (r.req.interventionType ?? '') === f.type) &&
-    (f.site === 'all' || r.siteKey === f.site) &&
+    (f.site === 'all' || (f.site === NO_SITE ? r.siteKey === '' : r.siteKey === f.site)) &&
     (f.origin === 'all' || (r.req.origin ?? 'app') === f.origin) &&
     (!f.from || r.day >= f.from) &&
     (!f.to || r.day <= f.to) &&
