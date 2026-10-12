@@ -193,6 +193,8 @@ export interface MaintenanceRequest {
   equipmentCode?: string;
   interventionCode?: string;
   siteCode?: string;
+  /** Motif de rejet / d'annulation (colonne `rejection_reason`) : saisi dans l'application, absent de l'export Coswin. */
+  rejectionReason?: string;
 }
 
 export interface Message {
