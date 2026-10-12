@@ -32,8 +32,9 @@ const REQUIRED: Field[] = ['code', 'title', 'state'];
 export const COSWIN_STATE_MAP: Record<string, StatusRow> = {
   '0': 'en_attente', '1': 'en_attente', '14': 'en_attente', // Créée, Révisée, Waiting : pas encore traitées
   '3': 'approuvee', '17': 'approuvee', // OT créé ; Clôturée sans OT (affichée « Clôturée » via coswin_state)
-  '5': 'rejetee', // Annulée
-}; // « 8. Signed off » : sens non confirmé, volontairement non importé
+  '5': 'rejetee', // Annulée (affichée « DI annulée » grâce à coswin_state)
+  '8': 'approuvee', // Signed off : sens non documenté ; seule DI connue = OT terminé (affichée selon l'OT, état Coswin conservé)
+};
 
 /** Priorités Coswin → priorités de l'application (U0 = urgent confirmé par l'écran Coswin ; U1 à U3 : hypothèse). */
 export const COSWIN_PRIORITY_MAP: Record<string, PriorityRow> = { U0: 'urgente', U1: 'haute', U2: 'moyenne', U3: 'basse' };
