@@ -28,7 +28,7 @@ export function canonicalSiteKey(raw?: string | null): string {
   return s;
 }
 
-export const STATE_ORDER: RequestDisplayState[] = ['En attente', 'Prise en charge', 'En cours', 'Clôturée', 'Rejetée', 'OT annulé'];
+export const STATE_ORDER: RequestDisplayState[] = ['En attente', 'Prise en charge', 'En cours', 'Clôturée', 'DI annulée', 'Rejetée', 'OT annulé'];
 const PRIORITY_RANK: Record<WorkOrderPriority, number> = { Faible: 0, Moyenne: 1, Élevée: 2, Urgente: 3 };
 
 /** Une ligne prête à filtrer/trier/afficher (calculée une fois par changement de données). */
