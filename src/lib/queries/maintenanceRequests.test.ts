@@ -33,6 +33,7 @@ import {
   fetchMaintenanceRequests,
   createMaintenanceRequest,
   decideMaintenanceRequest,
+  updateRequestRejectionReason,
   generateRequestCode,
 } from './maintenanceRequests';
 
@@ -72,6 +73,22 @@ describe('maintenanceRequests', () => {
     expect(calls[0].payload).toMatchObject({ status: 'approuvee', approved_by: 'm1', work_order_id: 'w1' });
     state.rows = [];
     await expect(decideMaintenanceRequest('r1', { status: 'Rejetée', approvedBy: 'm1' })).rejects.toThrow(/refusée/);
+  });
+  it('rejet avec motif : rejection_reason écrit avec la décision ; motif seul ne touche ni statut ni décision', async () => {
+    state.rows = [{ id: 'r1' }];
+    await decideMaintenanceRequest('r1', { status: 'Rejetée', approvedBy: 'm1', rejectionReason: 'Doublon' });
+    expect(calls[0].payload).toMatchObject({ status: 'rejetee', approved_by: 'm1', rejection_reason: 'Doublon' });
+    calls.length = 0;
+    await updateRequestRejectionReason('r1', '  Hors contrat  ');
+    expect(calls[0].payload).toEqual({ rejection_reason: 'Hors contrat' });
+    await updateRequestRejectionReason('r1', '   ');
+    expect(calls[1].payload).toEqual({ rejection_reason: null });
+    state.rows = [];
+    await expect(updateRequestRejectionReason('r1', 'x')).rejects.toThrow(/refusée/);
+  });
+  it('lecture : motif de rejet exposé', async () => {
+    state.rows = [{ ...ROW, status: 'rejetee', rejection_reason: 'Doublon' }];
+    expect((await fetchMaintenanceRequests())[0].rejectionReason).toBe('Doublon');
   });
   it('code de demande au bon format', () => {
     expect(generateRequestCode(new Date('2026-10-05T10:00:00Z'))).toMatch(/^DEM-20261005-\d{4}$/);
