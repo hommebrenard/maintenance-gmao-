@@ -17,3 +17,13 @@ export function linkedRequestRows(requests: MaintenanceRequest[], eq: Pick<Equip
   const byRequest = indexWorkOrders(workOrders, mine);
   return mine.map(req => ({ req, state: displayState(req, req.workOrderId ? byRequest.get(req.workOrderId) : undefined) }));
 }
+
+const CLOSED_STATES: ReadonlySet<RequestDisplayState> = new Set(['Clôturée', 'DI annulée', 'Rejetée', 'OT annulé']);
+
+/** Passeport PDF : même règle que le registre des OT — année en cours + demandes non closes des années précédentes. */
+export function passportRequestRows(rows: LinkedRequestRow[], year: number): LinkedRequestRow[] {
+  return rows.filter(({ req, state }) => {
+    const y = parseInt((req.createdAtIso ?? '').slice(0, 4), 10);
+    return y === year || !CLOSED_STATES.has(state);
+  });
+}
