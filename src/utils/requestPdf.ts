@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { MaintenanceRequest, Equipment, WorkOrder } from '../types';
-import { displayState } from './requestDisplay';
+import { displayState, requestAlert } from './requestDisplay';
 import { responsibleOf } from './workOrderResponsible';
 import { formatDateFr } from './reportTable';
 import { formatDateTimeFr } from './reportExport';
@@ -47,10 +47,12 @@ export function buildRequestSections({ request: r, equipment, locationName, work
       { label: 'État OT', value: dash(r.otStateLabel ?? r.otState) },
       { label: 'Début prévu', value: dash(r.plannedStart ? formatDateFr(r.plannedStart) : '') },
       { label: 'Date de fin', value: dash(r.otEndDate ? formatDateFr(r.otEndDate) : '') },
+      ...(requestAlert(r) ? [{ wide: true, label: 'Alerte', value: requestAlert(r) as string }] : []),
     ] });
   } else {
     sections.push({ title: 'Informations OT', fields: [{ wide: true, label: 'OT', value:
       r.status === 'En attente' ? "Aucun OT : la demande n'est pas encore décidée." :
+      displayState(r, workOrder) === 'DI annulée' ? 'Aucun OT : la demande est annulée dans Coswin.' :
       r.status === 'Rejetée' ? 'Aucun OT : la demande a été rejetée.' : 'OT introuvable dans la période chargée.' }] });
   }
 
