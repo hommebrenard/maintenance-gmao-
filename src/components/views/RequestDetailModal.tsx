@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { X, CheckCircle2, XCircle, Printer, Download } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, CheckCircle2, XCircle, Printer, Download, HeartPulse } from 'lucide-react';
 import type { MaintenanceRequest, Equipment, WorkOrder } from '../../types';
-import { displayState, DISPLAY_STATE_CLASS, requestAlert } from '../../utils/requestDisplay';
+import { displayState, DISPLAY_STATE_CLASS, requestAlert, decisionOrigin } from '../../utils/requestDisplay';
 import { responsibleOf } from '../../utils/workOrderResponsible';
 import { formatDateFr } from '../../utils/reportTable';
 import { formatDateTimeFr } from '../../utils/reportExport';
@@ -15,7 +15,11 @@ interface Props {
   isManager: boolean;
   onClose: () => void;
   onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  onReject: (id: string, reason?: string) => void;
+  /** Enregistre le motif d'une demande rejetée / annulée (responsable). */
+  onSaveReason?: (id: string, reason: string) => void;
+  /** Ouvre le carnet de santé de l'équipement reconnu. */
+  onOpenHealthRecord?: (equipmentId: string) => void;
 }
 
 const Field: React.FC<{ label: string; value?: React.ReactNode; highlight?: boolean; mono?: boolean }> = ({ label, value, highlight, mono }) => (
@@ -28,7 +32,12 @@ const Field: React.FC<{ label: string; value?: React.ReactNode; highlight?: bool
 );
 
 /** Fiche de demande d'intervention (lecture) : champs de la demande + bloc « Informations OT ». */
-export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locationName, workOrder, isManager, onClose, onApprove, onReject }) => {
+export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locationName, workOrder, isManager, onClose, onApprove, onReject, onSaveReason, onOpenHealthRecord }) => {
+  // Rejet avec motif obligatoire ; saisie / correction du motif d'une demande déjà rejetée ou annulée (responsable).
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [reasonDraft, setReasonDraft] = useState(request.rejectionReason ?? '');
+  useEffect(() => { setReasonDraft(request.rejectionReason ?? ''); }, [request.id, request.rejectionReason]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -38,6 +47,7 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
   const state = displayState(request, workOrder);
   const canDecide = isManager && request.status === 'En attente';
   const alert = requestAlert(request);
+  const origin = decisionOrigin(request);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -49,7 +59,13 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => exportRequestToPdf({ request, equipment, locationName, workOrder })}
+            {equipment && onOpenHealthRecord && (
+            <button onClick={() => { onOpenHealthRecord(equipment.id); onClose(); }} title="Ouvrir le carnet de santé de l'équipement"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+              <HeartPulse className="w-4 h-4" /><span>Carnet de santé</span>
+            </button>
+          )}
+          <button onClick={() => exportRequestToPdf({ request, equipment, locationName, workOrder })}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
               <Download className="w-3.5 h-3.5" /><span>Télécharger PDF</span>
             </button>
@@ -66,6 +82,32 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <span aria-hidden>⚠</span><span><strong>OT actif.</strong> {alert}</span>
             </div>
+          )}
+          {origin && (
+            <fieldset className="border border-gray-200 rounded-lg px-4 pb-4 pt-1">
+              <legend className="px-2 text-xs font-semibold text-gray-500 uppercase">Décision</legend>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Origine" value={origin === 'coswin' ? `Annulée dans Coswin (état « ${request.coswinState ?? '5'} »)` : "Rejetée dans l'application"} />
+                <div className="md:col-span-2">
+                  <div className="text-[11px] font-semibold text-gray-500 uppercase mb-1">Motif</div>
+                  {isManager && onSaveReason ? (
+                    <div className="space-y-2">
+                      <textarea value={reasonDraft} onChange={e => setReasonDraft(e.target.value)} rows={2}
+                        placeholder={origin === 'coswin' ? "Motif d'annulation (absent de l'export Coswin : à saisir si connu)" : 'Motif du rejet'}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      {reasonDraft.trim() !== (request.rejectionReason ?? '').trim() && (
+                        <button onClick={() => onSaveReason(request.id, reasonDraft)}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Enregistrer le motif</button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2 text-sm rounded-md border bg-gray-50 border-gray-200 min-h-[36px] whitespace-pre-wrap">
+                      {request.rejectionReason || <span className="text-gray-400">{origin === 'coswin' ? "Non renseigné (l'export Coswin ne fournit pas le motif)" : 'Non renseigné'}</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </fieldset>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="N° de DI" value={request.code} mono />
@@ -144,15 +186,38 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
         </div>
 
         {canDecide && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
-            <button onClick={() => { onReject(request.id); onClose(); }}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100">
-              <XCircle className="w-4 h-4" /><span>Rejeter</span>
-            </button>
-            <button onClick={() => { onApprove(request.id); onClose(); }}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">
-              <CheckCircle2 className="w-4 h-4" /><span>Approuver & Créer OT</span>
-            </button>
+          <div className="px-6 py-4 border-t border-gray-200 space-y-3">
+            {rejecting && (
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase mb-1 block">Motif du rejet *</label>
+                <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={2} autoFocus
+                  placeholder="Ex : doublon de DI00001234, hors périmètre du contrat…"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400" />
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              {!rejecting ? (
+                <button onClick={() => setRejecting(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100">
+                  <XCircle className="w-4 h-4" /><span>Rejeter</span>
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => { setRejecting(false); setRejectReason(''); }}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
+                  <button disabled={rejectReason.trim().length < 3} onClick={() => { onReject(request.id, rejectReason.trim()); onClose(); }}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <XCircle className="w-4 h-4" /><span>Confirmer le rejet</span>
+                  </button>
+                </>
+              )}
+              {!rejecting && (
+                <button onClick={() => { onApprove(request.id); onClose(); }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">
+                  <CheckCircle2 className="w-4 h-4" /><span>Approuver & Créer OT</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
