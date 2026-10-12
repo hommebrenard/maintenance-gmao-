@@ -19,7 +19,9 @@ interface RequestsViewProps {
   equipmentList: Equipment[];
   onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => void;
   onApproveRequest: (id: string) => void;
-  onRejectRequest: (id: string) => void;
+  onRejectRequest: (id: string, reason?: string) => void;
+  onSaveRejectionReason?: (id: string, reason: string) => void;
+  onOpenHealthRecord?: (equipmentId: string) => void;
   isManager?: boolean;
   techniciens?: Technicien[];
   workOrders?: WorkOrder[];
@@ -39,7 +41,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   workOrders = [],
   locations = [],
   onImportRequests,
-  onSyncRequests
+  onSyncRequests,
+  onSaveRejectionReason,
+  onOpenHealthRecord
 }) => {
   const [filters, setFilters] = useState<RequestFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortSpec>({ key: 'date', dir: 'desc' });
@@ -307,7 +311,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                                 className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold">
                                 <CheckCircle2 className="w-3.5 h-3.5" /><span>Approuver</span>
                               </button>
-                              <button onClick={() => onRejectRequest(req.id)} title="Rejeter"
+                              <button onClick={() => setSelectedId(req.id)} title="Rejeter : ouvre la fiche pour saisir le motif"
                                 className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-gray-200">
                                 <XCircle className="w-4 h-4" />
                               </button>
@@ -358,6 +362,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
           onClose={() => setSelectedId(null)}
           onApprove={onApproveRequest}
           onReject={onRejectRequest}
+          onSaveReason={onSaveRejectionReason}
+          onOpenHealthRecord={onOpenHealthRecord}
         />
       )}
 
