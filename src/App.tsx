@@ -67,7 +67,7 @@ import {
 } from './types';
 import { fetchProfiles } from './lib/queries/profiles';
 import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
-import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, importMaintenanceRequests, syncMaintenanceRequests, type SyncResult } from './lib/queries/maintenanceRequests';
+import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, updateRequestRejectionReason, importMaintenanceRequests, syncMaintenanceRequests, type SyncResult } from './lib/queries/maintenanceRequests';
 import type { RequestInsertRow } from './utils/importRequests';
 
 // Helper for localStorage state persistence
@@ -691,14 +691,33 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       });
   };
 
-  const handleRejectRequest = (reqId: string) => {
+  const handleRejectRequest = (reqId: string, reason?: string) => {
     const previous = requests;
-    setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Rejetée' } : r));
-    decideMaintenanceRequest(reqId, { status: 'Rejetée', approvedBy: session.user.id }).catch(err => {
+    setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Rejetée', rejectionReason: reason?.trim() || undefined } : r));
+    decideMaintenanceRequest(reqId, { status: 'Rejetée', approvedBy: session.user.id, rejectionReason: reason?.trim() || undefined }).catch(err => {
       console.error('Erreur rejet demande:', err);
       setRequests(previous);
       alert("Le rejet n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
     });
+  };
+
+  // Motif d'une demande rejetée / annulée (saisi par un responsable ; l'export Coswin n'en fournit pas).
+  const handleSaveRejectionReason = async (reqId: string, reason: string) => {
+    const previous = requests;
+    setRequests(prev => prev.map(r => r.id === reqId ? { ...r, rejectionReason: reason.trim() || undefined } : r));
+    try {
+      await updateRequestRejectionReason(reqId, reason);
+    } catch (err) {
+      console.error('Erreur enregistrement motif:', err);
+      setRequests(previous);
+      alert("Le motif n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    }
+  };
+
+  // Ouvre le carnet de santé d'un équipement depuis une autre vue (même mécanisme que le lien profond du QR code).
+  const handleOpenHealthRecord = (equipmentId: string) => {
+    setDeepLink(prev => ({ equipmentId, openAddForm: false, key: (prev?.key ?? 0) + 1 }));
+    setCurrentTab('health-records');
   };
 
   // Handlers - Messages
@@ -1059,6 +1078,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onAddRequest={handleAddRequest}
             onApproveRequest={handleApproveRequest}
             onRejectRequest={handleRejectRequest}
+            onSaveRejectionReason={handleSaveRejectionReason}
+            onOpenHealthRecord={handleOpenHealthRecord}
             isManager={isManager}
             techniciens={techniciens}
             workOrders={workOrders}
@@ -1120,7 +1141,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'health-records':
-        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} currentUserId={session.user.id} isManager={isManager} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
+        return <HealthRecordsView equipmentList={equipmentList} workOrders={workOrders} requests={requests} currentUserId={session.user.id} isManager={isManager} initialEquipmentId={deepLink?.equipmentId ?? null} initialOpenAddForm={deepLink?.openAddForm ?? false} deepLinkKey={deepLink?.key ?? 0} />;
       case 'inventory':
         return (
           <InventoryView
