@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { MaintenanceRequest, Equipment, WorkOrder } from '../types';
-import { displayState, requestAlert } from './requestDisplay';
+import { displayState, requestAlert, decisionOrigin } from './requestDisplay';
 import { responsibleOf } from './workOrderResponsible';
 import { formatDateFr } from './reportTable';
 import { formatDateTimeFr } from './reportExport';
@@ -54,6 +54,14 @@ export function buildRequestSections({ request: r, equipment, locationName, work
       r.status === 'En attente' ? "Aucun OT : la demande n'est pas encore décidée." :
       displayState(r, workOrder) === 'DI annulée' ? 'Aucun OT : la demande est annulée dans Coswin.' :
       r.status === 'Rejetée' ? 'Aucun OT : la demande a été rejetée.' : 'OT introuvable dans la période chargée.' }] });
+  }
+
+  const origin = decisionOrigin(r);
+  if (origin) {
+    sections.push({ title: 'Décision', fields: [
+      { label: 'Origine', value: origin === 'coswin' ? `Annulée dans Coswin (état « ${r.coswinState ?? '5'} »)` : "Rejetée dans l'application" },
+      { wide: true, label: 'Motif', value: r.rejectionReason || (origin === 'coswin' ? "Non renseigné (l'export Coswin ne fournit pas le motif)" : 'Non renseigné') },
+    ] });
   }
 
   if (coswin) {
