@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, HeartPulse, Printer, Download, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Equipment, WorkOrder, HealthRecordEntry } from '../../types';
+import { Equipment, WorkOrder, HealthRecordEntry, MaintenanceRequest } from '../../types';
 import { getLinkedWorkOrders, getOperationalStatusBadgeClass } from '../../utils/equipmentDisplay';
 import { fetchHealthRecords, createHealthRecord } from '../../lib/queries/healthRecords';
 import { exportElementToPdf } from '../../utils/pdfExport';
 
 import { EquipmentPassport } from '../health-records/EquipmentPassport';
 import { LinkedWorkOrdersTable } from '../health-records/LinkedWorkOrdersTable';
+import { LinkedRequestsTable } from '../health-records/LinkedRequestsTable';
+import { linkedRequestRows } from '../../utils/equipmentRequests';
 import { HealthTimeline } from '../health-records/HealthTimeline';
 import { HealthRecordPrint } from '../health-records/HealthRecordPrint';
 import { HealthRecordTabs, type HealthRecordTab } from '../health-records/HealthRecordTabs';
@@ -23,6 +25,8 @@ import { PHOTO_MAX_BYTES, validatePhotoFile } from '../../utils/fileUpload';
 interface HealthRecordsViewProps {
   equipmentList: Equipment[];
   workOrders: WorkOrder[];
+  /** Demandes d'intervention : affichées dans l'onglet Interventions (lecture seule). */
+  requests?: MaintenanceRequest[];
   currentUserId: string;
   /** Rôle « responsable » : seul autorisé à écrire dans Planification (la RLS reste le vrai verrou). */
   isManager?: boolean;
@@ -42,7 +46,7 @@ interface HealthRecordsViewProps {
 // Volontairement PAS de section « Synthèse de santé / conformité
 // réglementaire » avec des chiffres inventés (indice de fiabilité, DESP...) :
 // aucune donnée réelle ne les alimente aujourd'hui (voir échange du 22/09).
-export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, currentUserId, isManager = false, initialEquipmentId, initialOpenAddForm, deepLinkKey }) => {
+export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentList, workOrders, requests = [], currentUserId, isManager = false, initialEquipmentId, initialOpenAddForm, deepLinkKey }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deepLinkNotFound, setDeepLinkNotFound] = useState<string | null>(null);
@@ -449,6 +453,7 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               {activeTab === 'interventions' && (
                 <>
                   <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} />
+                  <LinkedRequestsTable key={`di-${selected.id}`} rows={linkedRequestRows(requests, selected, workOrders)} />
                   {timeline(true)}
                 </>
               )}
