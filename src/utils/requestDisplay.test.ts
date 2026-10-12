@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceRequest, WorkOrder } from '../types';
-import { displayState, indexWorkOrders, requestAlert } from './requestDisplay';
+import { displayState, indexWorkOrders, requestAlert, decisionOrigin } from './requestDisplay';
 
 const req = (status: MaintenanceRequest['status'], workOrderId?: string) =>
   ({ id: 'r' + status + workOrderId, status, workOrderId } as MaintenanceRequest);
@@ -44,6 +44,12 @@ describe('requestDisplay', () => {
     expect(requestAlert({ status: 'Rejetée', coswinState: '5. Annulée', otNumber: '1', otState: 'X' })).toBeNull();
     expect(requestAlert({ status: 'Rejetée', otNumber: '1', otState: 'A' })).toBeNull(); // rejet local : pas concerné
     expect(requestAlert({ status: 'Approuvée', coswinState: '3. OT créé', otNumber: '1', otState: 'A' })).toBeNull();
+  });
+  it('origine de la décision : Coswin ≠ application', () => {
+    expect(decisionOrigin({ status: 'Rejetée', coswinState: '5. Annulée' })).toBe('coswin');
+    expect(decisionOrigin({ status: 'Rejetée' })).toBe('app');
+    expect(decisionOrigin({ status: 'Approuvée', coswinState: '5. Annulée' })).toBeNull();
+    expect(decisionOrigin({ status: 'En attente' })).toBeNull();
   });
   it('index : uniquement les OT liés à une demande', () => {
     const m = indexWorkOrders([wo('a', 'Ouvert'), wo('b', 'Terminé'), wo('c', 'Ouvert')], [req('Approuvée', 'b'), req('En attente')]);
