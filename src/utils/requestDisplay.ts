@@ -21,6 +21,12 @@ export function requestAlert(req: { status: string; coswinState?: string; otNumb
   return `DI annulée dans Coswin alors que l'OT existe et n'est pas terminé${ot ? ` (état ${ot})` : ''}. À vérifier dans Coswin.`;
 }
 
+/** Origine de l'état « rejetée / annulée » : annulation venue de Coswin (« 5. Annulée ») ou rejet décidé dans l'application. */
+export function decisionOrigin(req: { status: string; coswinState?: string }): 'coswin' | 'app' | null {
+  if (req.status !== 'Rejetée') return null;
+  return isCoswinCancelled(req.coswinState) ? 'coswin' : 'app';
+}
+
 export function displayState(req: Pick<MaintenanceRequest, 'status'> & { otState?: string; coswinState?: string }, wo?: Pick<WorkOrder, 'status'> | null): RequestDisplayState {
   if (req.status === 'En attente') return 'En attente';
   if (req.status === 'Rejetée') return isCoswinCancelled(req.coswinState) ? 'DI annulée' : 'Rejetée'; // Coswin « 5. Annulée » ≠ rejet local
