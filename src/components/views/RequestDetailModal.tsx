@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { X, CheckCircle2, XCircle, Printer, Download } from 'lucide-react';
 import type { MaintenanceRequest, Equipment, WorkOrder } from '../../types';
-import { displayState, DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
+import { displayState, DISPLAY_STATE_CLASS, requestAlert } from '../../utils/requestDisplay';
 import { responsibleOf } from '../../utils/workOrderResponsible';
 import { formatDateFr } from '../../utils/reportTable';
 import { formatDateTimeFr } from '../../utils/reportExport';
@@ -37,6 +37,7 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
 
   const state = displayState(request, workOrder);
   const canDecide = isManager && request.status === 'En attente';
+  const alert = requestAlert(request);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -61,6 +62,11 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
         </div>
 
         <div className="p-6 space-y-5">
+          {alert && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span aria-hidden>⚠</span><span><strong>OT actif.</strong> {alert}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="N° de DI" value={request.code} mono />
             <Field label="Demandeur" value={request.requestedBy} />
@@ -110,6 +116,7 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             ) : (
               <p className="text-sm text-gray-500">
                 {request.status === 'En attente' ? "Aucun OT : la demande n'est pas encore décidée." :
+                 state === 'DI annulée' ? 'Aucun OT : la demande est annulée dans Coswin.' :
                  request.status === 'Rejetée' ? 'Aucun OT : la demande a été rejetée.' :
                  "OT introuvable dans la période chargée."}
               </p>
