@@ -45,6 +45,7 @@ import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormal
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
+import { safeSetItem } from '../../utils/safeStorage';
 
 interface WorkOrdersViewProps {
   workOrders: WorkOrder[];
@@ -403,7 +404,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Cache local (affichage immédiat au prochain chargement, avant que le
   // fetch Supabase ci-dessus ne réponde) — plus jamais la source de vérité.
   useEffect(() => {
-    localStorage.setItem('gmao_gammesList', JSON.stringify(gammesList));
+    safeSetItem('gmao_gammesList', JSON.stringify(gammesList), true); // simple cache : on l'abandonne si le quota est plein
   }, [gammesList]);
   const [newTaskText, setNewTaskText] = useState('');
   
