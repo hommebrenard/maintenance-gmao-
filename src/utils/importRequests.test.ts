@@ -94,7 +94,7 @@ describe('importRequests : analyse', () => {
 
   it('mapping des états Coswin', () => {
     expect(COSWIN_STATE_MAP).toMatchObject({ '0': 'en_attente', '1': 'en_attente', '14': 'en_attente', '3': 'approuvee', '17': 'approuvee', '5': 'rejetee' });
-    expect(COSWIN_STATE_MAP['8']).toBeUndefined();
+    expect(COSWIN_STATE_MAP['8']).toBe('approuvee'); // Signed off : importée, affichée selon l'OT
   });
 });
 
