@@ -8,7 +8,7 @@ import type { SyncResult } from '../../lib/queries/maintenanceRequests';
 import { buildImportContext, type RequestInsertRow } from '../../utils/importRequests';
 import { exportRequestListToPdf, printRequestList } from '../../utils/requestListPdf';
 import { exportRequestsToXlsx } from '../../utils/requestExport';
-import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders } from '../../utils/requestDisplay';
+import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders, requestAlert } from '../../utils/requestDisplay';
 import {
   EMPTY_FILTERS, NO_SITE, STATE_ORDER, applyFilters, canonicalSiteKey, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
   type RequestFilters, type RequestRowView, type SortKey, type SortSpec,
@@ -294,6 +294,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                       <td className="px-3 py-2.5 text-xs text-gray-700 whitespace-nowrap">{req.requestedBy}</td>
                       <td className="px-3 py-2.5">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
+                        {requestAlert(req) && (
+                          <span title={requestAlert(req) ?? ''} className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">⚠ OT actif</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{wo?.code ?? (req.otNumber ? `OT-${req.otNumber}` : '—')}</td>
                       {isManager && (
