@@ -9,7 +9,7 @@ import { exportElementToPdf } from '../../utils/pdfExport';
 import { EquipmentPassport } from '../health-records/EquipmentPassport';
 import { LinkedWorkOrdersTable } from '../health-records/LinkedWorkOrdersTable';
 import { LinkedRequestsTable } from '../health-records/LinkedRequestsTable';
-import { linkedRequestRows } from '../../utils/equipmentRequests';
+import { linkedRequestRows, passportRequestRows } from '../../utils/equipmentRequests';
 import { HealthTimeline } from '../health-records/HealthTimeline';
 import { HealthRecordPrint } from '../health-records/HealthRecordPrint';
 import { HealthRecordTabs, type HealthRecordTab } from '../health-records/HealthRecordTabs';
@@ -143,11 +143,25 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
     [equipmentList, searchQuery]
   );
 
+  // Fait défiler la liste de gauche jusqu'à l'équipement sélectionné (arrivée depuis une DI ou un QR code) s'il n'est pas visible.
+  const listRef = useRef<HTMLDivElement>(null);
   const selected = selectedId
     ? filteredList.find(e => e.id === selectedId)
     : deepLinkNotFound
       ? undefined // lien profond résolu vers un id absent/inaccessible : pas de repli silencieux sur le premier équipement
       : filteredList[0];
+
+  useEffect(() => {
+    const box = listRef.current;
+    const id = selected?.id;
+    if (!box || !id) return;
+    const el = Array.from(box.querySelectorAll<HTMLElement>('[data-eq-id]')).find(n => n.dataset.eqId === id);
+    if (!el) return;
+    const b = box.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    if (e.top >= b.top && e.bottom <= b.bottom) return; // déjà visible : on ne bouge pas (clic dans la liste)
+    box.scrollTop += (e.top - b.top) - (b.height - e.height) / 2; // centre l'équipement dans la liste
+  }, [selected?.id, deepLinkKey]);
 
   // QR code affiché sur la fiche : lien profond en hash vers le formulaire de
   // saisie de cette même fiche (même standard que le QR de la fiche Équipement,
@@ -363,10 +377,11 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" ref={listRef}>
           {filteredList.map(eq => (
             <button
               key={eq.id}
+              data-eq-id={eq.id}
               onClick={() => {
                 setSelectedId(eq.id);
                 setDeepLinkNotFound(null);
@@ -521,6 +536,12 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                       entriesLoading={isLoadingEntries}
                     />
                     <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} showAll />
+                    {(() => {
+                      const all = linkedRequestRows(requests, selected, workOrders);
+                      const year = new Date().getFullYear();
+                      const kept = passportRequestRows(all, year);
+                      return <LinkedRequestsTable key={`pdf-di-${selected.id}`} rows={kept} showAll note={`Affichage : Année ${year} + non closes des années précédentes — ${kept.length} sur ${all.length} DI`} />;
+                    })()}
                     {timeline(false)}
                   </HealthRecordPrint>
                 </>
