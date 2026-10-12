@@ -6,15 +6,16 @@ import type { LinkedRequestRow } from '../../utils/equipmentRequests';
 const PAGE_SIZE = 20;
 
 /** Demandes d'intervention (DI) de l'équipement : lecture seule, complète le registre des OT. */
-export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[] }> = ({ rows }) => {
+export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[]; showAll?: boolean; note?: string }> = ({ rows, showAll = false, note }) => {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const shown = rows.slice(0, limit);
+  const shown = showAll ? rows : rows.slice(0, limit);
   return (
     <div data-pdf-block className="border border-gray-200 rounded-lg mt-4">
       <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5">
         <Inbox className="w-4 h-4 text-gray-500" />
         <h3 className="text-sm font-bold text-gray-900">Demandes d'intervention ({rows.length})</h3>
       </div>
+      {note && <p className="px-3 py-1 text-[10px] text-gray-500 border-b border-gray-100">{note}</p>}
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-sm text-gray-500">Aucune demande d'intervention pour cet équipement.</p>
       ) : (
@@ -48,7 +49,7 @@ export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[] }> = ({ ro
           </table>
         </div>
       )}
-      {rows.length > limit && (
+      {!showAll && rows.length > limit && (
         <div data-pdf-exclude="true" className="px-3 py-2 border-t border-gray-100">
           <button type="button" onClick={() => setLimit(l => l + PAGE_SIZE)} className="text-xs font-semibold text-blue-600 hover:underline">Voir plus ({rows.length - limit})</button>
         </div>
