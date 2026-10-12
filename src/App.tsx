@@ -105,6 +105,7 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
 // désormais lue/écrite directement (voir lib/queries/work_orders.ts), donc plus
 // besoin de le faire transiter par le localStorage du navigateur.
 const WO_EXTRAS_KEY = 'gmao_workOrders_extras';
+let quotaWarned = false; // alerte « stockage plein » : une seule fois par session
 const WO_EXTRA_FIELDS = ['tasks', 'intervenantsLogs', 'visa', 'planNumber',
   'interventionCode', 'entity', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
 
@@ -119,6 +120,7 @@ function loadWorkOrderExtras(): Record<string, Partial<WorkOrder>> {
 
 import type { Session } from '@supabase/supabase-js';
 import { LogOut } from 'lucide-react';
+import { safeSetItem } from './utils/safeStorage';
 
 interface AppProps {
   session: Session;
@@ -296,7 +298,11 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       });
       extras[wo.id] = entry;
     });
-    localStorage.setItem(WO_EXTRAS_KEY, JSON.stringify(extras));
+    // Ces champs (checklist, intervenants, visa…) n'existent QUE dans ce navigateur : jamais supprimés ; si le quota est plein, on prévient une fois.
+    if (!safeSetItem(WO_EXTRAS_KEY, JSON.stringify(extras)) && !quotaWarned) {
+      quotaWarned = true;
+      alert("Le stockage local du navigateur est plein : les checklists, intervenants et visas saisis ne sont plus sauvegardés sur ce poste. Libérez de la place (ex. vider le cache des gammes) puis rechargez.");
+    }
   }, [workOrders, isLoadingWorkOrders]);
 
   // Depuis le 05/10/2026, les demandes vivent dans `maintenance_requests`
@@ -342,7 +348,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   }, []);
 
   React.useEffect(() => {
-    localStorage.setItem('gmao_inventory', JSON.stringify(inventory));
+    safeSetItem('gmao_inventory', JSON.stringify(inventory)); // conserve l'ancienne valeur si le quota est plein
   }, [inventory]);
 
   // Handlers - Work Orders
