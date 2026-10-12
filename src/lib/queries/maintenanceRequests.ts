@@ -52,7 +52,7 @@ interface RequestRow {
   ot_state?: string | null; ot_state_label?: string | null; function_label?: string | null; function_code?: string | null;
   supervisor_name?: string | null; cost_center?: string | null; planned_start?: string | null; ot_end_date?: string | null;
   coswin_created_at?: string | null; visa?: string | null; equipment_code?: string | null; intervention_code?: string | null;
-  site_code?: string | null;
+  site_code?: string | null; rejection_reason?: string | null;
 }
 
 function rowToRequest(row: RequestRow): MaintenanceRequest {
@@ -78,7 +78,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     plannedStart: row.planned_start ?? undefined, otEndDate: row.ot_end_date ?? undefined,
     coswinCreatedAt: row.coswin_created_at ?? undefined, visa: row.visa ?? undefined,
     equipmentCode: row.equipment_code ?? undefined, interventionCode: row.intervention_code ?? undefined,
-    siteCode: row.site_code ?? undefined,
+    siteCode: row.site_code ?? undefined, rejectionReason: row.rejection_reason ?? undefined,
     createdAtIso: row.created_at,
     createdAt: new Date(row.created_at).toLocaleString('fr-FR', row.origin === 'coswin' ? { timeZone: 'UTC' } : undefined),
   };
@@ -142,6 +142,8 @@ export interface RequestDecision {
   status: RequestStatus;
   approvedBy: string;
   workOrderId?: string;
+  /** Motif (rejet) : colonne `rejection_reason`. */
+  rejectionReason?: string;
 }
 
 /** Approuve ou rejette une demande (is_manager). 0 ligne modifiée = refus RLS. */
@@ -152,9 +154,21 @@ export async function decideMaintenanceRequest(id: string, d: RequestDecision): 
     approval_date: new Date().toISOString(),
   };
   if (d.workOrderId) patch.work_order_id = d.workOrderId;
+  if (d.rejectionReason) patch.rejection_reason = d.rejectionReason;
   const { data, error } = await supabase
     .from('maintenance_requests')
     .update(patch)
+    .eq('id', id)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Modification refusée ou demande introuvable.');
+}
+
+/** Enregistre ou efface le motif d'une demande rejetée/annulée (is_manager). Ne touche ni au statut ni à la décision. */
+export async function updateRequestRejectionReason(id: string, reason: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('maintenance_requests')
+    .update({ rejection_reason: reason.trim() || null })
     .eq('id', id)
     .select('id');
   if (error) throw error;
