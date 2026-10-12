@@ -19,8 +19,16 @@ export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[]; showAll?:
       {rows.length === 0 ? (
         <p className="px-3 py-4 text-sm text-gray-500">Aucune demande d'intervention pour cet équipement.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full table-fixed text-xs">
+            <colgroup>
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '13%' }} />
+              <col />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '13%' }} />
+            </colgroup>
             <thead className="bg-gray-50 text-gray-500 uppercase">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">N° DI</th>
@@ -34,15 +42,15 @@ export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[]; showAll?:
             <tbody>
               {shown.map(({ req, state }) => (
                 <tr key={req.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2 font-mono whitespace-nowrap">{req.code ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{req.createdAt}</td>
-                  <td className="px-3 py-2 text-gray-800 max-w-[22rem] truncate" title={req.title}>{req.title}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{req.interventionType ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className={`font-medium px-2 py-0.5 rounded-md ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
-                    {requestAlert(req) && <span title={requestAlert(req) ?? ''} className="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">⚠ OT actif</span>}
+                  <td className="px-3 py-2 font-mono align-top break-all">{req.code ?? '—'}</td>
+                  <td className="px-3 py-2 align-top text-gray-600">{(req.createdAt ?? '').replace(/(\d{2}:\d{2}):\d{2}$/, '$1')}</td>
+                  <td className="px-3 py-2 align-top text-gray-800 whitespace-normal break-words">{req.title}</td>
+                  <td className="px-3 py-2 align-top">{req.interventionType ?? '—'}</td>
+                  <td className="px-3 py-2 align-top">
+                    <span className={`inline-block whitespace-nowrap font-medium px-2 py-0.5 rounded-md ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
+                    {requestAlert(req) && <span title={requestAlert(req) ?? ''} className="inline-block whitespace-nowrap mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">⚠ OT actif</span>}
                   </td>
-                  <td className="px-3 py-2 font-mono whitespace-nowrap text-gray-600">{req.otNumber ? `OT-${req.otNumber}` : '—'}</td>
+                  <td className="px-3 py-2 align-top font-mono text-gray-600 break-all">{req.otNumber ? `OT-${req.otNumber}` : '—'}</td>
                 </tr>
               ))}
             </tbody>
