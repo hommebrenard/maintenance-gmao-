@@ -1,6 +1,14 @@
 @import "tailwindcss";
 
+/* Copie imprimable du passeport (posée sous <body> uniquement pendant l'impression). */
+#carnet-print-clone { display: none; }
+
 @media print {
+  body.printing-carnet-clone > *:not(#carnet-print-clone) { display: none !important; }
+  body.printing-carnet-clone > #carnet-print-clone { display: block !important; position: static !important; width: auto !important; }
+  body.printing-carnet thead { display: table-header-group; }
+  body.printing-carnet tr { break-inside: avoid; page-break-inside: avoid; }
+
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
