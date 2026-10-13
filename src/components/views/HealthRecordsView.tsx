@@ -509,16 +509,20 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                 <>
                   <div className="print:hidden flex items-center justify-end gap-2 flex-wrap mb-3" data-pdf-exclude="true">
                     {pdfError && <span className="text-xs text-red-600">{pdfError}</span>}
+                    {isLoadingEntries && <span className="text-xs text-gray-500">Chargement des entrées du carnet…</span>}
                     <button
                       onClick={() => window.print()}
-                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                      disabled={isLoadingEntries}
+                      title={isLoadingEntries ? 'Patientez : les entrées du carnet sont en cours de chargement' : undefined}
+                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Printer className="w-3.5 h-3.5" /> Imprimer
                     </button>
                     <button
                       onClick={handleDownloadPdf}
-                      disabled={isExportingPdf}
-                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+                      disabled={isExportingPdf || isLoadingEntries}
+                      title={isLoadingEntries ? 'Patientez : les entrées du carnet sont en cours de chargement' : undefined}
+                      className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                       Télécharger PDF
