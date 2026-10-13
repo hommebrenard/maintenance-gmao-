@@ -75,7 +75,7 @@ export const LinkedWorkOrdersTable: React.FC<LinkedWorkOrdersTableProps> = ({ li
                 <div className="p-4 text-xs text-gray-500">Aucun OT ne correspond à ces filtres. Choisissez « Toutes les années » ou cliquez sur « Réinitialiser ».</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table data-pdf-repeat-header className="w-full text-xs">
                     <thead className="bg-gray-50 text-gray-500">
                       <tr>
                         <th className="text-left px-3 py-1.5 font-medium">OT</th>
