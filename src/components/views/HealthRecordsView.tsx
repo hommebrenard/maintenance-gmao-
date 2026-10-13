@@ -117,10 +117,22 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
         style.textContent = '@page { size: A4 portrait; margin: 0; }';
         document.head.appendChild(style);
       }
+      // Passeport : on imprime une copie du document placée directement sous <body>, les autres
+      // éléments étant masqués (index.css) — indépendant de la coquille de l'app (h-screen,
+      // overflow, colonnes), qui donnait une page blanche.
+      const src = printableRef.current;
+      if (src && !document.getElementById('carnet-print-clone')) {
+        const clone = src.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('[data-pdf-exclude="true"]').forEach(n => n.remove());
+        clone.id = 'carnet-print-clone';
+        document.body.appendChild(clone);
+        document.body.classList.add('printing-carnet-clone');
+      }
     };
     const onAfter = () => {
-      document.body.classList.remove('printing-carnet');
+      document.body.classList.remove('printing-carnet', 'printing-carnet-clone');
       document.getElementById('carnet-print-page')?.remove();
+      document.getElementById('carnet-print-clone')?.remove();
     };
     window.addEventListener('beforeprint', onBefore);
     window.addEventListener('afterprint', onAfter);
@@ -544,8 +556,8 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                     />
                     <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} showAll />
                     {(() => {
-                      const { recent, archived } = splitRequestRows(linkedRequestRows(requests, selected, workOrders), new Date().getFullYear());
-                      return <LinkedRequestsTable key={`pdf-di-${selected.id}`} rows={recent} archived={archived} archivedMode="summary" showAll />;
+                      const all = linkedRequestRows(requests, selected, workOrders);
+                      return <LinkedRequestsTable key={`pdf-di-${selected.id}`} rows={all} showAll compact />;
                     })()}
                     {timeline(false)}
                   </HealthRecordPrint>
