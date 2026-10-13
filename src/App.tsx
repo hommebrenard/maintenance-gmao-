@@ -23,7 +23,7 @@ import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
-import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
+import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, slimExtraEntry } from './utils/workOrderExtras';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
 
@@ -290,13 +290,16 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
        if (isLoadingWorkOrders) return;
     // Fusionne avec ce qui existe déjà, pour ne jamais effacer les OT
     // absents de l'état courant (ex. après un "Vider et remplacer" partiel).
-    const extras: Record<string, Partial<WorkOrder>> = { ...loadWorkOrderExtras() };
+    // Les anciennes entrées sont aussi allégées (checklist copiée de la gamme = recalculée à l'affichage).
+    const extras: Record<string, Partial<WorkOrder>> = {};
+    const previous = loadWorkOrderExtras();
+    Object.keys(previous).forEach(id => { extras[id] = slimExtraEntry(previous[id]); });
     workOrders.forEach(wo => {
       const entry: Partial<WorkOrder> = {};
       WO_EXTRA_FIELDS.forEach(field => {
         if (wo[field] !== undefined) (entry as any)[field] = wo[field];
       });
-      extras[wo.id] = entry;
+      extras[wo.id] = slimExtraEntry(entry);
     });
     // Ces champs (checklist, intervenants, visa…) n'existent QUE dans ce navigateur : jamais supprimés ; si le quota est plein, on prévient une fois.
     if (!safeSetItem(WO_EXTRAS_KEY, JSON.stringify(extras)) && !quotaWarned) {
