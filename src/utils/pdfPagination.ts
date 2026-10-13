@@ -39,3 +39,45 @@ export function computePageBreaks(
   }
   return ends;
 }
+
+/** Tableau dont l'en-tête (thead) doit être répété en haut de chaque page où il continue. Positions en px du document. */
+export interface RepeatHeader { headTop: number; headBottom: number; bottom: number }
+export interface PageSlice { start: number; end: number; header?: { top: number; bottom: number } }
+
+/**
+ * Comme computePageBreaks, mais retourne aussi, pour chaque page qui démarre au milieu d'un
+ * tableau, l'en-tête à redessiner en haut de page (sa hauteur est retirée de la place utile).
+ */
+export function computePageSlices(
+  totalPx: number,
+  pagePx: number,
+  candidates: number[],
+  headers: RepeatHeader[] = [],
+  minFill = 0.3
+): PageSlice[] {
+  const sorted = [...candidates].sort((a, b) => a - b);
+  const slices: PageSlice[] = [];
+  let start = 0;
+  while (start < totalPx - 0.5) {
+    const h = headers.find(x => x.headBottom <= start + 0.5 && start < x.bottom - 0.5);
+    const headH = h ? h.headBottom - h.headTop : 0;
+    const avail = Math.max(pagePx * minFill, pagePx - headH);
+    const header = h ? { top: h.headTop, bottom: h.headBottom } : undefined;
+    const limit = start + avail;
+    if (limit >= totalPx) {
+      slices.push({ start, end: totalPx, header });
+      break;
+    }
+    let cut = limit;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const c = sorted[i];
+      if (c <= limit && c > start + avail * minFill) {
+        cut = c;
+        break;
+      }
+    }
+    slices.push({ start, end: cut, header });
+    start = cut;
+  }
+  return slices;
+}

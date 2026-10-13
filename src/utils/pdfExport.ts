@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { toJpeg } from 'html-to-image';
-import { computePageBreaks } from './pdfPagination';
+import { computePageSlices, type RepeatHeader } from './pdfPagination';
 
 // Export PDF 100% client (aucun serveur, aucune clé API) : capture l'élément
 // DOM ciblé en image haute résolution puis la place sur une ou plusieurs
@@ -58,6 +58,19 @@ function collectBreakCandidates(root: HTMLElement): number[] {
   );
 }
 
+/** En-têtes de tableau (table[data-pdf-repeat-header] > thead) à répéter sur chaque page où le tableau continue. */
+function collectRepeatHeaders(root: HTMLElement): RepeatHeader[] {
+  const rootTop = root.getBoundingClientRect().top;
+  const out: RepeatHeader[] = [];
+  root.querySelectorAll<HTMLElement>('table[data-pdf-repeat-header]').forEach(table => {
+    const thead = table.querySelector('thead');
+    if (!thead) return;
+    const h = thead.getBoundingClientRect();
+    out.push({ headTop: h.top - rootTop, headBottom: h.bottom - rootTop, bottom: table.getBoundingClientRect().bottom - rootTop });
+  });
+  return out;
+}
+
 /**
  * Génère un PDF A4 à partir d'un élément DOM et déclenche son téléchargement.
  * Découpe sur plusieurs pages si le contenu dépasse une page A4, en coupant
@@ -91,6 +104,7 @@ export async function exportElementToPdf(
     const elementWidth = target.offsetWidth || 800;
     const elementHeight = target.scrollHeight || target.offsetHeight;
     const breakCandidates = collectBreakCandidates(target);
+    const repeatHeaders = collectRepeatHeaders(target);
     const pixelRatio = Math.min(2, Math.sqrt(MAX_CAPTURE_PIXELS / (elementWidth * elementHeight)));
 
     const imageData = await toJpeg(target, {
@@ -130,28 +144,32 @@ export async function exportElementToPdf(
     } else {
       // Découpe en tranches, une par page A4, coupées entre deux blocs.
       const scale = image.naturalWidth / elementWidth;
-      const ends = computePageBreaks(
+      const slices = computePageSlices(
         image.naturalHeight,
         pageHeightInPx,
-        breakCandidates.map(c => c * scale)
-      ).map(e => Math.round(e));
+        breakCandidates.map(c => c * scale),
+        repeatHeaders.map(h => ({ headTop: h.headTop * scale, headBottom: h.headBottom * scale, bottom: h.bottom * scale }))
+      );
 
-      let sourceY = 0;
-      ends.forEach((end, pageIndex) => {
-        const sliceHeightPx = Math.max(1, end - sourceY);
+      slices.forEach((sl, pageIndex) => {
+        const start = Math.round(sl.start);
+        const sliceHeightPx = Math.max(1, Math.round(sl.end) - start);
+        const hTop = sl.header ? Math.round(sl.header.top) : 0;
+        const headH = sl.header ? Math.max(0, Math.round(sl.header.bottom) - hTop) : 0;
         if (pageIndex > 0) pdf.addPage();
         const sliceCanvas = document.createElement('canvas');
         sliceCanvas.width = image.naturalWidth;
-        sliceCanvas.height = sliceHeightPx;
+        sliceCanvas.height = headH + sliceHeightPx;
         const ctx = sliceCanvas.getContext('2d');
         if (ctx) {
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-          ctx.drawImage(image, 0, sourceY, image.naturalWidth, sliceHeightPx, 0, 0, image.naturalWidth, sliceHeightPx);
+          // En-tête du tableau répété en haut de la page (OT, DI) quand la page démarre au milieu du tableau.
+          if (headH > 0) ctx.drawImage(image, 0, hTop, image.naturalWidth, headH, 0, 0, image.naturalWidth, headH);
+          ctx.drawImage(image, 0, start, image.naturalWidth, sliceHeightPx, 0, headH, image.naturalWidth, sliceHeightPx);
           const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95);
-          pdf.addImage(sliceData, 'JPEG', marginMm, marginMm, availableWidthMm, sliceHeightPx * mmPerPx);
+          pdf.addImage(sliceData, 'JPEG', marginMm, marginMm, availableWidthMm, (headH + sliceHeightPx) * mmPerPx);
         }
-        sourceY = end;
       });
     }
 

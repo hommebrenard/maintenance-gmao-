@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computePageBreaks } from './pdfPagination';
+import { computePageBreaks, computePageSlices } from './pdfPagination';
 
 describe('computePageBreaks', () => {
   it('une seule page quand tout tient', () => {
@@ -26,5 +26,28 @@ describe('computePageBreaks', () => {
     const ends = computePageBreaks(5000, 900, [300, 800, 1500, 2600, 3100, 4200, 5000]);
     expect(ends[ends.length - 1]).toBe(5000);
     for (let i = 1; i < ends.length; i++) expect(ends[i]).toBeGreaterThan(ends[i - 1]);
+  });
+});
+
+describe('computePageSlices', () => {
+  const rows = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+  const header = { headTop: 40, headBottom: 60, bottom: 900 };
+  it('page 1 sans en-tête répété, pages suivantes avec', () => {
+    const sl = computePageSlices(900, 350, rows, [header]);
+    expect(sl[0].header).toBeUndefined();
+    expect(sl.slice(1).every(x => x.header?.top === 40)).toBe(true);
+  });
+  it("l'en-tête réduit la place utile des pages suivantes", () => {
+    const sl = computePageSlices(900, 350, rows, [header]);
+    sl.slice(1).forEach(x => expect(x.end - x.start + 20).toBeLessThanOrEqual(350));
+  });
+  it('couvre tout le document sans trou', () => {
+    const sl = computePageSlices(900, 350, rows, [header]);
+    expect(sl[0].start).toBe(0);
+    expect(sl[sl.length - 1].end).toBe(900);
+    sl.slice(1).forEach((x, i) => expect(x.start).toBe(sl[i].end));
+  });
+  it('sans tableau : identique à une découpe simple', () => {
+    expect(computePageSlices(900, 350, rows).map(x => x.end)).toEqual([300, 600, 900]);
   });
 });
