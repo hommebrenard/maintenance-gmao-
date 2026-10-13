@@ -79,6 +79,7 @@ import {
   computeLocalBackfillPatch,
   hasTaskWork,
   hasIntervenantWork,
+  slimExtraEntry,
   identityToRow,
   rowToIdentity,
   computeIdentityBackfillPatch,
@@ -487,5 +488,23 @@ describe('écriture Supabase (client simulé)', () => {
       id: 'b', equipmentId: undefined, locationId: undefined, planner: undefined,
       interventionCode: 'PS-TD-1T-01', planNumber: '7', entity: 'BAM_KNT_AG',
     });
+  });
+});
+
+describe('slimExtraEntry', () => {
+  const copy = [{ id: 't1', label: 'Contrôler', completed: false }] as any;
+  it('retire la checklist copiée de la gamme et les intervenants vides', () => {
+    const out = slimExtraEntry({ tasks: copy, intervenantsLogs: [{ id: 'i', name: '', timeSpent: '00:00' }] as any, planNumber: 'P1', visa: 'ok' });
+    expect(out.tasks).toBeUndefined();
+    expect(out.intervenantsLogs).toBeUndefined();
+    expect(out.planNumber).toBe('P1');
+    expect(out.visa).toBe('ok');
+  });
+  it('garde le vrai travail saisi (tâche cochée, intervenant nommé)', () => {
+    const tasks = [{ id: 't1', label: 'x', completed: true }] as any;
+    const logs = [{ id: 'i', name: 'Ali', timeSpent: '01:00' }] as any;
+    const out = slimExtraEntry({ tasks, intervenantsLogs: logs });
+    expect(out.tasks).toBe(tasks);
+    expect(out.intervenantsLogs).toBe(logs);
   });
 });

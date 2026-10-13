@@ -219,3 +219,16 @@ export function computeLocalBackfillPatch(db: WorkOrder, local?: Partial<WorkOrd
   }
   return patch;
 }
+
+/**
+ * Allège une entrée de la copie locale (`gmao_workOrders_extras`) : la checklist copiée de la Gamme et
+ * une liste d'intervenants vide se recalculent / n'ont aucune valeur — seul le vrai travail saisi est
+ * gardé. Le reste (visa, dates, n° de plan, code d'intervention, entité) est petit et conservé tel quel.
+ * Évite que des milliers d'OT importés saturent le quota localStorage (~5 Mo pour tout le domaine).
+ */
+export function slimExtraEntry(entry: Partial<WorkOrder>): Partial<WorkOrder> {
+  const out: Partial<WorkOrder> = { ...entry };
+  if (!hasTaskWork(out.tasks)) delete out.tasks;
+  if (!hasIntervenantWork(out.intervenantsLogs)) delete out.intervenantsLogs;
+  return out;
+}
