@@ -27,3 +27,20 @@ export function passportRequestRows(rows: LinkedRequestRow[], year: number): Lin
     return y === year || !CLOSED_STATES.has(state);
   });
 }
+
+/** Sépare les DI à détailler (année en cours + non closes) des DI closes d'années précédentes (repliées / résumées). */
+export function splitRequestRows(rows: LinkedRequestRow[], year: number): { recent: LinkedRequestRow[]; archived: LinkedRequestRow[] } {
+  const recent = passportRequestRows(rows, year);
+  const keep = new Set(recent);
+  return { recent, archived: rows.filter(r => !keep.has(r)) };
+}
+
+/** Résumé par année des DI archivées : [année, codes triés du plus récent au plus ancien]. */
+export function archivedSummary(archived: LinkedRequestRow[]): Array<{ year: string; codes: string[] }> {
+  const map = new Map<string, string[]>();
+  for (const { req } of archived) {
+    const y = (req.createdAtIso ?? '').slice(0, 4) || 'Date inconnue';
+    map.set(y, [...(map.get(y) ?? []), req.code ?? '—']);
+  }
+  return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([year, codes]) => ({ year, codes }));
+}
