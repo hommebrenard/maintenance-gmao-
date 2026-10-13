@@ -1,23 +1,39 @@
 import React, { useState } from 'react';
 import { Inbox } from 'lucide-react';
 import { DISPLAY_STATE_CLASS, requestAlert } from '../../utils/requestDisplay';
-import type { LinkedRequestRow } from '../../utils/equipmentRequests';
+import { archivedSummary, type LinkedRequestRow } from '../../utils/equipmentRequests';
 
 const PAGE_SIZE = 20;
 
 /** Demandes d'intervention (DI) de l'équipement : lecture seule, complète le registre des OT. */
-export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[]; showAll?: boolean; note?: string }> = ({ rows, showAll = false, note }) => {
+export const LinkedRequestsTable: React.FC<{
+  rows: LinkedRequestRow[];
+  /** DI closes des années précédentes : repliées (écran) ou résumées par année (PDF). */
+  archived?: LinkedRequestRow[];
+  archivedMode?: 'toggle' | 'summary';
+  showAll?: boolean;
+}> = ({ rows, archived = [], archivedMode = 'toggle', showAll = false }) => {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const shown = showAll ? rows : rows.slice(0, limit);
+  const [showArchived, setShowArchived] = useState(false);
+  const total = rows.length + archived.length;
+  const list = archivedMode === 'toggle' && showArchived ? [...rows, ...archived] : rows;
+  const shown = showAll ? list : list.slice(0, limit);
+  const note = archived.length === 0
+    ? null
+    : archivedMode === 'summary'
+      ? `${rows.length} DI détaillées (année en cours + non closes) · ${archived.length} DI closes des années précédentes résumées ci-dessous`
+      : `${rows.length} DI détaillées (année en cours + non closes) · ${archived.length} DI closes des années précédentes ${showArchived ? 'affichées' : 'masquées'}`;
   return (
     <div data-pdf-block className="border border-gray-200 rounded-lg mt-4">
       <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5">
         <Inbox className="w-4 h-4 text-gray-500" />
-        <h3 className="text-sm font-bold text-gray-900">Demandes d'intervention ({rows.length})</h3>
+        <h3 className="text-sm font-bold text-gray-900">Demandes d'intervention ({total})</h3>
       </div>
       {note && <p className="px-3 py-1 text-[10px] text-gray-500 border-b border-gray-100">{note}</p>}
-      {rows.length === 0 ? (
+      {total === 0 ? (
         <p className="px-3 py-4 text-sm text-gray-500">Aucune demande d'intervention pour cet équipement.</p>
+      ) : list.length === 0 ? (
+        <p className="px-3 py-3 text-xs text-gray-500">Aucune DI de l'année en cours ou non close.</p>
       ) : (
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full table-fixed text-xs">
@@ -57,9 +73,23 @@ export const LinkedRequestsTable: React.FC<{ rows: LinkedRequestRow[]; showAll?:
           </table>
         </div>
       )}
-      {!showAll && rows.length > limit && (
+      {archivedMode === 'summary' && archived.length > 0 && (
+        <div className="px-3 py-2 border-t border-gray-100 text-[10px] text-gray-600 leading-snug">
+          {archivedSummary(archived).map(({ year, codes }) => (
+            <p key={year} className="mb-1 last:mb-0"><span className="font-semibold text-gray-800">{year} — {codes.length} DI :</span> <span className="font-mono">{codes.join(', ')}</span></p>
+          ))}
+        </div>
+      )}
+      {archivedMode === 'toggle' && archived.length > 0 && (
         <div data-pdf-exclude="true" className="px-3 py-2 border-t border-gray-100">
-          <button type="button" onClick={() => setLimit(l => l + PAGE_SIZE)} className="text-xs font-semibold text-blue-600 hover:underline">Voir plus ({rows.length - limit})</button>
+          <button type="button" onClick={() => setShowArchived(v => !v)} className="text-xs font-semibold text-blue-600 hover:underline">
+            {showArchived ? 'Masquer' : 'Afficher'} les {archived.length} DI closes des années précédentes
+          </button>
+        </div>
+      )}
+      {!showAll && list.length > limit && (
+        <div data-pdf-exclude="true" className="px-3 py-2 border-t border-gray-100">
+          <button type="button" onClick={() => setLimit(l => l + PAGE_SIZE)} className="text-xs font-semibold text-blue-600 hover:underline">Voir plus ({list.length - limit})</button>
         </div>
       )}
     </div>
