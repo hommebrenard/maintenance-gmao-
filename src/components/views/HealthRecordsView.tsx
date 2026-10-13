@@ -9,7 +9,7 @@ import { exportElementToPdf } from '../../utils/pdfExport';
 import { EquipmentPassport } from '../health-records/EquipmentPassport';
 import { LinkedWorkOrdersTable } from '../health-records/LinkedWorkOrdersTable';
 import { LinkedRequestsTable } from '../health-records/LinkedRequestsTable';
-import { linkedRequestRows, passportRequestRows } from '../../utils/equipmentRequests';
+import { linkedRequestRows, splitRequestRows } from '../../utils/equipmentRequests';
 import { HealthTimeline } from '../health-records/HealthTimeline';
 import { HealthRecordPrint } from '../health-records/HealthRecordPrint';
 import { HealthRecordTabs, type HealthRecordTab } from '../health-records/HealthRecordTabs';
@@ -468,7 +468,10 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
               {activeTab === 'interventions' && (
                 <>
                   <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} />
-                  <LinkedRequestsTable key={`di-${selected.id}`} rows={linkedRequestRows(requests, selected, workOrders)} />
+                  {(() => {
+                    const { recent, archived } = splitRequestRows(linkedRequestRows(requests, selected, workOrders), new Date().getFullYear());
+                    return <LinkedRequestsTable key={`di-${selected.id}`} rows={recent} archived={archived} archivedMode="toggle" />;
+                  })()}
                   {timeline(true)}
                 </>
               )}
@@ -541,10 +544,8 @@ export const HealthRecordsView: React.FC<HealthRecordsViewProps> = ({ equipmentL
                     />
                     <LinkedWorkOrdersTable key={selected.id} linkedWorkOrders={linkedWorkOrders} showAll />
                     {(() => {
-                      const all = linkedRequestRows(requests, selected, workOrders);
-                      const year = new Date().getFullYear();
-                      const kept = passportRequestRows(all, year);
-                      return <LinkedRequestsTable key={`pdf-di-${selected.id}`} rows={kept} showAll note={`Affichage : Année ${year} + non closes des années précédentes — ${kept.length} sur ${all.length} DI`} />;
+                      const { recent, archived } = splitRequestRows(linkedRequestRows(requests, selected, workOrders), new Date().getFullYear());
+                      return <LinkedRequestsTable key={`pdf-di-${selected.id}`} rows={recent} archived={archived} archivedMode="summary" showAll />;
                     })()}
                     {timeline(false)}
                   </HealthRecordPrint>
