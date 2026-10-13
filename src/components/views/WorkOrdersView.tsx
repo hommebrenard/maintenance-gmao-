@@ -404,7 +404,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Cache local (affichage immédiat au prochain chargement, avant que le
   // fetch Supabase ci-dessus ne réponde) — plus jamais la source de vérité.
   useEffect(() => {
-    safeSetItem('gmao_gammesList', JSON.stringify(gammesList), true); // simple cache : on l'abandonne si le quota est plein
+    // Simple cache : abandonné s'il est volumineux (il pousserait le quota ~5 Mo et empêcherait
+    // d'enregistrer le reste) ou si le quota est plein ; la vraie liste est dans Supabase.
+    const json = JSON.stringify(gammesList);
+    if (json.length > 1_500_000) {
+      try { localStorage.removeItem('gmao_gammesList'); } catch { /* rien à faire */ }
+    } else {
+      safeSetItem('gmao_gammesList', json, true);
+    }
   }, [gammesList]);
   const [newTaskText, setNewTaskText] = useState('');
   
