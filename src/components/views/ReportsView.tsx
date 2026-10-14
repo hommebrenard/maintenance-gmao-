@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X, ArrowUp, ArrowDown, Search, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { WorkOrder, Equipment } from '../../types';
+import { WorkOrder, Equipment, LocationItem } from '../../types';
+import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
 import { parseWoDateTime, sortByRecentActivity } from '../../utils/reportDates';
 import { responsibleOf } from '../../utils/workOrderResponsible';
 import { DetailSortKey, formatDateFr, toDetailRow, sortDetailRows, matchesDetailSearch } from '../../utils/reportTable';
@@ -17,6 +18,8 @@ import { familyKeyOf } from '../../utils/annualMatrix';
 interface ReportsViewProps {
   workOrders: WorkOrder[];
   equipmentList: Equipment[];
+  /** Sites (pour masquer ceux qui ne sont pas encore opérationnels). */
+  locations?: LocationItem[];
 }
 
 const formatLocalDate = (d: Date): string => {
@@ -45,7 +48,12 @@ const downloadCSV = (rows: WorkOrder[], fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentList }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrders, equipmentList: allEquipment, locations = [] }) => {
+  // Sites « À préparer » / « En intégration » : masqués des rapports tant que la case n'est pas cochée.
+  const [includeAllSites, setIncludeAllSites] = useState(false);
+  const workOrders = useMemo(() => filterBySiteIntegration(allWorkOrders, locations, includeAllSites), [allWorkOrders, locations, includeAllSites]);
+  const equipmentList = useMemo(() => filterBySiteIntegration(allEquipment, locations, includeAllSites), [allEquipment, locations, includeAllSites]);
+  const nonOperationalCount = countNonOperational(locations);
   const [activeTab, setActiveTab] = useState<'work-orders' | 'equipment' | 'details' | 'activity' | 'export'>('work-orders');
   const [detailsSearch, setDetailsSearch] = useState('');
   const [detailsSort, setDetailsSort] = useState<{ key: DetailSortKey; dir: 'asc' | 'desc' }>({ key: 'dueDate', dir: 'asc' });
@@ -254,6 +262,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders, equipmentL
           <option value="">Intervenant</option>
           {assigneeOptions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
+
+        {nonOperationalCount > 0 && (
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 select-none cursor-pointer" title="Sites « À préparer » ou « En intégration » : masqués par défaut">
+            <input type="checkbox" checked={includeAllSites} onChange={(e) => setIncludeAllSites(e.target.checked)} />
+            Inclure les sites non opérationnels ({nonOperationalCount})
+          </label>
+        )}
 
         <select
           value={locationFilter}
