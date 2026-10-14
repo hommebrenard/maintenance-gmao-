@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
+import { EquipmentImportModal } from './EquipmentImportModal';
 import { 
   Plus, 
   Search, 
@@ -65,6 +66,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   // Sites non opérationnels (« À préparer » / « En intégration ») : leurs équipements sont
   // masqués de cette liste tant que la case n'est pas cochée. Carnet de santé et DI restent complets.
   const [includeAllSites, setIncludeAllSites] = useState(false);
+  const [isCoswinImportOpen, setIsCoswinImportOpen] = useState(false);
   const equipmentList = useMemo(
     () => filterBySiteIntegration(allEquipment, locations, includeAllSites),
     [allEquipment, locations, includeAllSites]
@@ -361,6 +363,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
               >
                 <Layers className="w-4 h-4" />
                 <span>Générer depuis les OT ({newEquipmentFromWOCount})</span>
+              </button>
+            )}
+
+            {isManager && (
+              <button
+                onClick={() => setIsCoswinImportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium rounded-lg text-sm shadow-2xs transition-colors"
+                title="Aperçu de l'import des équipements recensés par Coswin (rien n'est écrit)"
+              >
+                <span>Import Coswin (aperçu)</span>
               </button>
             )}
 
@@ -1100,6 +1112,13 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {isCoswinImportOpen && (
+        <EquipmentImportModal
+          existing={allEquipment.map(e => ({ code: e.code, locationId: e.locationId }))}
+          locations={locations}
+          onClose={() => setIsCoswinImportOpen(false)}
+        />
       )}
     </div>
   );
