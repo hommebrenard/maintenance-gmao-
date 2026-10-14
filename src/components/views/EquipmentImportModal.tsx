@@ -92,10 +92,11 @@ export const EquipmentImportModal: React.FC<Props> = ({ existing, locations, onC
                 <Stat label="Nouveaux (à créer)" value={r.toCreate.length} tone="ok" />
                 <Stat label="Site inconnu" value={r.unknownSiteRows} tone={r.unknownSiteRows ? 'warn' : 'neutral'} />
               </div>
-              {(r.emptyCodeRows > 0 || r.duplicateCodesInFile.length > 0) && (
+              {(r.emptyCodeRows > 0 || r.duplicateCodesInFile.length > 0 || r.geographicRowsIgnored > 0) && (
                 <div className="flex items-start gap-2 text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
+                    {r.geographicRowsIgnored > 0 && <div>{r.geographicRowsIgnored} désignation(s) géographique(s) ignorée(s) (site, bâtiment : ce ne sont pas des équipements).</div>}
                     {r.emptyCodeRows > 0 && <div>{r.emptyCodeRows} ligne(s) sans code équipement : ignorée(s).</div>}
                     {r.duplicateCodesInFile.length > 0 && <div>{r.duplicateCodesInFile.length} code(s) en double dans le fichier (1re ligne retenue) : {r.duplicateCodesInFile.slice(0, 5).join(', ')}{r.duplicateCodesInFile.length > 5 ? '…' : ''}</div>}
                   </div>
