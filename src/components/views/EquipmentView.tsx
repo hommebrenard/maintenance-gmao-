@@ -82,14 +82,15 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   const [locationFilter, setLocationFilter] = useState('');
 
   const newEquipmentFromWOCount = useMemo(() => {
-    const existingCodes = new Set(equipmentList.map(e => e.code));
+    // Compte sur la liste COMPLÈTE : les équipements des sites non opérationnels (masqués plus haut) existent déjà.
+    const existingCodes = new Set(allEquipment.map(e => e.code));
     const seen = new Set<string>();
     workOrders.forEach(w => {
       const code = w.equipmentCode;
       if (code && !existingCodes.has(code)) seen.add(code);
     });
     return seen.size;
-  }, [workOrders, equipmentList]);
+  }, [workOrders, allEquipment]);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const toggleGroup = (loc: string) => {
