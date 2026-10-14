@@ -261,8 +261,11 @@ export async function updateEquipment(id: string, patch: Partial<Equipment>): Pr
 
 /** Supprime un équipement. */
 export async function deleteEquipment(id: string): Promise<void> {
-  const { error } = await supabase.from('equipment').delete().eq('id', id);
+  // `.select('id')` : sans lui, une suppression refusée par les règles d'accès (RLS) ne renvoie ni erreur
+  // ni ligne, et l'app croirait avoir supprimé. On exige donc qu'une ligne ait réellement été supprimée.
+  const { data, error } = await supabase.from('equipment').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error("Suppression refusée ou équipement introuvable (droits insuffisants ?).");
 }
 
 // ---------------------------------------------------------------------------
