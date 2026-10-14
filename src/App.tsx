@@ -21,6 +21,7 @@ import { TechniciensView } from './components/views/TechniciensView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
+import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, slimExtraEntry } from './utils/workOrderExtras';
@@ -869,6 +870,30 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     }
   };
 
+  // Import des équipements recensés par Coswin (étape B). Écriture « pessimiste » : on attend la base,
+  // on ne crée QUE les codes absents (re-contrôlés ici sur la liste complète), jamais d'écrasement.
+  // Champs écrits : code, nom, site, statut « En service », criticité « Normal » — rien d'autre.
+  const handleImportCoswinEquipment = async (rows: NewEquipmentRow[]): Promise<{ created: number; skipped: number }> => {
+    const { toCreate, skipped } = selectRowsToCreate(rows, equipmentList);
+    if (toCreate.length === 0) return { created: 0, skipped };
+    const locationName = new Map(locations.map(l => [l.id, l.name]));
+    const items = toCreate.map(r => ({
+      code: r.code,
+      name: r.name,
+      status: 'En service' as const,
+      criticality: 'Normal' as const,
+      locationId: r.locationId,
+      location: locationName.get(r.locationId) ?? '',
+    }));
+    let createdAll: Equipment[] = [];
+    for (let i = 0; i < items.length; i += 200) {
+      const created = await createEquipmentBulk(items.slice(i, i + 200), session.user.id);
+      createdAll = createdAll.concat(created);
+      setEquipmentList(prev => [...created, ...prev]);
+    }
+    return { created: createdAll.length, skipped };
+  };
+
   const handleUpdateEquipmentStatus = (id: string, status: OperationalStatus) => {
     const previous = equipmentList;
     setEquipmentList(prev => prev.map(e => e.id === id ? { ...e, status, updatedAt: new Date().toISOString() } : e));
@@ -1159,6 +1184,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onDeleteEquipment={handleDeleteEquipment}
             onEditEquipment={handleEditEquipment}
             onSyncFromWorkOrders={handleSyncEquipmentFromWorkOrders}
+            onImportCoswinEquipment={handleImportCoswinEquipment}
             isManager={isManager}
           />
         );
