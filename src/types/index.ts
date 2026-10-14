@@ -424,6 +424,8 @@ export interface LocationItem {
   // Ajouté le 27/09/2026 — zone Nord/Sud du site, pour suggérer les bons
   // techniciens dans le formulaire OT. Nullable : sites pas encore affectés.
   zone?: 'Nord' | 'Sud' | null;
+  // État d'intégration du site (`locations.integration_status`). Absent = opérationnel.
+  integrationStatus?: 'a_preparer' | 'en_integration' | 'operationnel';
 }
 
 export interface UserItem {
