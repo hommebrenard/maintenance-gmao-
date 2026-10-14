@@ -8,6 +8,21 @@ const row = (code: string, zone: string, name = 'X') => ({
   'Code équipement': code, "Description de l'équipement": name, Zone: zone, 'Description de la zone': 'z', 'Famille ': 'TE',
 });
 
+describe('lignes géographiques ignorées', () => {
+  const base = { "Description de l'équipement": 'SAFI AGENCE', Zone: 'BAM_SAF_AG', 'Description de la zone': 'z' };
+  it('ignore le type « 1. Géographique »', () => {
+    const r = analyzeEquipmentRows([{ ...base, "Type d'équipement": '1. Géographique', 'Code équipement': 'BAM_SAF_AG' }, row('BAM-SAF_AG-TD-09', 'BAM_SAF_AG')], [], locations);
+    expect(r.geographicRowsIgnored).toBe(1);
+    expect(r.toCreate.map(n => n.code)).toEqual(['BAM-SAF_AG-TD-09']);
+    expect(r.sites[0].fileCount).toBe(1);
+  });
+  it('ignore aussi une ligne dont le code est celui de la zone (sans colonne Type)', () => {
+    const r = analyzeEquipmentRows([{ ...base, 'Code équipement': 'BAM-SAF_AG' }], [], locations);
+    expect(r.geographicRowsIgnored).toBe(1);
+    expect(r.toCreate).toHaveLength(0);
+  });
+});
+
 describe('equipmentCompareKey', () => {
   it('confond - et _ et ignore la casse', () => {
     expect(equipmentCompareKey('bam-saf_ag-td-01')).toBe(equipmentCompareKey('BAM_SAF_AG_TD_01'));
