@@ -25,6 +25,7 @@ import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, slimExtraEntry } from './utils/workOrderExtras';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
+import { type IntegrationStatus } from './utils/siteIntegration';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
 
 
@@ -989,6 +990,17 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     });
   };
 
+  // État d'intégration d'un site (à préparer / en intégration / opérationnel) — optimiste, avec restauration.
+  const handleUpdateLocationIntegration = (id: string, integrationStatus: IntegrationStatus) => {
+    const previous = locations;
+    setLocations(prev => prev.map(l => (l.id === id ? { ...l, integrationStatus } : l)));
+    updateLocation(id, { integrationStatus }).catch(err => {
+      console.error("Erreur état d'intégration du site:", err);
+      setLocations(previous);
+      alert("L'état d'intégration n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    });
+  };
+
   // Ajouté le 27/09/2026 — affectation d'un site à une zone Nord/Sud (chantier
   // B, gérée depuis l'écran Techniciens plutôt que Emplacements, à la demande
   // de l'utilisateur), pour le futur filtrage des techniciens par zone dans
@@ -1111,6 +1123,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           <ReportsView
             workOrders={workOrders}
             equipmentList={equipmentList}
+            locations={locations}
           />
         );
       case 'automations':
@@ -1189,6 +1202,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             workOrders={workOrders}
             onAddLocation={handleAddLocation}
             onDeleteLocation={handleDeleteLocation}
+            onUpdateIntegration={handleUpdateLocationIntegration}
+            isManager={isManager}
             onClearAllLocations={handleClearAllLocations}
           />
         );
