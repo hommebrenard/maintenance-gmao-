@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
 import { EquipmentImportModal } from './EquipmentImportModal';
+import type { NewEquipmentRow } from '../../utils/coswinEquipmentImport';
 import { 
   Plus, 
   Search, 
@@ -46,6 +47,8 @@ interface EquipmentViewProps {
   onDeleteEquipment: (id: string) => void;
   onEditEquipment: (id: string, updated: Partial<Equipment>) => void;
   onSyncFromWorkOrders?: () => void;
+  /** Écrit les équipements nouveaux issus de l'export Coswin (responsables) ; renvoie créés / ignorés. */
+  onImportCoswinEquipment?: (rows: NewEquipmentRow[]) => Promise<{ created: number; skipped: number }>;
   /** Manager (rôle « responsable ») : seul à voir Nouvel équipement, Générer, Modifier et Supprimer (la RLS reste le vrai verrou). */
   isManager?: boolean;
 }
@@ -61,6 +64,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   onDeleteEquipment,
   onEditEquipment,
   onSyncFromWorkOrders,
+  onImportCoswinEquipment,
   isManager = false
 }) => {
   // Sites non opérationnels (« À préparer » / « En intégration ») : leurs équipements sont
@@ -370,9 +374,9 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
               <button
                 onClick={() => setIsCoswinImportOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium rounded-lg text-sm shadow-2xs transition-colors"
-                title="Aperçu de l'import des équipements recensés par Coswin (rien n'est écrit)"
+                title="Importer les équipements recensés par Coswin (aperçu avant écriture)"
               >
-                <span>Import Coswin (aperçu)</span>
+                <span>Import Coswin</span>
               </button>
             )}
 
@@ -1117,6 +1121,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
         <EquipmentImportModal
           existing={allEquipment.map(e => ({ code: e.code, locationId: e.locationId }))}
           locations={locations}
+          onImport={onImportCoswinEquipment}
           onClose={() => setIsCoswinImportOpen(false)}
         />
       )}
