@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LocationItem } from '../types';
-import { analyzeEquipmentRows, equipmentCompareKey } from './coswinEquipmentImport';
+import { analyzeEquipmentRows, equipmentCompareKey, selectRowsToCreate } from './coswinEquipmentImport';
 
 const loc = (id: string, name: string, code: string): LocationItem => ({ id, name, code, type: 'Site', equipmentCount: 0 });
 const locations = [loc('L1', 'AG Type B SAFI', 'BAM_SAF_AG'), loc('L2', 'CV MARINA', 'BAM-MRN_CV')];
@@ -56,5 +56,20 @@ describe('analyzeEquipmentRows (aperçu, sans écriture)', () => {
   it('bloque si les colonnes obligatoires manquent', () => {
     const r3 = analyzeEquipmentRows([{ Foo: 1 }], existing, locations);
     expect(r3.missingHeaders).toEqual(['Code équipement', 'Zone']);
+  });
+});
+
+describe('selectRowsToCreate (garde-fou avant écriture)', () => {
+  const mk = (code: string) => ({ code, name: code, siteKey: 'BAM_SAF_AG', locationId: 'L1' });
+  it('ignore les codes déjà présents (même écrits différemment) et les doublons', () => {
+    const { toCreate, skipped } = selectRowsToCreate(
+      [mk('BAM-SAF_AG-APLC-01'), mk('BAM_SAF_AG_TD_01'), mk('BAM-SAF_AG-APLC-01'), mk('BAM-SAF_AG-APLC-02')],
+      [{ code: 'BAM-SAF_AG-TD-01' }]
+    );
+    expect(toCreate.map(r => r.code)).toEqual(['BAM-SAF_AG-APLC-01', 'BAM-SAF_AG-APLC-02']);
+    expect(skipped).toBe(2);
+  });
+  it('liste vide = rien à créer', () => {
+    expect(selectRowsToCreate([], []).toCreate).toEqual([]);
   });
 });
