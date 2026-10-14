@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import type { LocationItem } from '../../types';
+import { normalizeIntegrationStatus, type IntegrationStatus } from '../../utils/siteIntegration';
 
 // ---------------------------------------------------------------------------
 // Basé sur le schéma RÉEL de `locations` (confirmé le 13/09/2026 via le
@@ -23,6 +24,7 @@ interface LocationRow {
   type: string | null;
   parent_id: string | null;
   zone: string | null;
+  integration_status?: string | null;
 }
 
 function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
@@ -33,6 +35,7 @@ function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
     type: (row.type as LocationItem['type']) || 'Site',
     equipmentCount,
     zone: (row.zone as LocationItem['zone']) ?? null,
+    integrationStatus: normalizeIntegrationStatus(row.integration_status),
   };
 }
 
@@ -40,7 +43,7 @@ function rowToLocation(row: LocationRow, equipmentCount = 0): LocationItem {
 export async function fetchLocations(): Promise<LocationItem[]> {
   const { data, error } = await supabase
     .from('locations')
-    .select('id, name, code, type, parent_id, zone')
+    .select('id, name, code, type, parent_id, zone, integration_status')
     .order('name');
 
   if (error) throw error;
@@ -52,7 +55,7 @@ export async function createLocation(loc: { name: string; code?: string; type?: 
   const { data, error } = await supabase
     .from('locations')
     .insert({ name: loc.name, code: loc.code || null, type: loc.type || 'Site' })
-    .select('id, name, code, type, parent_id, zone')
+    .select('id, name, code, type, parent_id, zone, integration_status')
     .single();
 
   if (error) throw error;
@@ -62,19 +65,20 @@ export async function createLocation(loc: { name: string; code?: string; type?: 
 /** Met à jour un site/emplacement existant (dont la zone Nord/Sud). */
 export async function updateLocation(
   id: string,
-  patch: { name?: string; code?: string; type?: string; zone?: 'Nord' | 'Sud' | null }
+  patch: { name?: string; code?: string; type?: string; zone?: 'Nord' | 'Sud' | null; integrationStatus?: IntegrationStatus }
 ): Promise<LocationItem> {
-  const row: { name?: string; code?: string | null; type?: string; zone?: string | null } = {};
+  const row: { name?: string; code?: string | null; type?: string; zone?: string | null; integration_status?: IntegrationStatus } = {};
   if (patch.name !== undefined) row.name = patch.name;
   if (patch.code !== undefined) row.code = patch.code || null;
   if (patch.type !== undefined) row.type = patch.type;
   if (patch.zone !== undefined) row.zone = patch.zone;
+  if (patch.integrationStatus !== undefined) row.integration_status = patch.integrationStatus;
 
   const { data, error } = await supabase
     .from('locations')
     .update(row)
     .eq('id', id)
-    .select('id, name, code, type, parent_id, zone')
+    .select('id, name, code, type, parent_id, zone, integration_status')
     .single();
 
   if (error) throw error;
