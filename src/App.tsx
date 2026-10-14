@@ -20,7 +20,7 @@ import { UsersView } from './components/views/UsersView';
 import { TechniciensView } from './components/views/TechniciensView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
-import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk } from './lib/queries/equipment';
+import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, deleteEquipment } from './lib/queries/equipment';
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
@@ -904,8 +904,23 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     });
   };
 
+  // Suppression réellement enregistrée en base (avant : retirée de l'écran seulement, elle revenait au F5).
+  // Refusée si des OT sont rattachés à l'équipement, pour ne pas laisser d'OT orphelins.
   const handleDeleteEquipment = (id: string) => {
+    const target = equipmentList.find(e => e.id === id);
+    if (!target) return;
+    const linked = workOrders.filter(w => w.equipmentCode === target.code).length;
+    if (linked > 0) {
+      alert(`Suppression impossible : ${linked} ordre(s) de travail sont rattachés à ${target.code}.`);
+      return;
+    }
+    const previous = equipmentList;
     setEquipmentList(prev => prev.filter(e => e.id !== id));
+    deleteEquipment(id).catch(err => {
+      console.error('Erreur suppression équipement:', err);
+      setEquipmentList(previous);
+      alert("La suppression n'a pas pu être enregistrée en base (droits ou liens avec d'autres données). L'équipement a été remis dans la liste.");
+    });
   };
 
   // Depuis le 20/09/2026, la modification d'un équipement est enregistrée en base
