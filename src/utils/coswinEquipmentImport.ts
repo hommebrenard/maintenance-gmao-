@@ -137,3 +137,21 @@ export function analyzeEquipmentRows(
     unknownSiteRows, alreadyInApp, toCreate,
   };
 }
+
+/**
+ * ÉTAPE B — dernier garde-fou avant écriture : retire les lignes dont le code existe déjà dans l'app
+ * (comparaison normalisée), même si l'aperçu les croyait nouvelles, et celles du même code en double.
+ * Ne renvoie que des champs « source » (code, nom, site) : statut/criticité par défaut, rien d'autre.
+ */
+export function selectRowsToCreate(rows: NewEquipmentRow[], existing: ExistingEquipment[]): { toCreate: NewEquipmentRow[]; skipped: number } {
+  const known = new Set(existing.map(e => equipmentCompareKey(e.code)));
+  const toCreate: NewEquipmentRow[] = [];
+  let skipped = 0;
+  for (const r of rows) {
+    const k = equipmentCompareKey(r.code);
+    if (known.has(k)) { skipped++; continue; }
+    known.add(k);
+    toCreate.push(r);
+  }
+  return { toCreate, skipped };
+}
