@@ -21,6 +21,7 @@ const COL = {
   zone: 'zone',
   zoneName: 'description de la zone',
   parent: 'equipement parent',
+  type: 'type d equipement',
 } as const;
 
 export interface ExistingEquipment { code: string; locationId?: string }
@@ -50,6 +51,8 @@ export interface EquipmentImportReport {
   missingHeaders: string[];
   totalRows: number;
   emptyCodeRows: number;
+  /** Lignes « Géographique » (site, bâtiment…) : ce ne sont pas des équipements, ignorées. */
+  geographicRowsIgnored: number;
   duplicateCodesInFile: string[];
   sites: SiteBlock[];
   /** Lignes dont le site n'existe pas dans `locations` (non créables tant que le site n'existe pas). */
@@ -70,7 +73,7 @@ export function analyzeEquipmentRows(
   const missingHeaders = [COL.code, COL.zone].filter(c => !headerOf.has(c));
   const empty: EquipmentImportReport = {
     missingHeaders: missingHeaders.map(c => (c === COL.code ? 'Code équipement' : 'Zone')),
-    totalRows: raw.length, emptyCodeRows: 0, duplicateCodesInFile: [], sites: [],
+    totalRows: raw.length, emptyCodeRows: 0, geographicRowsIgnored: 0, duplicateCodesInFile: [], sites: [],
     unknownSiteRows: 0, alreadyInApp: 0, toCreate: [],
   };
   if (missingHeaders.length > 0) return empty;
@@ -91,11 +94,18 @@ export function analyzeEquipmentRows(
   const blocks = new Map<string, SiteBlock>();
   const fileKeysBySite = new Map<string, Set<string>>();
   const toCreate: NewEquipmentRow[] = [];
-  let emptyCodeRows = 0, unknownSiteRows = 0, alreadyInApp = 0;
+  let emptyCodeRows = 0, unknownSiteRows = 0, alreadyInApp = 0, geographicRowsIgnored = 0;
 
   for (const row of raw) {
     const code = get(row, COL.code);
     if (!code) { emptyCodeRows++; continue; }
+    // Désignation géographique (ex. « SAFI AGENCE ») : type « 1. Géographique » dans Coswin, ou code identique à la zone.
+    const type = normHeader(get(row, COL.type));
+    const zoneRaw = get(row, COL.zone);
+    if (type.includes('geographique') || (zoneRaw && canonicalSiteKey(code) === canonicalSiteKey(zoneRaw))) {
+      geographicRowsIgnored++;
+      continue;
+    }
     const cmp = equipmentCompareKey(code);
     if (seenInFile.has(cmp)) { dupes.add(code); continue; }
     seenInFile.add(cmp);
@@ -131,7 +141,7 @@ export function analyzeEquipmentRows(
   });
 
   return {
-    missingHeaders: [], totalRows: raw.length, emptyCodeRows,
+    missingHeaders: [], totalRows: raw.length, emptyCodeRows, geographicRowsIgnored,
     duplicateCodesInFile: Array.from(dupes),
     sites: Array.from(blocks.values()).sort((a, b) => a.siteKey.localeCompare(b.siteKey)),
     unknownSiteRows, alreadyInApp, toCreate,
