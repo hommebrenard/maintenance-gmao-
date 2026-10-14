@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, Upload, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import type { LocationItem } from '../../types';
-import { analyzeEquipmentRows, type EquipmentImportReport, type ExistingEquipment } from '../../utils/coswinEquipmentImport';
+import { analyzeEquipmentRows, type EquipmentImportReport, type ExistingEquipment, type NewEquipmentRow } from '../../utils/coswinEquipmentImport';
 
 interface Props {
   existing: ExistingEquipment[];
   locations: LocationItem[];
   onClose: () => void;
+  /** Écriture réelle (étape B). Absent = aperçu seul. */
+  onImport?: (rows: NewEquipmentRow[]) => Promise<{ created: number; skipped: number }>;
 }
 
 const Stat: React.FC<{ label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'neutral' }> = ({ label, value, tone = 'neutral' }) => (
@@ -18,13 +20,28 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; tone?: 'ok' | 'war
 );
 
 /** Import des équipements Coswin — ÉTAPE A : aperçu seul, rien n'est écrit en base. */
-export const EquipmentImportModal: React.FC<Props> = ({ existing, locations, onClose }) => {
+export const EquipmentImportModal: React.FC<Props> = ({ existing, locations, onClose, onImport }) => {
   const [fileName, setFileName] = useState('');
   const [report, setReport] = useState<EquipmentImportReport | null>(null);
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+
+  const run = async () => {
+    if (!report || !onImport) return;
+    setBusy(true); setError('');
+    try {
+      setResult(await onImport(report.toCreate));
+      setConfirming(false);
+    } catch (e) {
+      console.error(e);
+      setError("L'écriture a échoué (droits ou connexion). Rien n'a été modifié pour le lot en cours ; tu peux relancer sans risque de doublon.");
+    } finally { setBusy(false); }
+  };
 
   const handleFile = async (file: File) => {
-    setError(''); setReport(null); setFileName(file.name);
+    setError(''); setReport(null); setResult(null); setConfirming(false); setFileName(file.name);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -44,13 +61,13 @@ export const EquipmentImportModal: React.FC<Props> = ({ existing, locations, onC
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
-          <div className="flex items-center gap-2 font-bold text-gray-900"><FileSpreadsheet className="w-5 h-5 text-blue-600" /> Importer les équipements Coswin — aperçu</div>
+          <div className="flex items-center gap-2 font-bold text-gray-900"><FileSpreadsheet className="w-5 h-5 text-blue-600" /> Importer les équipements Coswin</div>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Fermer"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-4 text-sm">
           <div className="rounded-lg bg-blue-50 border border-blue-200 text-blue-900 px-3 py-2 text-xs">
-            Aperçu seulement : <b>rien n'est écrit en base</b>. Rapprochement par code équipement (le code n'est jamais modifié) ; la colonne « Famille » et l'état Coswin sont ignorés ; aucun équipement n'est supprimé.
+            Analyse d'abord, <b>écriture seulement après confirmation</b>. Rapprochement par code équipement (le code n'est jamais modifié) ; la colonne « Famille » et l'état Coswin sont ignorés ; aucun équipement n'est supprimé.
           </div>
 
           <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -130,9 +147,37 @@ export const EquipmentImportModal: React.FC<Props> = ({ existing, locations, onC
                 </details>
               )}
 
-              <div className="text-xs text-gray-500">
-                L'écriture en base sera ajoutée à l'étape B, après validation de cet aperçu.
-              </div>
+              {onImport && !result && (
+                <div className="border-t border-gray-200 pt-4 space-y-2">
+                  {r.toCreate.length === 0 ? (
+                    <div className="text-xs text-gray-500">Aucun équipement nouveau à créer.</div>
+                  ) : !confirming ? (
+                    <button type="button" onClick={() => setConfirming(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm">
+                      Créer les {r.toCreate.length} équipement(s) nouveau(x)…
+                    </button>
+                  ) : (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 space-y-2">
+                      <div className="text-amber-900 text-sm">
+                        Confirmer la création de <b>{r.toCreate.length}</b> équipement(s) ? Seuls les codes absents sont créés (nom, site, statut « En service », criticité « Normal »). Aucun équipement existant n'est modifié ni supprimé.
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={busy} onClick={() => void run()} className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium rounded-lg text-sm">
+                          {busy ? 'Écriture en cours…' : 'Oui, créer'}
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700">Annuler</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {result && (
+                <div className="rounded-lg border border-green-300 bg-green-50 text-green-900 px-3 py-3 text-sm">
+                  <b>{result.created}</b> équipement(s) créé(s){result.skipped > 0 ? `, ${result.skipped} ignoré(s) (déjà présents)` : ''}. Attendu : {r.toCreate.length}. Fermez la fenêtre pour voir la liste à jour.
+                </div>
+              )}
+              {r.unknownSiteRows > 0 && (
+                <div className="text-xs text-amber-800">{r.unknownSiteRows} ligne(s) d'un site absent de la liste ne seront pas importées : créez d'abord ce site dans Emplacements.</div>
+              )}
             </>
           )}
         </div>
