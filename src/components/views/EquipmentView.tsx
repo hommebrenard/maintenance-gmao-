@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import QRCode from 'qrcode';
+import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
 import { 
   Plus, 
   Search, 
@@ -49,7 +50,7 @@ interface EquipmentViewProps {
 }
 
 export const EquipmentView: React.FC<EquipmentViewProps> = ({
-  equipmentList,
+  equipmentList: allEquipment,
   workOrders = [],
   locations = [],
   supplierOptions = [],
@@ -61,6 +62,14 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
   onSyncFromWorkOrders,
   isManager = false
 }) => {
+  // Sites non opérationnels (« À préparer » / « En intégration ») : leurs équipements sont
+  // masqués de cette liste tant que la case n'est pas cochée. Carnet de santé et DI restent complets.
+  const [includeAllSites, setIncludeAllSites] = useState(false);
+  const equipmentList = useMemo(
+    () => filterBySiteIntegration(allEquipment, locations, includeAllSites),
+    [allEquipment, locations, includeAllSites]
+  );
+  const nonOperationalCount = countNonOperational(locations);
   const [selectedId, setSelectedId] = useState<string>(equipmentList[0]?.id || '');
   // Disposition mobile (29/09/2026) : sur petit écran un seul panneau à la fois (liste OU fiche,
   // bouton retour) ; à partir de md (≥768px) les deux restent côte à côte comme avant.
@@ -406,6 +415,10 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             ))}
             <option value="__none__">Sans fournisseur</option>
           </select>
+          {nonOperationalCount > 0 && <label className="flex items-center gap-1.5 text-xs text-gray-600 select-none cursor-pointer" title="Sites « À préparer » ou « En intégration » : masqués par défaut">
+            <input type="checkbox" checked={includeAllSites} onChange={(e) => setIncludeAllSites(e.target.checked)} />
+            Inclure les sites non opérationnels ({nonOperationalCount})
+          </label>}
           <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Emplacement ∨</option>
             {sortedLocations.map(l => (
