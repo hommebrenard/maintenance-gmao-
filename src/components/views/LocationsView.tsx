@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Building2, Trash2, CheckCircle2, Circle } from 'lucide-react';
 import { LocationItem, WorkOrder } from '../../types';
+import { INTEGRATION_STATUSES, INTEGRATION_LABELS, normalizeIntegrationStatus, type IntegrationStatus } from '../../utils/siteIntegration';
 
 interface LocationsViewProps {
   locations: LocationItem[];
@@ -11,6 +12,9 @@ interface LocationsViewProps {
   workOrders?: WorkOrder[];
   onAddLocation: (loc: Omit<LocationItem, 'id'>) => void;
   onDeleteLocation?: (id: string) => void;
+  /** Changement d'état d'intégration d'un site (réservé aux responsables). */
+  onUpdateIntegration?: (id: string, status: IntegrationStatus) => void;
+  isManager?: boolean;
   onClearAllLocations?: () => void;
 }
 
@@ -19,6 +23,8 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
   workOrders = [],
   onAddLocation,
   onDeleteLocation,
+  onUpdateIntegration,
+  isManager = false,
   onClearAllLocations
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,6 +225,21 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-500">Intégration :</span>
+                    {isManager && onUpdateIntegration ? (
+                      <select
+                        value={normalizeIntegrationStatus(loc.integrationStatus)}
+                        onChange={(e) => onUpdateIntegration(loc.id, e.target.value as IntegrationStatus)}
+                        className="px-2 py-1 border border-gray-300 rounded-md bg-white text-gray-700"
+                      >
+                        {INTEGRATION_STATUSES.map(s => <option key={s} value={s}>{INTEGRATION_LABELS[s]}</option>)}
+                      </select>
+                    ) : (
+                      <span className="font-semibold text-gray-700">{INTEGRATION_LABELS[normalizeIntegrationStatus(loc.integrationStatus)]}</span>
                     )}
                   </div>
 
