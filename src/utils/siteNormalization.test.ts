@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findMasterLocationName, getAvailableSiteNames, matchesSiteFilter } from './siteNormalization';
+import { findMasterLocationName, getAvailableSiteNames, groupOrdersBySite, matchesSiteFilter } from './siteNormalization';
 
 // Les 4 emplacements réels de la table `locations` (noms + codes Zone).
 const LOCS = [
@@ -105,5 +105,24 @@ describe('matchesSiteFilter (après normalisation)', () => {
   it("'all' laisse tout passer", () => {
     expect(matchesSiteFilter({ location: 'AG Type A MEKNES' } as any, 'all', LOCS)).toBe(true);
     expect(matchesSiteFilter({ location: '' } as any, 'Tous les sites', LOCS)).toBe(true);
+  });
+});
+
+describe('groupOrdersBySite (badge Chargé des Emplacements)', () => {
+  const locs = [
+    { name: 'Succursale régionale Type B AGADIR', code: 'BAM_AGD_AG' },
+    { name: 'CV AGADIR', code: 'BAM_AGD_CV' },
+  ];
+  it('rattache les OT à l\'ancien code avec tiret (BAM_AGD-AG) au site dont le code a été corrigé', () => {
+    const g = groupOrdersBySite([
+      { location: '', entity: 'BAM_AGD-AG' },
+      { location: 'BAM_AGD-AG', entity: '' },
+      { location: 'Succursale régionale Type B AGADIR' },
+      { location: '', entity: 'BAM_AGD_CV' },
+      { location: 'Site inconnu' },
+    ], locs);
+    expect(g.get('Succursale régionale Type B AGADIR')?.length).toBe(3);
+    expect(g.get('CV AGADIR')?.length).toBe(1);
+    expect(g.size).toBe(2);
   });
 });

@@ -209,3 +209,24 @@ export function matchesSiteFilter(wo: WorkOrder, filterValue: string, locations?
 
   return false;
 }
+
+/**
+ * Regroupe les OT par NOM d'emplacement officiel (table `locations`), avec la même tolérance que le
+ * filtre « Site » de la vue Ordres de travail (« - » = « _ », casse, alias). Sert au badge
+ * « Chargé (N OT) » des cartes Emplacements, pour que les deux écrans comptent pareil
+ * (cas Agadir 14/10/2026 : code corrigé BAM_AGD-AG → BAM_AGD_AG, OT restés avec l'ancien code).
+ * Un OT qui ne correspond à aucun emplacement configuré n'est dans aucun groupe.
+ */
+export function groupOrdersBySite<T extends { location?: string; entity?: string }>(
+  workOrders: T[],
+  locations: SiteLocationItem[]
+): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  workOrders.forEach(w => {
+    const master = findMasterLocationName(w.location, locations) ?? findMasterLocationName(w.entity, locations);
+    if (!master) return;
+    const list = groups.get(master);
+    if (list) list.push(w); else groups.set(master, [w]);
+  });
+  return groups;
+}
