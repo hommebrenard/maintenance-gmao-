@@ -118,7 +118,10 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
             </div>
           )}
           {report && !blocked && newInFile > 0 && (
-            <p className="text-xs text-gray-500">Le fichier contient {newInFile} DI absentes de l'application : elles s'ajoutent avec « Importer depuis Coswin », pas ici.</p>
+            <div className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 flex gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>Le fichier contient <b>{newInFile} nouvelle(s) DI</b> absente(s) de l'application. La synchronisation ne les crée pas : fermez cette fenêtre et utilisez <b>« Importer depuis Coswin »</b> pour les ajouter.</span>
+            </div>
           )}
 
           {preview && !done && (
@@ -139,7 +142,9 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
               )}
               {preview.champs_modifies === 0 ? (
                 <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3 text-green-800 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" />Aucune différence : les demandes sont déjà à jour avec ce fichier.
+                  <CheckCircle2 className="w-4 h-4" />{newInFile > 0
+                    ? `Aucune différence sur les ${payload.length} DI déjà présentes. Les ${newInFile} nouvelles DI ne sont pas ajoutées ici (voir ci-dessus).`
+                    : 'Aucune différence : les demandes sont déjà à jour avec ce fichier.'}
                 </div>
               ) : (
                 <details className="text-sm border border-gray-200 rounded-lg p-3">
