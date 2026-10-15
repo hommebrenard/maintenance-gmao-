@@ -45,7 +45,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   
   // Import strategy: append to existing orders or replace current list
-  const [importBehavior, setImportBehavior] = useState<'append' | 'replace'>('replace');
+  const [importBehavior, setImportBehavior] = useState<'append' | 'replace'>('append');
 
   // Multi-site override toggle & selection state
   const [useMultiSiteOverride, setUseMultiSiteOverride] = useState(false);
@@ -659,8 +659,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     className="text-amber-600 focus:ring-amber-500"
                   />
                   <div>
-                    <span className="block font-semibold text-amber-900">Vider et remplacer la liste</span>
-                    <span className="text-[10px] text-amber-700 font-normal">Efface les anciens OT pour repartir à zéro avec le nouveau mois</span>
+                    <span className="block font-semibold text-amber-900">Afficher uniquement ce fichier</span>
+                    <span className="text-[10px] text-amber-700 font-normal">Les autres OT disparaissent de l'écran jusqu'au rechargement ; la base n'est pas vidée</span>
                   </div>
                 </label>
               </div>
