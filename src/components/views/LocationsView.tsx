@@ -1,14 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Building2, Trash2, CheckCircle2, Circle } from 'lucide-react';
 import { LocationItem, WorkOrder } from '../../types';
+import { groupOrdersBySite } from '../../utils/siteNormalization';
 import { INTEGRATION_STATUSES, INTEGRATION_LABELS, normalizeIntegrationStatus, type IntegrationStatus } from '../../utils/siteIntegration';
 
 interface LocationsViewProps {
   locations: LocationItem[];
   // Utilisé uniquement pour calculer le badge "Chargé / Pas encore chargé"
   // (13/09/2026) : compte les OT déjà présents pour chaque site, en
-  // comparant au nom du site ET à son code Zone (les OT non encore
-  // rattachés via location_id n'ont que le code Zone brut du CSV).
+  // comparant au nom du site ET à son code Zone, avec la même tolérance que la
+  // vue Ordres de travail (« - » = « _ », voir groupOrdersBySite).
   workOrders?: WorkOrder[];
   onAddLocation: (loc: Omit<LocationItem, 'id'>) => void;
   onDeleteLocation?: (id: string) => void;
@@ -49,6 +50,9 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
     (l.parentLocation || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Rapprochement OT ↔ emplacement tolérant (« - » = « _ »), identique à la vue Ordres de travail.
+  const ordersBySite = useMemo(() => groupOrdersBySite(workOrders, locations), [workOrders, locations]);
+
     const MONTH_NAMES = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -65,7 +69,7 @@ export const LocationsView: React.FC<LocationsViewProps> = ({
   // (regroupement sur `dueDate.slice(0,7)`), pour savoir précisément quels
   // mois sont couverts et lesquels manquent encore, pas juste un total.
   const monthBreakdown = (loc: LocationItem): { ym: string; label: string; count: number }[] => {
-    const matching = workOrders.filter(w => w.location === loc.name || (loc.code && w.entity === loc.code));
+    const matching = ordersBySite.get(loc.name) ?? [];
     const counts = new Map<string, number>();
     matching.forEach(w => {
       const ym = w.dueDate && w.dueDate.length >= 7 ? w.dueDate.slice(0, 7) : null;
