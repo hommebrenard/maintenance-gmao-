@@ -518,7 +518,7 @@ describe('countUnsyncedLocalExtras (suppression conditionnelle de la copie local
     const extras = { a: { tasks: [{ id: 'x', completed: true }], visa: 'AB', interventionCode: 'PS-1' } } as any;
     // interventionCode local absent en base => à rattraper : pending
     expect(countUnsyncedLocalExtras(fetched, extras).pending).toBe(1);
-    expect(countUnsyncedLocalExtras(fetched, { a: { tasks: [{ id: 'x', completed: true }], visa: 'AB' } } as any)).toEqual({ pending: 0, orphansWithWork: 0 });
+    expect(countUnsyncedLocalExtras(fetched, { a: { tasks: [{ id: 'x', completed: true }], visa: 'AB' } } as any)).toEqual({ pending: 0, orphansWithWork: 0, orphanIds: [] });
   });
 
   it('compte le travail local que la base n\'a pas (checklist cochée, visa)', () => {
@@ -540,10 +540,10 @@ describe('countUnsyncedLocalExtras (suppression conditionnelle de la copie local
       gone1: { tasks: [{ id: 'x', completed: true }] },
       gone2: { tasks: [{ id: 'y', completed: false }] }, // copie de gamme sans travail
     } as any;
-    expect(countUnsyncedLocalExtras([], extras)).toEqual({ pending: 0, orphansWithWork: 1 });
+    expect(countUnsyncedLocalExtras([], extras)).toEqual({ pending: 0, orphansWithWork: 1, orphanIds: ['gone1'] });
   });
 
   it('sans copie locale : rien à signaler', () => {
-    expect(countUnsyncedLocalExtras([base()], {})).toEqual({ pending: 0, orphansWithWork: 0 });
+    expect(countUnsyncedLocalExtras([base()], {})).toEqual({ pending: 0, orphansWithWork: 0, orphanIds: [] });
   });
 });
