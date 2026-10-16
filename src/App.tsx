@@ -24,7 +24,8 @@ import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, 
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
-import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
+import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, countUnsyncedLocalExtras } from './utils/workOrderExtras';
+import { explainSaveError } from './utils/saveErrors';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { type IntegrationStatus } from './utils/siteIntegration';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
@@ -108,6 +109,14 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
 // désormais lue/écrite directement (voir lib/queries/work_orders.ts), donc plus
 // besoin de le faire transiter par le localStorage du navigateur.
 const WO_EXTRAS_KEY = 'gmao_workOrders_extras';
+// Enregistrements d'OT en cours vers la base (16/10/2026) : sert à prévenir si l'onglet est fermé en plein envoi.
+let pendingOrderWrites = 0;
+function trackOrderWrite<T>(promise: Promise<T>): Promise<T> {
+  pendingOrderWrites += 1;
+  const done = () => { pendingOrderWrites = Math.max(0, pendingOrderWrites - 1); };
+  promise.then(done, done);
+  return promise;
+}
 
 function loadWorkOrderExtras(): Record<string, Partial<WorkOrder>> {
   try {
@@ -225,6 +234,23 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         const merged = fetched.map(wo => mergeWorkOrderWithLocalExtras(wo, extras[wo.id]));
         setWorkOrders(merged);
 
+        // Point 4 bis (16/10/2026) : la copie locale n'est plus écrite. Si elle ne contient plus rien que la base
+        // n'ait déjà (la base l'emporte), elle est supprimée de CE navigateur pour libérer le quota ; sinon elle est
+        // gardée, le rattrapage ci-dessous envoie ce qui manque, et la vérification se refait à la prochaine ouverture.
+        try {
+          const { pending, orphansWithWork } = countUnsyncedLocalExtras(fetched, extras);
+          if (Object.keys(extras).length === 0) {
+            // rien à supprimer
+          } else if (pending === 0 && orphansWithWork === 0) {
+            localStorage.removeItem(WO_EXTRAS_KEY);
+            console.info(`Copie locale des OT supprimée de ce navigateur : tout est déjà en base (${Object.keys(extras).length} entrées).`);
+          } else {
+            console.info(`Copie locale des OT conservée : ${pending} OT à rattraper vers la base, ${orphansWithWork} entrée(s) sans OT en base portant un travail saisi.`);
+          }
+        } catch (err) {
+          console.warn('Vérification de la copie locale des OT impossible :', err);
+        }
+
         // Rattrapage ponctuel (20/09/2026), sur le modèle du backfill `planner` :
         // le travail déjà saisi dans CE navigateur (checklist cochée, visa,
         // temps, intervenants) et absent de la base y est envoyé une seule fois,
@@ -283,6 +309,18 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       })
       .catch(err => console.error('Erreur chargement OT:', err))
       .finally(() => setIsLoadingWorkOrders(false));
+  }, []);
+
+  // Prévient le navigateur si l'onglet est fermé ou rechargé pendant qu'un enregistrement d'OT est en cours d'envoi.
+  React.useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingOrderWrites > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
   // Depuis le 05/10/2026, les demandes vivent dans `maintenance_requests`
@@ -369,10 +407,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     return;
   }
 
-  updateWorkOrder(id, { status }).catch(err => {
+  trackOrderWrite(updateWorkOrder(id, { status })).catch(err => {
     console.error('Erreur mise à jour statut OT:', err);
     setWorkOrders(previous);
-    alert("Le changement de statut n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+    alert(`Le changement de statut n'a pas pu être enregistré. ${explainSaveError(err)}`);
   });
 };
 
@@ -588,10 +626,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
     if (Object.keys(corePatch).length === 0) return;
 
-    updateWorkOrder(id, corePatch).catch(err => {
+    trackOrderWrite(updateWorkOrder(id, corePatch)).catch(err => {
       console.error('Erreur mise à jour OT:', err);
       setWorkOrders(previous);
-      alert("La modification n'a pas pu être enregistrée dans Supabase. Vérifie ta connexion ou tes droits.");
+      alert(`La modification n'a pas pu être enregistrée. ${explainSaveError(err)}`);
     });
   };
 
@@ -1012,7 +1050,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     updateLocation(id, { integrationStatus }).catch(err => {
       console.error("Erreur état d'intégration du site:", err);
       setLocations(previous);
-      alert("L'état d'intégration n'a pas pu être enregistré. Vérifie ta connexion ou tes droits.");
+      alert(`L'état d'intégration n'a pas pu être enregistré. ${explainSaveError(err)}`);
     });
   };
 
