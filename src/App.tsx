@@ -24,7 +24,7 @@ import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, 
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
-import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, slimExtraEntry } from './utils/workOrderExtras';
+import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch } from './utils/workOrderExtras';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { type IntegrationStatus } from './utils/siteIntegration';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
@@ -102,14 +102,12 @@ function getInitialState<T extends { id: string }>(key: string, demoData: T[]): 
 // Depuis le 20/09/2026, checklist/intervenants/visa/dates-heures sont AUSSI en base,
 // et depuis le 21/09/2026 interventionCode/planNumber/entity aussi (la base
 // l'emporte, voir mergeWorkOrderWithLocalExtras) : la copie locale n'est gardée
-// que comme filet de sécurité, à retirer dans un pas de nettoyage ultérieur.
+// que comme filet de sécurité. Depuis le 16/10/2026 (point 4 bis, temps 1) elle n'est
+// plus ÉCRITE (quota navigateur) : seulement lue, pour le rattrapage unique vers la base.
 // `planner` a été retiré de cette liste le 14/09/2026 : colonne Supabase dédiée
 // désormais lue/écrite directement (voir lib/queries/work_orders.ts), donc plus
 // besoin de le faire transiter par le localStorage du navigateur.
 const WO_EXTRAS_KEY = 'gmao_workOrders_extras';
-let quotaWarned = false; // alerte « stockage plein » : une seule fois par session
-const WO_EXTRA_FIELDS = ['tasks', 'intervenantsLogs', 'visa', 'planNumber',
-  'interventionCode', 'entity', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
 
 function loadWorkOrderExtras(): Record<string, Partial<WorkOrder>> {
   try {
@@ -270,8 +268,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
         // Backfill ponctuel (14/09/2026) : avant l'ajout de la colonne Supabase
         // `planner`, ce champ ne vivait qu'en localStorage. Le prochain cycle de
-        // sauvegarde va réécrire ce localStorage SANS `planner` (retiré de
-        // WO_EXTRA_FIELDS ci-dessus) — on pousse donc une fois vers Supabase
+        // sauvegarde réécrivait ce localStorage SANS `planner` (retiré de la liste des
+        // champs locaux, aujourd'hui supprimée) — on pousse donc une fois vers Supabase
         // toute valeur encore uniquement locale, pour ne rien perdre.
         merged.forEach(wo => {
           const alreadyInSupabase = fetched.find(f => f.id === wo.id)?.planner;
@@ -285,30 +283,6 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       .catch(err => console.error('Erreur chargement OT:', err))
       .finally(() => setIsLoadingWorkOrders(false));
   }, []);
-
-  // Sauvegarde des champs pas encore gérés par Supabase (checklist, intervenants, visa,
-  // planner, planNumber, interventionCode, entity, startDate/startTime/endDate/endTime).
-    React.useEffect(() => {
-       if (isLoadingWorkOrders) return;
-    // Fusionne avec ce qui existe déjà, pour ne jamais effacer les OT
-    // absents de l'état courant (ex. après un "Vider et remplacer" partiel).
-    // Les anciennes entrées sont aussi allégées (checklist copiée de la gamme = recalculée à l'affichage).
-    const extras: Record<string, Partial<WorkOrder>> = {};
-    const previous = loadWorkOrderExtras();
-    Object.keys(previous).forEach(id => { extras[id] = slimExtraEntry(previous[id]); });
-    workOrders.forEach(wo => {
-      const entry: Partial<WorkOrder> = {};
-      WO_EXTRA_FIELDS.forEach(field => {
-        if (wo[field] !== undefined) (entry as any)[field] = wo[field];
-      });
-      extras[wo.id] = slimExtraEntry(entry);
-    });
-    // Ces champs (checklist, intervenants, visa…) n'existent QUE dans ce navigateur : jamais supprimés ; si le quota est plein, on prévient une fois.
-    if (!safeSetItem(WO_EXTRAS_KEY, JSON.stringify(extras)) && !quotaWarned) {
-      quotaWarned = true;
-      alert("Le stockage local du navigateur est plein : les checklists, intervenants et visas saisis ne sont plus sauvegardés sur ce poste. Libérez de la place (ex. vider le cache des gammes) puis rechargez.");
-    }
-  }, [workOrders, isLoadingWorkOrders]);
 
   // Depuis le 05/10/2026, les demandes vivent dans `maintenance_requests`
   // (avant : localStorage de démonstration).
