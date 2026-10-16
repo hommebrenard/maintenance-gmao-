@@ -203,6 +203,12 @@ describe('lots (equipmentFamilies)', () => {
     expect(['APLC', 'RESAS', 'RESEP', 'CHDR', 'IFBT'].map(lotOfFamily)).toEqual(['ELEC', 'FLUIDE', 'FLUIDE', 'FLUIDE', 'DIVERS']);
   });
 
+  it('incendie (16/10/2026) : RIA dans le contrat (Fluides) ; poteaux et extincteurs hors contrat (Divers, libellé conservé)', () => {
+    expect(['RIA', 'PDI', 'EXI'].map(lotOfFamily)).toEqual(['FLUIDE', 'DIVERS', 'DIVERS']);
+    expect(FAMILIES.PDI?.label).toBe("Poteau d'incendie");
+    expect(FAMILIES.EXI?.label).toBe('Extincteur');
+  });
+
   it('l\'éclairage extérieur (ECLEX) est classé en Électricité, pas en Divers', () => {
     expect(lotOfFamily('ECLEX')).toBe('ELEC');
   });
