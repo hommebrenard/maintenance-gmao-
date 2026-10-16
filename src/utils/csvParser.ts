@@ -244,6 +244,36 @@ const KNOWN_SITES = [
   { key: 'bml', names: ['bml', 'beni mellal', 'béni mellal', 'benimellal'] },
 ];
 
+// Perf (16/10/2026) : les expressions régulières « jeton de site » étaient recompilées pour chaque plan à
+// chaque rendu de la fiche OT (un simple clic sur une case de checklist relançait tout). Elles sont désormais
+// compilées une fois par jeton ; sans drapeau « g », `.test()` n'a aucun état : réutilisation sans risque.
+const siteTokenRegexCache = new Map<string, RegExp>();
+function siteTokenRegex(token: string): RegExp {
+  let re = siteTokenRegexCache.get(token);
+  if (!re) {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    re = new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i');
+    siteTokenRegexCache.set(token, re);
+  }
+  return re;
+}
+// Site (clé KNOWN_SITES) d'un plan : calculé une fois par plan (les plans ne sont jamais modifiés sur place).
+const planSiteKeyCache = new WeakMap<GammePlan, string | undefined>();
+function knownSiteKeyOfPlan(p: GammePlan): string | undefined {
+  if (planSiteKeyCache.has(p)) return planSiteKeyCache.get(p);
+  const pEq = (p.equipmentCode || '').toLowerCase();
+  const pDesc = (p.equipmentDescription || '').toLowerCase();
+  const pTitle = (p.interventionTitle || '').toLowerCase();
+  const key = KNOWN_SITES.find(s => s.names.some(n =>
+    siteTokenRegex(n).test(pEq) || siteTokenRegex(n).test(pDesc) || siteTokenRegex(n).test(pTitle)
+  ))?.key;
+  planSiteKeyCache.set(p, key);
+  return key;
+}
+// Résultat du rattachement par OT : il ne dépend que de ces 4 textes et de la liste de gammes.
+const gammeMatchCache = new WeakMap<GammePlan[], Map<string, GammeMatchResult>>();
+
+
 // Empreinte d'un plan : libellés d'actions normalisés (minuscules, sans accents, espaces
 // — y compris insécables — réduits), dans l'ordre. Mise en cache par plan.
 const planSignatureCache = new WeakMap<GammePlan, string>();
@@ -271,24 +301,13 @@ function findStandardPlanByCode(gammePlans: GammePlan[], rawCode: string): Stand
   if (!perList) { perList = new Map(); standardPlanCache.set(gammePlans, perList); }
   if (perList.has(code)) return perList.get(code) || undefined;
 
-  const hasToken = (str: string, token: string): boolean => {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i').test(str);
-  };
-  const siteKeyOfPlan = (p: GammePlan): string | undefined => {
-    const pEq = (p.equipmentCode || '').toLowerCase();
-    const pDesc = (p.equipmentDescription || '').toLowerCase();
-    const pTitle = (p.interventionTitle || '').toLowerCase();
-    return KNOWN_SITES.find(s => s.names.some(n => hasToken(pEq, n) || hasToken(pDesc, n) || hasToken(pTitle, n)))?.key;
-  };
-
   let info: StandardPlanInfo | null = null;
   const sameCode = gammePlans.filter(p => p.tasks && p.tasks.length > 0 && (p.planCode || '').trim() === code);
   if (sameCode.length > 0) {
     const sig = planContentSignature(sameCode[0]);
     if (sameCode.every(p => planContentSignature(p) === sig)) {
       const sites = new Set<string>();
-      sameCode.forEach(p => { const k = siteKeyOfPlan(p); if (k) sites.add(k); });
+      sameCode.forEach(p => { const k = knownSiteKeyOfPlan(p); if (k) sites.add(k); });
       if (sites.size >= MIN_SITES_FOR_STANDARD_PLAN) {
         info = { plan: sameCode[0], planCount: sameCode.length, siteCount: sites.size };
       }
@@ -333,42 +352,31 @@ export function findMatchingGammePlanDetailed(
     return { status: 'non_trouve', method: 'aucune gamme importée' };
   }
 
+  const cacheKey = [eqCode, interventionCode, intDesc, siteLocation].map(v => v || '').join('\u0001');
+  let perList = gammeMatchCache.get(gammePlans);
+  if (!perList) { perList = new Map(); gammeMatchCache.set(gammePlans, perList); }
+  const cached = perList.get(cacheKey);
+  if (cached) return cached;
+
   const cleanEq = (eqCode || '').trim().toLowerCase();
   const cleanCode = (interventionCode || '').trim().toLowerCase();
   const cleanTitle = (intDesc || '').trim().toLowerCase();
   const cleanSite = (siteLocation || '').trim().toLowerCase();
 
-   const hasSiteToken = (str: string, token: string): boolean => {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i');
-    return re.test(str);
-  };
+  // Site de l'OT : identique pour tous les plans, calculé une seule fois.
+  const otSiteKey = KNOWN_SITES.find(s =>
+    s.names.some(n => siteTokenRegex(n).test(cleanSite) || siteTokenRegex(n).test(cleanEq) || siteTokenRegex(n).test(cleanTitle))
+  )?.key;
 
-  const sitesConflict = (plan: GammePlan): boolean => {
-    const pEq = (plan.equipmentCode || '').toLowerCase();
-    const pDesc = (plan.equipmentDescription || '').toLowerCase();
-    const pTitle = (plan.interventionTitle || '').toLowerCase();
-    
-       const knownSites = KNOWN_SITES;
-
-    const otSiteKey = knownSites.find(s => 
-      s.names.some(n => hasSiteToken(cleanSite, n) || hasSiteToken(cleanEq, n) || hasSiteToken(cleanTitle, n))
-    );
-
-    const planSiteKey = knownSites.find(s => 
-      s.names.some(n => hasSiteToken(pEq, n) || hasSiteToken(pDesc, n) || hasSiteToken(pTitle, n))
-    );
-
-    if (otSiteKey && planSiteKey && otSiteKey.key !== planSiteKey.key) {
-      return true;
-    }
-    return false;
-  };
-
-  const eligiblePlans = gammePlans.filter(p => !sitesConflict(p) && p.tasks && p.tasks.length > 0);
-  // Pool des plans écartés UNIQUEMENT pour conflit de site (sert seulement à
-  // détecter le cas 'conflit' ci-dessous, jamais à choisir un plan réel).
-  const conflictingPlans = gammePlans.filter(p => sitesConflict(p) && p.tasks && p.tasks.length > 0);
+  // Un plan est « en conflit » si son site connu diffère de celui de l'OT (mêmes règles qu'avant).
+  const eligiblePlans: GammePlan[] = [];
+  const conflictingPlans: GammePlan[] = [];
+  for (const p of gammePlans) {
+    if (!(p.tasks && p.tasks.length > 0)) continue;
+    const planSiteKey = otSiteKey ? knownSiteKeyOfPlan(p) : undefined;
+    if (otSiteKey && planSiteKey && otSiteKey !== planSiteKey) conflictingPlans.push(p);
+    else eligiblePlans.push(p);
+  }
 
   // Rejoue la même cascade de passes sur un pool donné ; retourne le plan et
   // le libellé de la passe qui a matché, ou undefined si aucune ne matche.
@@ -462,6 +470,7 @@ export function findMatchingGammePlanDetailed(
     return undefined;
   };
 
+  const finalize = (r: GammeMatchResult): GammeMatchResult => { perList!.set(cacheKey, r); return r; };
   const result = runPasses(eligiblePlans);
   // 'exact' seulement pour les 4 premières passes (code/titre EXACT) ;
   // toutes les passes par famille/mots-clés/sous-chaîne restent
@@ -471,7 +480,7 @@ export function findMatchingGammePlanDetailed(
   // exacte).
   const isExact = !!result && result.method.includes('(exact');
   if (result && isExact) {
-    return { plan: result.plan, status: 'exact', method: result.method };
+    return finalize({ plan: result.plan, status: 'exact', method: result.method });
   }
 
   // Ajouté le 21/09/2026 — « plan type » : rien d'exact pour ce site, mais le même code de
@@ -481,15 +490,15 @@ export function findMatchingGammePlanDetailed(
   // présent sur un seul site n'est jamais traité comme standard.
   const standard = findStandardPlanByCode(gammePlans, interventionCode);
   if (standard) {
-    return {
+    return finalize({
       plan: standard.plan,
       status: 'plan_type',
       method: `plan type — code « ${(interventionCode || '').trim()} » identique sur ${standard.planCount} plan(s) de ${standard.siteCount} sites`
-    };
+    });
   }
 
   if (result) {
-    return { plan: result.plan, status: 'approximatif', method: result.method };
+    return finalize({ plan: result.plan, status: 'approximatif', method: result.method });
   }
 
   // Rien trouvé dans le pool éligible : vérifie si un plan aurait matché
@@ -497,14 +506,14 @@ export function findMatchingGammePlanDetailed(
   // absence de donnée).
   const conflictResult = runPasses(conflictingPlans);
   if (conflictResult) {
-    return {
+    return finalize({
       status: 'conflit',
       method: `${conflictResult.method} — plan trouvé mais rattaché à un autre site`,
       conflictPlan: conflictResult.plan
-    };
+    });
   }
 
-  return { status: 'non_trouve', method: 'aucune passe de correspondance n\'a matché' };
+  return finalize({ status: 'non_trouve', method: 'aucune passe de correspondance n\'a matché' });
 }
 
 // Helper to clean and normalize header strings
