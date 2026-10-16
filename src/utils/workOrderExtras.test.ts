@@ -83,6 +83,7 @@ import {
   identityToRow,
   rowToIdentity,
   computeIdentityBackfillPatch,
+  countUnsyncedLocalExtras,
 } from './workOrderExtras';
 import { updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, fetchExistingWorkOrdersCore } from '../lib/queries/work_orders';
 
@@ -506,5 +507,43 @@ describe('slimExtraEntry', () => {
     const out = slimExtraEntry({ tasks, intervenantsLogs: logs });
     expect(out.tasks).toBe(tasks);
     expect(out.intervenantsLogs).toBe(logs);
+  });
+});
+
+describe('countUnsyncedLocalExtras (suppression conditionnelle de la copie locale)', () => {
+  const base = (over: Record<string, unknown> = {}) => ({ id: 'a', code: 'OT-1', title: 't', ...over }) as any;
+
+  it('0 / 0 quand la base possède déjà tout (la base l\'emporte)', () => {
+    const fetched = [base({ id: 'a', tasks: [{ id: 'x', completed: true }], visa: 'MO', planner: 'P' })];
+    const extras = { a: { tasks: [{ id: 'x', completed: true }], visa: 'AB', interventionCode: 'PS-1' } } as any;
+    // interventionCode local absent en base => à rattraper : pending
+    expect(countUnsyncedLocalExtras(fetched, extras).pending).toBe(1);
+    expect(countUnsyncedLocalExtras(fetched, { a: { tasks: [{ id: 'x', completed: true }], visa: 'AB' } } as any)).toEqual({ pending: 0, orphansWithWork: 0 });
+  });
+
+  it('compte le travail local que la base n\'a pas (checklist cochée, visa)', () => {
+    const fetched = [base({ id: 'a' }), base({ id: 'b' })];
+    const extras = {
+      a: { tasks: [{ id: 'x', completed: true }] },
+      b: { visa: 'MO' },
+    } as any;
+    expect(countUnsyncedLocalExtras(fetched, extras).pending).toBe(2);
+  });
+
+  it('compte un ancien « planner » local absent de la base', () => {
+    expect(countUnsyncedLocalExtras([base({ id: 'a' })], { a: { planner: 'Dupont' } } as any).pending).toBe(1);
+    expect(countUnsyncedLocalExtras([base({ id: 'a', planner: 'Dupont' })], { a: { planner: 'Dupont' } } as any).pending).toBe(0);
+  });
+
+  it('garde (compte) une entrée locale orpheline qui porte un vrai travail, ignore les orphelines vides', () => {
+    const extras = {
+      gone1: { tasks: [{ id: 'x', completed: true }] },
+      gone2: { tasks: [{ id: 'y', completed: false }] }, // copie de gamme sans travail
+    } as any;
+    expect(countUnsyncedLocalExtras([], extras)).toEqual({ pending: 0, orphansWithWork: 1 });
+  });
+
+  it('sans copie locale : rien à signaler', () => {
+    expect(countUnsyncedLocalExtras([base()], {})).toEqual({ pending: 0, orphansWithWork: 0 });
   });
 });
