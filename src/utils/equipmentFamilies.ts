@@ -119,9 +119,12 @@ export const FAMILIES: Record<string, FamilyInfo> = {
   RESAS: { label: 'Réseaux assainissement', lot: 'FLUIDE' },
   RESEP: { label: 'Réseaux eaux pluviales', lot: 'FLUIDE' },
   CEE: { label: 'Compteur eau', lot: 'FLUIDE' },
+  // Validé le 16/10/2026 : seuls les RIA sont couverts par le contrat (lot Fluides). Les poteaux d'incendie et
+  // les extincteurs sont hors contrat : famille connue (libellé conservé) mais classée « Divers », donc hors des
+  // lots contractuels suivis.
   RIA: { label: "Robinet d'incendie armé", lot: 'FLUIDE' },
-  PDI: { label: "Poteau d'incendie", lot: 'FLUIDE' },
-  EXI: { label: 'Extincteur', lot: 'FLUIDE' },
+  PDI: { label: "Poteau d'incendie", lot: 'DIVERS' },
+  EXI: { label: 'Extincteur', lot: 'DIVERS' },
   GAR: { label: 'Gestion arrosage', lot: 'FLUIDE' },
   RBD: { label: 'Rain Bird décodeur interface', lot: 'FLUIDE' },
   RBS: { label: 'Station de gestion Rain Bird', lot: 'FLUIDE' },
