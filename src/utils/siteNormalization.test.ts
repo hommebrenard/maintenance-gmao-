@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findMasterLocationName, getAvailableSiteNames, groupOrdersBySite, matchesSiteFilter } from './siteNormalization';
+import { findMasterLocationName, getAvailableSiteNames, groupOrdersBySite, matchesSiteFilter, createSiteMatcher } from './siteNormalization';
 
 // Les 4 emplacements réels de la table `locations` (noms + codes Zone).
 const LOCS = [
@@ -124,5 +124,34 @@ describe('groupOrdersBySite (badge Chargé des Emplacements)', () => {
     expect(g.get('Succursale régionale Type B AGADIR')?.length).toBe(3);
     expect(g.get('CV AGADIR')?.length).toBe(1);
     expect(g.size).toBe(2);
+  });
+});
+
+describe('createSiteMatcher (perf 16/10/2026) : mêmes résultats que matchesSiteFilter', () => {
+  const locs = [
+    { name: 'Agence Agadir', code: 'BAM_AGD_AG' },
+    { name: 'Succursale Kénitra', code: 'BAM_KNT_AG' },
+    { name: 'CV CABO', code: 'BAM_CAB_CV' },
+  ];
+  const orders = [
+    { location: 'Agence Agadir', entity: undefined },
+    { location: undefined, entity: 'BAM_AGD-AG' },       // ancien code avec « - »
+    { location: 'bam_agd_ag', entity: undefined },       // casse
+    { location: 'Succursale Kénitra', entity: 'BAM_KNT_AG' },
+    { location: 'CV CABO', entity: undefined },
+    { location: 'Site inconnu', entity: 'XYZ' },
+    { location: undefined, entity: undefined },
+  ];
+  const filters = ['Agence Agadir', 'Succursale Kénitra', 'CV CABO', 'Site inconnu', 'all', 'Tous les sites', ''];
+
+  it('donne le même résultat pour chaque couple (OT, site)', () => {
+    for (const f of filters) {
+      const matcher = createSiteMatcher(f, locs);
+      for (const o of orders) {
+        expect(matcher(o as any), `${f} / ${JSON.stringify(o)}`).toBe(matchesSiteFilter(o as any, f, locs));
+        // 2e appel : résultat issu du cache, toujours identique
+        expect(matcher(o as any)).toBe(matchesSiteFilter(o as any, f, locs));
+      }
+    }
   });
 });
