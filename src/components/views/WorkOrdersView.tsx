@@ -41,7 +41,7 @@ import { ImportModal } from './ImportModal';
 import { AnnualMatrixView } from './AnnualMatrixView';
 import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
-import { getAvailableSiteNames, matchesSiteFilter } from '../../utils/siteNormalization';
+import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
@@ -654,12 +654,19 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Filter Logic
   const todayStr = formatLocalDate(new Date());
 
+  // Perf (16/10/2026, 13 000+ OT) : le filtre de site est résolu une seule fois, le résultat est mis en cache
+  // et la liste filtrée n'est recalculée que si un filtre ou les données changent.
+  const selectedSiteMatcher = useMemo(
+    () => createSiteMatcher(selectedLocationFilter, locations),
+    [selectedLocationFilter, locations]
+  );
+  const searchLower = searchQuery.toLowerCase();
   const passesFilters = (wo: WorkOrder, withMonth: boolean, skipLocation = false): boolean => {
-    const matchesSearch = wo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          wo.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (wo.assignee && wo.assignee.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (wo.planner && wo.planner.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = wo.title.toLowerCase().includes(searchLower) ||
+                          wo.code.toLowerCase().includes(searchLower) ||
+                          (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchLower)) ||
+                          (wo.assignee && wo.assignee.toLowerCase().includes(searchLower)) ||
+                          (wo.planner && wo.planner.toLowerCase().includes(searchLower));
     
     let matchesStatus = true;
     if (selectedStatusFilter === 'Ouvert') matchesStatus = wo.status === 'Ouvert';
@@ -681,7 +688,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
     let matchesLocation = true;
     if (!skipLocation && selectedLocationFilter !== 'all') {
-      matchesLocation = matchesSiteFilter(wo, selectedLocationFilter, locations);
+      matchesLocation = selectedSiteMatcher(wo);
     }
 
     let matchesMonth = true;
@@ -691,7 +698,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
     return matchesSearch && matchesStatus && matchesPriority && matchesLocation && matchesMonth;
   };
-  const filteredOrders = workOrders.filter(wo => passesFilters(wo, true));
+  const filteredOrders = useMemo(
+    () => workOrders.filter(wo => passesFilters(wo, true)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workOrders, searchQuery, selectedStatusFilter, selectedPriorityFilter, selectedLocationFilter, selectedSiteMatcher, selectedMonthFilter, todayStr]
+  );
+
+  // Nombre de cartes / lignes dessinées à l'écran (les compteurs et les exports portent sur TOUTE la liste filtrée).
+  const DISPLAY_STEP = 100;
+  const [displayLimit, setDisplayLimit] = useState(DISPLAY_STEP);
+  useEffect(() => {
+    setDisplayLimit(DISPLAY_STEP);
+  }, [searchQuery, selectedStatusFilter, selectedPriorityFilter, selectedLocationFilter, selectedMonthFilter, viewMode]);
   // Vue annuelle : exactement les mêmes filtres que la page, « Mois » compris (retour terrain 06/10/2026 :
   // avec « Janvier 2026 » sélectionné, la matrice affichait encore février et mai). Pour voir toute l'année,
   // choisir « Tous les mois ».
@@ -702,8 +720,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const { siteCounts, siteCountsTotal } = useMemo(() => {
     const base = workOrders.filter(wo => passesFilters(wo, true, true));
     const counts: Record<string, number> = {};
-    availableSiteNames.forEach(site => {
-      counts[site] = base.filter(wo => matchesSiteFilter(wo, site, locations)).length;
+    availableSiteNames.forEach(site => { counts[site] = 0; });
+    // Les sites auxquels un OT appartient ne dépendent que de (location, entity) : calculés une fois par
+    // couple distinct (une trentaine) puis un seul passage sur les OT (16/10/2026, perf).
+    const sitesByKey = new Map<string, string[]>();
+    base.forEach(wo => {
+      const key = `${wo.location ?? ''}\u0001${wo.entity ?? ''}`;
+      let matching = sitesByKey.get(key);
+      if (!matching) {
+        matching = availableSiteNames.filter(site => matchesSiteFilter(wo, site, locations));
+        sitesByKey.set(key, matching);
+      }
+      matching.forEach(site => { counts[site] += 1; });
     });
     return { siteCounts: counts, siteCountsTotal: base.length };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1654,7 +1682,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   </div>
 
                   <div className="space-y-3 flex-1 overflow-y-auto">
-                    {ordersInStatus.map(order => (
+                    {ordersInStatus.slice(0, displayLimit).map(order => (
                       <div
                         key={order.id}
                         onClick={() => { setSelectedWorkOrder(order); setIsEditMode(false); }}
@@ -1728,6 +1756,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         )}
                       </div>
                     ))}
+                    {ordersInStatus.length > displayLimit && (
+                      <button
+                        onClick={() => setDisplayLimit(l => l + DISPLAY_STEP)}
+                        className="w-full py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md"
+                      >
+                        Afficher {Math.min(DISPLAY_STEP, ordersInStatus.length - displayLimit)} de plus ({displayLimit} sur {ordersInStatus.length})
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1751,7 +1787,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredOrders.map(order => (
+                {filteredOrders.slice(0, displayLimit).map(order => (
                   <tr 
                     key={order.id}
                     onClick={() => { setSelectedWorkOrder(order); setIsEditMode(false); }}
@@ -1836,6 +1872,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 ))}
               </tbody>
             </table>
+            {filteredOrders.length > displayLimit && (
+              <div className="p-3 text-center border-t border-gray-200">
+                <button
+                  onClick={() => setDisplayLimit(l => l + DISPLAY_STEP)}
+                  className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md"
+                >
+                  Afficher {Math.min(DISPLAY_STEP, filteredOrders.length - displayLimit)} de plus ({displayLimit} sur {filteredOrders.length})
+                </button>
+              </div>
+            )}
           </div>
         ) : viewMode === 'calendar' ? (
           /* Calendar View */
