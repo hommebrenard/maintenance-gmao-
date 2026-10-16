@@ -232,3 +232,39 @@ export function slimExtraEntry(entry: Partial<WorkOrder>): Partial<WorkOrder> {
   if (!hasIntervenantWork(out.intervenantsLogs)) delete out.intervenantsLogs;
   return out;
 }
+
+/**
+ * Compte ce que la copie locale (`gmao_workOrders_extras`) contient ENCORE sans que la base le possède.
+ * - `pending` : OT présents en base pour lesquels le rattrapage a quelque chose à envoyer (checklist,
+ *   intervenants, visa, heures, code d'intervention, n° de plan, entité, ancien `planner`).
+ * - `orphansWithWork` : entrées locales dont l'OT n'est plus en base mais qui portent un vrai travail
+ *   saisi (checklist cochée, intervenants, visa) : elles ne peuvent être envoyées nulle part, on les garde.
+ * Quand les deux valent 0, la copie locale ne contient rien que la base n'ait déjà (la base l'emporte) :
+ * elle peut être supprimée sans perte. Même logique que le rattrapage : aucun écrasement de la base.
+ */
+export function countUnsyncedLocalExtras(
+  fetched: WorkOrder[],
+  extras: Record<string, Partial<WorkOrder>>
+): { pending: number; orphansWithWork: number } {
+  let pending = 0;
+  const dbIds = new Set<string>();
+  for (const wo of fetched) {
+    dbIds.add(wo.id);
+    const local = extras[wo.id];
+    if (!local) continue;
+    const hasBackfill =
+      Object.keys(computeLocalBackfillPatch(wo, local)).length > 0 ||
+      Object.keys(computeIdentityBackfillPatch(wo, local)).length > 0 ||
+      (!!local.planner?.trim() && !wo.planner);
+    if (hasBackfill) pending += 1;
+  }
+  let orphansWithWork = 0;
+  for (const id of Object.keys(extras)) {
+    if (dbIds.has(id)) continue;
+    const local = extras[id];
+    if (hasTaskWork(local.tasks) || hasIntervenantWork(local.intervenantsLogs) || !!local.visa?.trim()) {
+      orphansWithWork += 1;
+    }
+  }
+  return { pending, orphansWithWork };
+}
