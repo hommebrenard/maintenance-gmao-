@@ -238,7 +238,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         // n'ait déjà (la base l'emporte), elle est supprimée de CE navigateur pour libérer le quota ; sinon elle est
         // gardée, le rattrapage ci-dessous envoie ce qui manque, et la vérification se refait à la prochaine ouverture.
         try {
-          const { pending, orphansWithWork } = countUnsyncedLocalExtras(fetched, extras);
+          const { pending, orphansWithWork, orphanIds } = countUnsyncedLocalExtras(fetched, extras);
           if (Object.keys(extras).length === 0) {
             // rien à supprimer
           } else if (pending === 0 && orphansWithWork === 0) {
@@ -246,6 +246,15 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             console.info(`Copie locale des OT supprimée de ce navigateur : tout est déjà en base (${Object.keys(extras).length} entrées).`);
           } else {
             console.info(`Copie locale des OT conservée : ${pending} OT à rattraper vers la base, ${orphansWithWork} entrée(s) sans OT en base portant un travail saisi.`);
+            if (orphanIds.length > 0) {
+              // Détail des entrées orphelines (id, visa, tâches cochées, intervenants) pour décider quoi en faire.
+              console.info('Entrées locales sans OT en base :', orphanIds.map(id => ({
+                id,
+                visa: extras[id]?.visa || '',
+                tachesCochees: (extras[id]?.tasks || []).filter(t => t.completed).length,
+                intervenants: (extras[id]?.intervenantsLogs || []).length,
+              })));
+            }
           }
         } catch (err) {
           console.warn('Vérification de la copie locale des OT impossible :', err);
