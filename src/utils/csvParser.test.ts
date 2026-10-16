@@ -276,3 +276,28 @@ describe('findMatchingGammePlanDetailed — statuts de confiance (Phase 1 aperç
     expect(result[0].gammeMatchMethod).toBeTruthy();
   });
 });
+
+describe('findMatchingGammePlanDetailed : cache par OT (perf 16/10/2026)', () => {
+  const plans: any[] = [
+    { planCode: 'PS-1', equipmentCode: 'BAM_KNT_EQ1', equipmentDescription: 'Extracteur Kenitra', interventionTitle: 'Maintenance extracteur', tasks: [{ id: 't1', actionCode: 'A1', description: 'x' }] },
+    { planCode: 'PS-2', equipmentCode: 'BAM_CAS_EQ2', equipmentDescription: 'Pompe Casa', interventionTitle: 'Maintenance pompe', tasks: [{ id: 't2', actionCode: 'A2', description: 'y' }] },
+  ];
+
+  it('renvoie le même résultat (même objet) à l\'appel suivant, sans le recalculer', () => {
+    const first = findMatchingGammePlanDetailed('BAM_KNT_EQ1', 'PS-1', 'Maintenance extracteur', plans, 'Kénitra');
+    const second = findMatchingGammePlanDetailed('BAM_KNT_EQ1', 'PS-1', 'Maintenance extracteur', plans, 'Kénitra');
+    expect(first.status).toBe('exact');
+    expect(second).toBe(first);
+  });
+
+  it('garde le constat de conflit de site (plan d\'un autre site)', () => {
+    const r = findMatchingGammePlanDetailed('BAM_CAS_EQ2', 'PS-2', 'Maintenance pompe', plans, 'Kénitra');
+    expect(r.status).toBe('conflit');
+  });
+
+  it('ne mélange pas les résultats entre deux listes de gammes différentes', () => {
+    const other: any[] = [{ ...plans[1], equipmentCode: 'BAM_KNT_EQ2', equipmentDescription: 'Pompe Kenitra' }];
+    const r = findMatchingGammePlanDetailed('BAM_KNT_EQ2', 'PS-2', 'Maintenance pompe', other, 'Kénitra');
+    expect(r.status).toBe('exact');
+  });
+});
