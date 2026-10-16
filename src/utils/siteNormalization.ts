@@ -211,6 +211,29 @@ export function matchesSiteFilter(wo: WorkOrder, filterValue: string, locations?
 }
 
 /**
+ * Version rapide de `matchesSiteFilter` pour un site FIXE appliqué à des milliers d'OT
+ * (compteurs par site, filtre de liste). Le résultat de `matchesSiteFilter` ne dépend que de
+ * `location` et `entity` de l'OT : on le calcule une seule fois par couple de valeurs distinctes
+ * (une trentaine) au lieu d'une fois par OT (13 000+). Résultats strictement identiques.
+ */
+export function createSiteMatcher(
+  filterValue: string,
+  locations?: SiteLocationItem[]
+): (wo: { location?: string; entity?: string }) => boolean {
+  if (!filterValue || filterValue === 'all' || filterValue === 'Tous les sites') return () => true;
+  const cache = new Map<string, boolean>();
+  return wo => {
+    const key = `${wo.location ?? ''}\u0001${wo.entity ?? ''}`;
+    let res = cache.get(key);
+    if (res === undefined) {
+      res = matchesSiteFilter(wo as WorkOrder, filterValue, locations);
+      cache.set(key, res);
+    }
+    return res;
+  };
+}
+
+/**
  * Regroupe les OT par NOM d'emplacement officiel (table `locations`), avec la même tolérance que le
  * filtre « Site » de la vue Ordres de travail (« - » = « _ », casse, alias). Sert au badge
  * « Chargé (N OT) » des cartes Emplacements, pour que les deux écrans comptent pareil
