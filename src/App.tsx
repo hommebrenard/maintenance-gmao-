@@ -271,8 +271,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         // sauvegarde réécrivait ce localStorage SANS `planner` (retiré de la liste des
         // champs locaux, aujourd'hui supprimée) — on pousse donc une fois vers Supabase
         // toute valeur encore uniquement locale, pour ne rien perdre.
+        const fetchedById = new Map(fetched.map(f => [f.id, f]));
         merged.forEach(wo => {
-          const alreadyInSupabase = fetched.find(f => f.id === wo.id)?.planner;
+          const alreadyInSupabase = fetchedById.get(wo.id)?.planner;
           if (wo.planner && !alreadyInSupabase) {
             updateWorkOrder(wo.id, { planner: wo.planner }).catch(err =>
               console.error(`Erreur backfill planner pour l'OT ${wo.code}:`, err)
