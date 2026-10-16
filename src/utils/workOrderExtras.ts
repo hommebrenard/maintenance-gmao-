@@ -245,7 +245,7 @@ export function slimExtraEntry(entry: Partial<WorkOrder>): Partial<WorkOrder> {
 export function countUnsyncedLocalExtras(
   fetched: WorkOrder[],
   extras: Record<string, Partial<WorkOrder>>
-): { pending: number; orphansWithWork: number } {
+): { pending: number; orphansWithWork: number; orphanIds: string[] } {
   let pending = 0;
   const dbIds = new Set<string>();
   for (const wo of fetched) {
@@ -258,13 +258,13 @@ export function countUnsyncedLocalExtras(
       (!!local.planner?.trim() && !wo.planner);
     if (hasBackfill) pending += 1;
   }
-  let orphansWithWork = 0;
+  const orphanIds: string[] = [];
   for (const id of Object.keys(extras)) {
     if (dbIds.has(id)) continue;
     const local = extras[id];
     if (hasTaskWork(local.tasks) || hasIntervenantWork(local.intervenantsLogs) || !!local.visa?.trim()) {
-      orphansWithWork += 1;
+      orphanIds.push(id);
     }
   }
-  return { pending, orphansWithWork };
+  return { pending, orphansWithWork: orphanIds.length, orphanIds };
 }
