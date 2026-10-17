@@ -58,6 +58,27 @@ describe('importRequests : analyse', () => {
     expect(rows[0]).toMatchObject({ equipment_id: 'eq1', location_id: 'loc-cas', work_order_id: 'wo1' });
     expect(report).toMatchObject({ equipmentMatched: 1, siteMatched: 1, otLinked: 1 });
   });
+  it('règle : équipement lié = planifié d\'abord, source en repli (comparaison tolérante - / _)', () => {
+    const c = buildImportContext({
+      requests: [],
+      equipment: [
+        { id: 'src', code: 'BAM-FEZ_AG-APLC-04', locationId: 'loc-fez' },
+        { id: 'plan', code: 'BAM-FEZ_AG-SPT-25', locationId: 'loc-fez' },
+      ],
+      locations: [{ id: 'loc-fez', code: 'BAM_FEZ_AG' }], workOrders: [],
+    });
+    const diverge = row({ 'Équipement source': 'BAM-FEZ_AG-APLC-04', 'Éqpt / grp planifié': 'BAM_FEZ_AG_SPT_25' });
+    const a = analyzeRequestRows([diverge], c);
+    expect(a.rows[0]).toMatchObject({ equipment_id: 'plan', equipment_code: 'BAM-FEZ_AG-APLC-04', planned_equipment_code: 'BAM_FEZ_AG_SPT_25' });
+    expect(a.report).toMatchObject({ equipmentMatched: 1, equipmentUnmatched: 0, equipmentSourceDiffersPlanned: 1 });
+    // planifié absent de l'application → repli sur la source
+    const repli = analyzeRequestRows([row({ 'Équipement source': 'BAM-FEZ_AG-APLC-04', 'Éqpt / grp planifié': 'BAM-FEZ_AG-INCONNU-01' })], c);
+    expect(repli.rows[0].equipment_id).toBe('src');
+    // source = planifié → aucun écart signalé
+    const same = analyzeRequestRows([row({ 'Équipement source': 'BAM-FEZ_AG-SPT-25', 'Éqpt / grp planifié': 'BAM-FEZ_AG-SPT-25' })], c);
+    expect(same.rows[0].equipment_id).toBe('plan');
+    expect(same.report.equipmentSourceDiffersPlanned).toBe(0);
+  });
   it('option B : une demande déjà présente n\'est jamais réimportée', () => {
     const { report, rows } = analyzeRequestRows([row({ 'N° de DI': 'DI00000001' })], ctx);
     expect(rows).toHaveLength(0);
