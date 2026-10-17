@@ -97,6 +97,9 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
                 <Stat label="Site reconnu / à rapprocher" value={`${r.siteMatched} / ${r.siteUnmatched}`} tone={r.siteUnmatched ? 'warn' : 'ok'} />
                 <Stat label="OT lié / hors application" value={`${r.otLinked} / ${r.otUnlinked}`} />
               </div>
+              {r.equipmentSourceDiffersPlanned > 0 && (
+                <p className="text-xs text-amber-700">{r.equipmentSourceDiffersPlanned} DI avec équipement source ≠ planifié : l'équipement planifié est retenu (erreur probable de saisie du source dans Coswin).</p>
+              )}
               <p className="text-xs text-gray-500">
                 « À rapprocher » : le code est conservé sur la demande et reste visible ; le rattachement se fera quand l'équipement ou le site existera dans l'application.
               </p>
