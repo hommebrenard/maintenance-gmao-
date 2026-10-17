@@ -110,12 +110,17 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
           )}
 
           {report && !blocked && (
+            <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Stat label="Lignes du fichier" value={report.totalRows} />
               <Stat label="DI déjà présentes (comparées)" value={payload.length} tone="ok" />
               <Stat label="Nouvelles DI (non créées ici)" value={newInFile} tone={newInFile ? 'warn' : 'neutral'} />
               <Stat label="Non retenues (état / ligne invalide)" value={unknownStates + report.invalid.length} tone={unknownStates + report.invalid.length ? 'warn' : 'neutral'} />
             </div>
+            {report.equipmentSourceDiffersPlanned > 0 && (
+              <p className="text-xs text-amber-700">{report.equipmentSourceDiffersPlanned} DI avec équipement source ≠ planifié : l'équipement planifié est retenu (erreur probable de saisie du source dans Coswin).</p>
+            )}
+            </>
           )}
           {report && !blocked && newInFile > 0 && (
             <div className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 flex gap-2">
