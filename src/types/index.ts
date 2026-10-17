@@ -1,4 +1,5 @@
 export type NavigationItem = 
+  | 'dashboard'
   | 'work-orders'
   | 'requests'
   | 'messages'
