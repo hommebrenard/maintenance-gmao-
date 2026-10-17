@@ -22,7 +22,8 @@ import {
   ChevronDown, 
   ChevronRight,
   Settings,
-  HeartPulse
+  HeartPulse,
+  LayoutDashboard
 } from 'lucide-react';
 import { NavigationItem } from '../types';
 
@@ -146,6 +147,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             OPTIMISER
           </div>
           <nav className="space-y-0.5">
+            <button
+              onClick={() => selectAndClose('dashboard')}
+              className={getItemClass('dashboard')}
+            >
+              <div className="flex items-center gap-3">
+                <LayoutDashboard className={`w-4 h-4 ${isActive('dashboard') ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span>Tableau de bord</span>
+              </div>
+            </button>
+
             <button
               onClick={() => selectAndClose('reports')}
               className={getItemClass('reports')}
