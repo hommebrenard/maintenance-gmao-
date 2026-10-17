@@ -124,7 +124,10 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <Field label="Équipement source" highlight value={equipment ? `${equipment.code} — ${equipment.name}` : (request.equipmentName ?? (request.equipmentCode ? `${request.equipmentCode} (non rattaché à un équipement de l'application)` : ''))} />
+              <Field label={request.plannedEquipmentCode ? 'Équipement planifié (lié — carnet de santé)' : 'Équipement'} highlight value={equipment ? `${equipment.code} — ${equipment.name}` : (request.equipmentName ?? ((request.plannedEquipmentCode || request.equipmentCode) ? `${request.plannedEquipmentCode || request.equipmentCode} (non rattaché à un équipement de l'application)` : ''))} />
+              {request.equipmentCode && (!equipment || equipment.code !== request.equipmentCode) && (
+                <div className="mt-2"><Field label="Équipement source (Coswin)" value={request.equipmentCode} /></div>
+              )}
             </div>
             <Field label="Site" value={equipment?.location || locationName || request.location || (request.siteCode ? `${request.siteCode} (hors application)` : '')} />
           </div>
