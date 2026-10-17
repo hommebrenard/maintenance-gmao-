@@ -1,4 +1,5 @@
 import type { Equipment, LocationItem, MaintenanceRequest, WorkOrder } from '../types';
+import { equipmentCompareKey } from './coswinEquipmentImport';
 
 /**
  * Import des demandes d'intervention (DI) exportées de Coswin. Règle « option B » : l'import n'AJOUTE que les
@@ -107,6 +108,8 @@ export interface RequestInsertRow {
 export interface ImportContext {
   existingCodes: Set<string>;
   equipmentIdByCode: Map<string, string>;
+  /** Rapprochement tolérant (« - » et « _ » confondus, casse ignorée) : clé normalisée → équipement. */
+  equipmentByKey: Map<string, { id: string; code: string }>;
   equipmentLocationById: Map<string, string | undefined>;
   locationIdByCode: Map<string, string>;
   workOrderIdByCode: Map<string, string>;
@@ -121,6 +124,7 @@ export function buildImportContext(src: {
   return {
     existingCodes: new Set(src.requests.map(r => r.code).filter((c): c is string => !!c)),
     equipmentIdByCode: new Map(src.equipment.map(e => [e.code, e.id] as [string, string])),
+    equipmentByKey: new Map(src.equipment.map(e => [equipmentCompareKey(e.code), { id: e.id, code: e.code }] as [string, { id: string; code: string }])),
     equipmentLocationById: new Map(src.equipment.map(e => [e.id, e.locationId] as [string, string | undefined])),
     locationIdByCode: new Map(src.locations.filter(l => l.code).map(l => [l.code as string, l.id] as [string, string])),
     workOrderIdByCode: new Map(src.workOrders.map(w => [w.code, w.id] as [string, string])),
@@ -136,6 +140,8 @@ export interface ImportReport {
   invalid: { code: string; reason: string }[];
   skippedUnknownState: { state: string; count: number }[];
   equipmentMatched: number; equipmentUnmatched: number;
+  /** Information : DI dont l'équipement source diffère de l'équipement planifié (le planifié est retenu s'il existe dans l'app). */
+  equipmentSourceDiffersPlanned: number;
   siteMatched: number; siteUnmatched: number;
   otLinked: number; otUnlinked: number;
   unmatchedEquipment: string[]; unmatchedSites: string[];
@@ -153,7 +159,7 @@ export function analyzeRequestRows(
 ): { report: ImportReport; rows: RequestInsertRow[]; existingRows: RequestInsertRow[] } {
   const report: ImportReport = {
     missingHeaders: [], totalRows: 0, blankRows: 0, newCount: 0, alreadyCount: 0, invalid: [], skippedUnknownState: [],
-    equipmentMatched: 0, equipmentUnmatched: 0, siteMatched: 0, siteUnmatched: 0, otLinked: 0, otUnlinked: 0,
+    equipmentMatched: 0, equipmentUnmatched: 0, equipmentSourceDiffersPlanned: 0, siteMatched: 0, siteUnmatched: 0, otLinked: 0, otUnlinked: 0,
     unmatchedEquipment: [], unmatchedSites: [], warnings: [],
   };
   const rows: RequestInsertRow[] = [];
@@ -217,10 +223,17 @@ export function analyzeRequestRows(
       report.warnings.push({ code, message: `Date de déclaration (${p2(declP.d)}/${p2(declP.m)}/${declP.y}) très éloignée de la date de création (${p2(creaP.d)}/${p2(creaP.m)}/${creaP.y}) : année probablement erronée dans Coswin (la date de création est retenue)` });
     }
 
-    const equipmentCode = g('equipment') || g('plannedEquipment');
-    const equipmentId = equipmentCode ? ctx.equipmentIdByCode.get(equipmentCode) ?? null : null;
+    // Règle : équipement lié = planifié s'il correspond à un équipement de l'app, sinon source. Le texte
+    // `equipment_code` reste celui de Coswin (équipement source) ; seul le lien `equipment_id` suit la règle.
+    const sourceCode = g('equipment');
+    const plannedCode = g('plannedEquipment');
+    const equipmentCode = sourceCode || plannedCode;
+    const plannedHit = plannedCode ? ctx.equipmentByKey.get(equipmentCompareKey(plannedCode)) : undefined;
+    const sourceHit = sourceCode ? ctx.equipmentByKey.get(equipmentCompareKey(sourceCode)) : undefined;
+    const equipmentId = (plannedHit ?? sourceHit)?.id ?? null;
+    if (sourceCode && plannedCode && equipmentCompareKey(sourceCode) !== equipmentCompareKey(plannedCode)) report.equipmentSourceDiffersPlanned += 1;
     if (equipmentCode) {
-      if (equipmentId) report.equipmentMatched += 1; else { report.equipmentUnmatched += 1; unmatchedEq.add(equipmentCode); }
+      if (equipmentId) report.equipmentMatched += 1; else { report.equipmentUnmatched += 1; unmatchedEq.add(plannedCode || equipmentCode); }
     }
     const siteCode = g('site');
     const locationId = (siteCode ? ctx.locationIdByCode.get(siteCode) : undefined)
