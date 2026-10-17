@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { WorkOrdersView } from './components/views/WorkOrdersView';
 import { RequestsView } from './components/views/RequestsView';
+import { DashboardView } from './components/views/DashboardView';
 import { MessagesView } from './components/views/MessagesView';
 import { ReportsView } from './components/views/ReportsView';
 import { AutomationsView } from './components/views/AutomationsView';
@@ -1180,6 +1181,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onAddConversation={handleAddConversation}
           />
         );
+      case 'dashboard':
+        return <DashboardView workOrders={workOrders} requests={requests} locations={locations} />;
       case 'reports':
         return (
           <ReportsView
