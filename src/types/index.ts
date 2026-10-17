@@ -191,6 +191,8 @@ export interface MaintenanceRequest {
   coswinCreatedAt?: string;
   visa?: string;
   equipmentCode?: string;
+  /** Équipement planifié Coswin (texte) : l'équipement lié (`equipmentId`) suit la règle « planifié d'abord, source en repli ». */
+  plannedEquipmentCode?: string;
   interventionCode?: string;
   siteCode?: string;
   /** Motif de rejet / d'annulation (colonne `rejection_reason`) : saisi dans l'application, absent de l'export Coswin. */
