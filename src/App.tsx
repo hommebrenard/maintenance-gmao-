@@ -24,6 +24,8 @@ import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, deleteEquipment } from './lib/queries/equipment';
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
+import { closeWorkOrdersFromCoswin, revertCoswinClosure } from './lib/queries/coswinClosure';
+import type { ClosureItem } from './utils/coswinClosure';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, countUnsyncedLocalExtras } from './utils/workOrderExtras';
 import { explainSaveError } from './utils/saveErrors';
@@ -661,6 +663,18 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     return res;
   };
 
+  // Clôture Coswin des OT à l'état T : aperçu (apply = false) ou écriture atomique (apply = true), puis rechargement.
+  const handleCoswinClosure = async (items: ClosureItem[], lot: string, apply: boolean) => {
+    const res = await closeWorkOrdersFromCoswin(items, lot, apply);
+    if (apply && res.applique) setWorkOrders(await fetchWorkOrders());
+    return res;
+  };
+  const handleCoswinRevert = async (lot: string) => {
+    const res = await revertCoswinClosure(lot);
+    setWorkOrders(await fetchWorkOrders());
+    return res;
+  };
+
   const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => {
     if (!reqData.equipmentId) {
       alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
@@ -1152,6 +1166,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onEditWorkOrder={handleEditWorkOrder}
             onBulkImportWorkOrders={handleBulkImportWorkOrders}
             onClearAllWorkOrders={handleClearAllWorkOrders}
+            onCoswinClosure={isManager ? handleCoswinClosure : undefined}
+            onCoswinRevert={isManager ? handleCoswinRevert : undefined}
           />
         );
       case 'requests':
