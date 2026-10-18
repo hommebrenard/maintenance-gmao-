@@ -7,12 +7,14 @@ import { createSiteMatcher } from './siteNormalization';
  * - Ancienneté du retard = nombre de jours entre l'échéance et aujourd'hui (tranches : 1-30, 31-90, 91-180, > 180 j).
  * - Aucun OT n'est exclu automatiquement : un retard ancien reste un retard à examiner (clôture oubliée dans l'application, ou OT réellement en souffrance).
  * - État Coswin « chargé » : pour un site et un mois d'échéance donnés, au moins un OT a été clôturé par l'import Coswin. Tant qu'il ne l'est pas, un OT « Ouvert » en retard peut déjà être terminé dans Coswin : son retard n'est pas confirmé.
+ * - OT « NC » = OT planifié dans l'application mais non créé dans Coswin (code « NC… ») : aucun état Coswin n'existe pour lui, son retard ne dépend pas d'un import Coswin.
  * - OT clôturé dans Coswin, non régularisé = OT « Terminé » via l'import Coswin, sans checklist ni visa renseignés dans l'application.
  */
 export type AgingKey = 'd30' | 'd90' | 'd180' | 'd180p';
-export interface OverdueItem { wo: WorkOrder; daysLate: number; coswinLoaded: boolean }
+export type CoswinState = 'loaded' | 'notLoaded' | 'notCreated';
+export interface OverdueItem { wo: WorkOrder; daysLate: number; coswin: CoswinState }
 export interface AgingBucket { key: AgingKey; label: string; min: number; max: number; items: OverdueItem[] }
-export interface AgingResult { total: number; buckets: AgingBucket[]; withoutDueDate: number; loadedTotal: number; notLoadedTotal: number }
+export interface AgingResult { total: number; buckets: AgingBucket[]; withoutDueDate: number; loadedTotal: number; notLoadedTotal: number; notCreatedTotal: number }
 
 const DAY = 86_400_000;
 export const AGING_DEFS: { key: AgingKey; label: string; min: number; max: number }[] = [
@@ -22,6 +24,7 @@ export const AGING_DEFS: { key: AgingKey; label: string; min: number; max: numbe
   { key: 'd180p', label: 'Plus de 180 jours', min: 181, max: Infinity },
 ];
 
+const isNotCreated = (w: WorkOrder) => /^(?:OT-)?NC/i.test((w.code || '').trim());
 const coverageKey = (w: WorkOrder) => `${w.location ?? ''}|${(w.dueDate || '').slice(0, 7)}`;
 /** Couples « site | mois d'échéance » dont l'état Coswin a été chargé (au moins un OT clôturé par l'import Coswin). */
 export function computeCoswinCoverage(workOrders: WorkOrder[]): Set<string> {
@@ -36,6 +39,7 @@ export function computeOverdueAging(workOrders: WorkOrder[], today: Date, covera
   let withoutDueDate = 0;
   let total = 0;
   let loadedTotal = 0;
+  let notCreatedTotal = 0;
   for (const wo of workOrders) {
     if (wo.status === 'Terminé' || wo.status === 'Annulé') continue;
     const due = Date.parse((wo.dueDate || '').slice(0, 10));
@@ -44,14 +48,15 @@ export function computeOverdueAging(workOrders: WorkOrder[], today: Date, covera
     if (daysLate < 1) continue;
     const b = buckets.find(x => daysLate >= x.min && daysLate <= x.max);
     if (b) {
-      const coswinLoaded = coverage.has(coverageKey(wo));
-      b.items.push({ wo, daysLate, coswinLoaded });
+      const coswin: CoswinState = isNotCreated(wo) ? 'notCreated' : coverage.has(coverageKey(wo)) ? 'loaded' : 'notLoaded';
+      b.items.push({ wo, daysLate, coswin });
       total += 1;
-      if (coswinLoaded) loadedTotal += 1;
+      if (coswin === 'loaded') loadedTotal += 1;
+      else if (coswin === 'notCreated') notCreatedTotal += 1;
     }
   }
   for (const b of buckets) b.items.sort((x, y) => y.daysLate - x.daysLate);
-  return { total, buckets, withoutDueDate, loadedTotal, notLoadedTotal: total - loadedTotal };
+  return { total, buckets, withoutDueDate, loadedTotal, notCreatedTotal, notLoadedTotal: total - loadedTotal - notCreatedTotal };
 }
 
 /** `site` = id d'un emplacement de type « Site », ou '' pour tous les sites (même règle que le tableau de bord). */
@@ -83,10 +88,11 @@ export function computeCompletionSplit(workOrders: WorkOrder[]): CompletionSplit
   };
 }
 
+export const COSWIN_STATE_LABEL: Record<CoswinState, string> = { loaded: 'Chargé', notLoaded: 'Non chargé', notCreated: 'Non créé dans Coswin (NC)' };
 const csvCell = (v: string | number | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 /** CSV (séparateur « ; », BOM UTF-8) lisible directement dans Excel. */
 export function overdueToCsv(items: OverdueItem[]): string {
   const head = ['Code', 'Titre', 'Équipement', 'Site', 'Échéance', 'Retard (jours)', 'Statut', 'Responsable', 'État Coswin'];
-  const rows = items.map(({ wo, daysLate, coswinLoaded }) => [wo.code, wo.title, wo.equipmentName, wo.location, (wo.dueDate || '').slice(0, 10), daysLate, wo.status, wo.assignee ?? wo.planner, coswinLoaded ? 'Chargé' : 'Non chargé']);
+  const rows = items.map(({ wo, daysLate, coswin }) => [wo.code, wo.title, wo.equipmentName, wo.location, (wo.dueDate || '').slice(0, 10), daysLate, wo.status, wo.assignee ?? wo.planner, COSWIN_STATE_LABEL[coswin]]);
   return '\uFEFF' + [head, ...rows].map(r => r.map(csvCell).join(';')).join('\r\n');
 }

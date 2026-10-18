@@ -44,8 +44,21 @@ describe('état Coswin chargé (site + mois d\'échéance)', () => {
     expect(r.total).toBe(3);
     expect(r.loadedTotal).toBe(1);
     expect(r.notLoadedTotal).toBe(2);
-    const flags = Object.fromEntries(r.buckets.flatMap(b => b.items).map(i => [i.wo.id, i.coswinLoaded]));
-    expect(flags).toEqual({ '2': true, '3': false, '4': false });
+    const flags = Object.fromEntries(r.buckets.flatMap(b => b.items).map(i => [i.wo.id, i.coswin]));
+    expect(flags).toEqual({ '2': 'loaded', '3': 'notLoaded', '4': 'notLoaded' });
+  });
+  it('un OT « NC » (non créé dans Coswin) n\'est jamais « confirmé » par un état Coswin', () => {
+    const list = [
+      wo('1', 'Terminé', '2026-02-09', { closureSource: 'coswin' }),
+      wo('2', 'Ouvert', '2026-02-20', { code: 'NC-AG KENITRA-FEV2026-001' }),   // même site et même mois, mais absent de Coswin
+      wo('3', 'Ouvert', '2026-02-21'),
+    ];
+    const r = computeOverdueAging(list, today);
+    expect(r.loadedTotal).toBe(1);
+    expect(r.notCreatedTotal).toBe(1);
+    expect(r.notLoadedTotal).toBe(0);
+    const flags = Object.fromEntries(r.buckets.flatMap(b => b.items).map(i => [i.wo.id, i.coswin]));
+    expect(flags).toEqual({ '2': 'notCreated', '3': 'loaded' });
   });
 });
 
@@ -77,7 +90,7 @@ describe('filterWorkOrdersBySite / overdueToCsv', () => {
     expect(filterWorkOrdersBySite(list, locations, 'a').map(w => w.id)).toEqual(['1']);
   });
   it('CSV : BOM, séparateur « ; » et guillemets échappés', () => {
-    const csv = overdueToCsv([{ wo: wo('1', 'Ouvert', '2026-10-01', { title: 'Test "x"' }), daysLate: 17, coswinLoaded: true }]);
+    const csv = overdueToCsv([{ wo: wo('1', 'Ouvert', '2026-10-01', { title: 'Test "x"' }), daysLate: 17, coswin: 'loaded' }]);
     expect(csv.startsWith('\uFEFF"Code";"Titre"')).toBe(true);
     expect(csv).toContain('"Test ""x"""');
     expect(csv).toContain(';"17";');
