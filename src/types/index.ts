@@ -111,6 +111,10 @@ export interface WorkOrder {
    * 07/10/2026). Jamais écrite par l'app ; absente si l'OT n'est pas « Terminé »
    * ou a été clos avant l'horodatage automatique. */
   closedAt?: string;
+  /** 'coswin' = clôturé via l'import Coswin (sans checklist ni visa) ; absent = clôturé dans l'app.
+   * Posé uniquement par la fonction SQL close_work_orders_from_coswin. */
+  closureSource?: string;
+  closureLotId?: string;
   planner?: string;
   planNumber?: string;
   interventionCode?: string;
