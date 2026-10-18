@@ -38,6 +38,9 @@ import {
 } from 'lucide-react';
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
+import { CoswinClosureModal } from './CoswinClosureModal';
+import type { ClosureResult } from '../../lib/queries/coswinClosure';
+import type { ClosureItem } from '../../utils/coswinClosure';
 import { AnnualMatrixView } from './AnnualMatrixView';
 import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
@@ -66,6 +69,9 @@ interface WorkOrdersViewProps {
   onEditWorkOrder?: (id: string, updated: Partial<WorkOrder>) => void;
   onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => void;
    onClearAllWorkOrders?: () => void;
+  /** Clôture Coswin (responsable uniquement) : absent = bouton masqué. */
+  onCoswinClosure?: (items: ClosureItem[], lot: string, apply: boolean) => Promise<ClosureResult>;
+  onCoswinRevert?: (lot: string) => Promise<{ lot: string; rouverts: number }>;
 }
 
 function getEquipmentNameOnly(wo?: WorkOrder | null, equipmentList: Equipment[] = []): string {
@@ -337,6 +343,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   onEditWorkOrder,
   onBulkImportWorkOrders,
     onClearAllWorkOrders,
+  onCoswinClosure,
+  onCoswinRevert,
 }) => {
   // Ajouté le 26/09/2026 — technicien(s) disponibles pour le sélecteur
   // d'assignation, et rôle de l'utilisateur connecté (seul un manager peut
@@ -365,6 +373,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Modals & Popovers state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCoswinClosureOpen, setIsCoswinClosureOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
@@ -1587,6 +1596,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Importer Excel / CSV</span>
             </button>
+
+            {/* Clôture des OT terminés dans Coswin (responsable) */}
+            {onCoswinClosure && onCoswinRevert && (
+              <button
+                onClick={() => setIsCoswinClosureOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-2xs"
+                title="Clôturer les OT à l'état T dans l'export Coswin (sans checklist ni visa)"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Clôture Coswin</span>
+              </button>
+            )}
 
             {/* Clear / Reset All Work Orders Button */}
             {onClearAllWorkOrders && workOrders.length > 0 && (
@@ -3006,6 +3027,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       <span className="text-gray-500 block font-medium">Équipement (Nom):</span>
                       <span className="font-semibold text-gray-900 block mt-0.5">{getEquipmentNameOnly(selectedWorkOrder, equipmentList)}</span>
                     </div>
+                    {selectedWorkOrder.closureSource === 'coswin' && (
+                      <div className="col-span-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1">
+                          <Check className="w-3.5 h-3.5" />
+                          Clôturé dans Coswin — sans checklist ni visa
+                        </span>
+                        {selectedWorkOrder.closedAt && (
+                          <span className="block text-[11px] text-indigo-700 mt-1">Date de fin déclarée dans Coswin : {new Date(selectedWorkOrder.closedAt).toLocaleDateString('fr-FR')} (clôture administrative, pas une preuve d'exécution)</span>
+                        )}
+                      </div>
+                    )}
                     <div>
                       <span className="text-gray-500 block font-medium">Code Équipement:</span>
                       {getEquipmentCodeOnly(selectedWorkOrder, equipmentList) !== '—' ? (
@@ -4011,6 +4043,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {isCoswinClosureOpen && onCoswinClosure && onCoswinRevert && (
+        <CoswinClosureModal workOrders={workOrders} onClose={() => setIsCoswinClosureOpen(false)} onCloseOrders={onCoswinClosure} onRevert={onCoswinRevert} />
       )}
 
       {/* Import Modal */}
