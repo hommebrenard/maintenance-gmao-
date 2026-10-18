@@ -23,6 +23,7 @@ import {
   Edit3, 
   Printer, 
   Check, 
+  HelpCircle,
   ChevronLeft, 
   ChevronRight,
   RotateCcw,
@@ -39,6 +40,7 @@ import {
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
 import { CoswinClosureModal } from './CoswinClosureModal';
+import { parseSearchGroups } from '../../utils/searchTerms';
 import { CoswinStrikeBand, CoswinStrikePill, isCoswinUnregularized } from '../CoswinStrikeBand';
 import type { ClosureResult } from '../../lib/queries/coswinClosure';
 import type { ClosureItem } from '../../utils/coswinClosure';
@@ -392,6 +394,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCoswinClosureOpen, setIsCoswinClosureOpen] = useState(false);
+  const [isSearchHelpOpen, setIsSearchHelpOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
@@ -687,13 +690,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     () => createSiteMatcher(selectedLocationFilter, locations),
     [selectedLocationFilter, locations]
   );
-  const searchLower = searchQuery.toLowerCase();
+  // Recherche multiple (plusieurs codes OT collés d'un coup) : calculée une seule fois par saisie.
+  const searchGroups = useMemo(() => parseSearchGroups(searchQuery), [searchQuery]);
   const passesFilters = (wo: WorkOrder, withMonth: boolean, skipLocation = false): boolean => {
-    const matchesSearch = wo.title.toLowerCase().includes(searchLower) ||
-                          wo.code.toLowerCase().includes(searchLower) ||
-                          (wo.equipmentName && wo.equipmentName.toLowerCase().includes(searchLower)) ||
-                          (wo.assignee && wo.assignee.toLowerCase().includes(searchLower)) ||
-                          (wo.planner && wo.planner.toLowerCase().includes(searchLower));
+    const matchesSearch = searchGroups.length === 0 || searchGroups.some(g =>
+                          wo.title.toLowerCase().includes(g) ||
+                          wo.code.toLowerCase().includes(g) ||
+                          (wo.equipmentName && wo.equipmentName.toLowerCase().includes(g)) ||
+                          (wo.assignee && wo.assignee.toLowerCase().includes(g)) ||
+                          (wo.planner && wo.planner.toLowerCase().includes(g)));
     
     let matchesStatus = true;
     if (selectedStatusFilter === 'Ouvert') matchesStatus = wo.status === 'Ouvert';
@@ -1424,7 +1429,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Rechercher (code, titre, technicien)..."
+                placeholder="Rechercher (code(s) OT, titre, technicien)..."
+                title="Vous pouvez coller plusieurs codes OT (séparés par un espace, une virgule ou un retour à la ligne)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-1.5 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -1436,6 +1442,38 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+              )}
+            </div>
+
+            {/* Bulle d'aide : recherche multiple */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsSearchHelpOpen(o => !o)}
+                aria-label="Aide sur la recherche multiple"
+                aria-expanded={isSearchHelpOpen}
+                title="Comment fonctionne la recherche ?"
+                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+              {isSearchHelpOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsSearchHelpOpen(false)} />
+                  <div role="dialog" aria-label="Aide sur la recherche" className="absolute left-0 top-full mt-2 z-50 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-xs text-gray-700 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-900">Recherche multiple</span>
+                      <button type="button" onClick={() => setIsSearchHelpOpen(false)} aria-label="Fermer l'aide" className="text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <p>Collez <b>plusieurs codes OT d'un coup</b> : tous les OT correspondant à l'un <b>ou</b> à l'autre s'affichent.</p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 font-mono text-[11px] leading-5">
+                      OT-85901 OT-85866<br />85901, 85866<br />un code par ligne
+                    </div>
+                    <p>Pour plusieurs mots-clés, <b>séparez-les par une virgule</b> : <span className="font-mono text-[11px]">onduleur, caisson</span>.</p>
+                    <p>Un texte simple reste un seul terme : <span className="font-mono text-[11px]">onduleur n2</span> cherche cette expression exacte.</p>
+                    <p className="text-gray-500">La recherche porte sur le code, le titre, l'équipement, le technicien et le planificateur. Un code inexistant est simplement ignoré. Elle se combine avec les filtres.</p>
+                  </div>
+                </>
               )}
             </div>
 
