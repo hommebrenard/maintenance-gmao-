@@ -73,6 +73,8 @@ interface WorkOrderRow extends WorkOrderExtrasRow, WorkOrderIdentityRow {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  closure_source: string | null;
+  closure_lot_id: string | null;
   assigned_to: string | null;
   equipment: { code: string; name: string } | null;
   locations: { name: string } | null;
@@ -140,6 +142,8 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
         createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
     closedAt: row.closed_at ?? undefined,
+    closureSource: row.closure_source ?? undefined,
+    closureLotId: row.closure_lot_id ?? undefined,
     // Checklist, intervenants, visa, dates/heures : NULL en base => absent.
     ...rowToExtras(row),
     // Code d'intervention, n° de plan, entité : NULL en base => absent.
