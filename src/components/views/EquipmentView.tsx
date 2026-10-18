@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { CoswinStrikePill } from '../CoswinStrikeBand';
 import QRCode from 'qrcode';
 import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
 import { EquipmentImportModal } from './EquipmentImportModal';
@@ -717,6 +718,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
                           <span className={`px-2 py-0.5 text-[10px] font-semibold border rounded-full ${getWorkOrderStatusBadgeClass(wo.status)}`}>
                             {wo.status}
                           </span>
+                          <CoswinStrikePill order={wo} />
                         </div>
                       </li>
                     ))}

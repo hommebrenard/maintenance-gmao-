@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { CoswinStrikePill } from '../CoswinStrikeBand';
 import { BarChart3, Calendar, Download, Plus, TrendingUp, TrendingDown, Minus, X, ArrowUp, ArrowDown, Search, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { WorkOrder, Equipment, LocationItem } from '../../types';
@@ -704,7 +705,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
                             <td className="px-4 py-2 text-gray-600">{r.lot}</td>
                             <td className="px-4 py-2 text-gray-600">{r.family === 'AUTRES' ? '—' : r.family}</td>
                             <td className="px-4 py-2 text-gray-600">{r.freq || '—'}</td>
-                            <td className="px-4 py-2 text-gray-600">{r.wo.status}</td>
+                            <td className="px-4 py-2 text-gray-600">{r.wo.status}<div className="mt-1"><CoswinStrikePill order={r.wo} /></div></td>
                             <td className="px-4 py-2 text-gray-600">{r.wo.priority}</td>
                             <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{r.responsible || '—'}</td>
                             <td className="px-4 py-2 text-gray-600">{r.wo.location || '—'}</td>
