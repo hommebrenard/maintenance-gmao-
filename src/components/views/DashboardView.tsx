@@ -3,7 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
-import { computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
+import { COSWIN_STATE_LABEL, computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
 
 interface Props { workOrders: WorkOrder[]; requests: MaintenanceRequest[]; locations: LocationItem[] }
 
@@ -56,13 +56,13 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const aging = React.useMemo(() => computeOverdueAging(scopedOts, new Date()), [scopedOts]);
   const split = React.useMemo(() => computeCompletionSplit(scopedOts), [scopedOts]);
   const [agingSel, setAgingSel] = React.useState<AgingKey | 'all' | null>(null);
-  const [agingCov, setAgingCov] = React.useState<'all' | 'loaded' | 'notLoaded'>('all');
+  const [agingCov, setAgingCov] = React.useState<'all' | 'loaded' | 'notLoaded' | 'notCreated'>('all');
   const [agingLimit, setAgingLimit] = React.useState(PAGE);
   const selectAging = (k: AgingKey | 'all' | null) => { setAgingSel(k); setAgingLimit(PAGE); };
   const agingItems: OverdueItem[] = agingSel === null ? [] : agingSel === 'all'
     ? aging.buckets.flatMap(b => b.items).sort((a, b) => b.daysLate - a.daysLate)
     : aging.buckets.find(b => b.key === agingSel)?.items ?? [];
-  const agingShown = agingItems.filter(i => agingCov === 'all' || (agingCov === 'loaded') === i.coswinLoaded);
+  const agingShown = agingItems.filter(i => agingCov === 'all' || i.coswin === agingCov);
   const agingLabel = agingSel === 'all' ? 'tous les retards' : aging.buckets.find(b => b.key === agingSel)?.label ?? '';
 
   return (
@@ -119,7 +119,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           </p>
           {aging.notLoadedTotal > 0 && (
             <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-snug text-amber-900">
-              <b>Retards calculés avant le chargement de l'état Coswin.</b> {num(aging.notLoadedTotal)} des {num(aging.total)} OT en retard ({pct(aging.total ? aging.notLoadedTotal / aging.total : null)}) appartiennent à des sites ou à des mois dont les clôtures Coswin n'ont pas encore été importées : ils peuvent déjà être terminés dans Coswin. Seuls <b>{num(aging.loadedTotal)}</b> retards sont confirmés par un état Coswin chargé. Importez l'état Coswin (bouton « Clôture Coswin » de l'onglet Ordres de travail) avant de tirer une conclusion.
+              <b>Retards calculés avant le chargement de l'état Coswin.</b> {num(aging.notLoadedTotal)} des {num(aging.total)} OT en retard ({pct(aging.total ? aging.notLoadedTotal / aging.total : null)}) appartiennent à des sites ou à des mois dont les clôtures Coswin n'ont pas encore été importées : ils peuvent déjà être terminés dans Coswin. <b>{num(aging.loadedTotal)}</b> seulement sont confirmés par un état Coswin chargé{aging.notCreatedTotal > 0 ? <>, et <b>{num(aging.notCreatedTotal)}</b> n'ont pas de numéro Coswin (OT « NC », non créés dans Coswin : leur retard ne dépend pas d'un import)</> : null}. Importez l'état Coswin (bouton « Clôture Coswin » de l'onglet Ordres de travail) avant de tirer une conclusion.
             </div>
           )}
           {aging.total === 0 ? (
@@ -131,7 +131,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                   className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${agingSel === b.key ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'}`}>
                   <span className="w-36 shrink-0 text-gray-700">{b.label}</span>
                   <div className="h-3 flex-1 rounded bg-gray-100"><div className={`h-3 rounded ${AGING_BAR[b.key]}`} style={{ width: `${aging.total ? (b.items.length / aging.total) * 100 : 0}%` }} /></div>
-                  <span className="w-44 shrink-0 text-right tabular-nums text-gray-700">{num(b.items.length)} <span className="text-gray-400">({pct(aging.total ? b.items.length / aging.total : null)}) · <span className="text-green-700">{num(b.items.filter(i => i.coswinLoaded).length)} confirmés</span></span></span>
+                  <span className="w-44 shrink-0 text-right tabular-nums text-gray-700">{num(b.items.length)} <span className="text-gray-400">({pct(aging.total ? b.items.length / aging.total : null)}) · <span className="text-green-700">{num(b.items.filter(i => i.coswin === 'loaded').length)} confirmés</span></span></span>
                 </button>
               ))}
               <div className="flex items-center justify-between px-2 pt-1 text-xs text-gray-600">
@@ -151,10 +151,11 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
               <div className="text-sm font-semibold text-gray-800">OT en retard — {agingLabel} <span className="font-normal text-gray-500">({num(agingShown.length)})</span></div>
               <label className="text-xs text-gray-600">
                 État Coswin
-                <select value={agingCov} onChange={e => { setAgingCov(e.target.value as 'all' | 'loaded' | 'notLoaded'); setAgingLimit(PAGE); }} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
+                <select value={agingCov} onChange={e => { setAgingCov(e.target.value as 'all' | 'loaded' | 'notLoaded' | 'notCreated'); setAgingLimit(PAGE); }} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
                   <option value="all">Tous</option>
                   <option value="loaded">Chargé (retard confirmé)</option>
                   <option value="notLoaded">Non chargé (à confirmer)</option>
+                  <option value="notCreated">Non créé dans Coswin (NC)</option>
                 </select>
               </label>
               <div className="flex items-center gap-2">
@@ -168,7 +169,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                   <tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Titre</th><th className="px-3 py-2">Équipement</th><th className="px-3 py-2">Site</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2 text-right">Retard</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2">Responsable</th><th className="px-3 py-2">État Coswin</th></tr>
                 </thead>
                 <tbody>
-                  {agingShown.slice(0, agingLimit).map(({ wo, daysLate, coswinLoaded }) => (
+                  {agingShown.slice(0, agingLimit).map(({ wo, daysLate, coswin }) => (
                     <tr key={wo.id} className="border-t border-gray-100">
                       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-700">{wo.code}</td>
                       <td className="max-w-xs truncate px-3 py-1.5 text-gray-900" title={wo.title}>{wo.title}</td>
@@ -178,7 +179,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-900">{num(daysLate)} j</td>
                       <td className="px-3 py-1.5 text-gray-600">{wo.status}</td>
                       <td className="px-3 py-1.5 text-gray-600">{wo.assignee || wo.planner || '—'}</td>
-                      <td className="whitespace-nowrap px-3 py-1.5">{coswinLoaded ? <span className="text-green-700">Chargé</span> : <span className="text-amber-700">Non chargé</span>}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5"><span className={coswin === 'loaded' ? 'text-green-700' : coswin === 'notCreated' ? 'text-indigo-700' : 'text-amber-700'}>{COSWIN_STATE_LABEL[coswin]}</span></td>
                     </tr>
                   ))}
                 </tbody>
