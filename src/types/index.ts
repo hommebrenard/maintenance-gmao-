@@ -115,6 +115,8 @@ export interface WorkOrder {
    * Posé uniquement par la fonction SQL close_work_orders_from_coswin. */
   closureSource?: string;
   closureLotId?: string;
+  /** Date de régularisation : checklist + visa renseignés après une clôture Coswin (provenance conservée). */
+  closureRegularizedAt?: string;
   planner?: string;
   planNumber?: string;
   interventionCode?: string;
