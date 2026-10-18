@@ -39,6 +39,7 @@ import {
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderType, Equipment, GammePlan, WorkOrderTask, LocationItem, IntervenantLog, WorkOrderPatchCandidate, Profile, Technicien } from '../../types';
 import { ImportModal } from './ImportModal';
 import { CoswinClosureModal } from './CoswinClosureModal';
+import { CoswinStrikeBand, CoswinStrikePill, isCoswinUnregularized } from '../CoswinStrikeBand';
 import type { ClosureResult } from '../../lib/queries/coswinClosure';
 import type { ClosureItem } from '../../utils/coswinClosure';
 import { AnnualMatrixView } from './AnnualMatrixView';
@@ -72,6 +73,8 @@ interface WorkOrdersViewProps {
   /** Clôture Coswin (responsable uniquement) : absent = bouton masqué. */
   onCoswinClosure?: (items: ClosureItem[], lot: string, apply: boolean) => Promise<ClosureResult>;
   onCoswinRevert?: (lot: string) => Promise<{ lot: string; rouverts: number }>;
+  /** Régularisation d'un OT clôturé via Coswin (la base vérifie checklist complète + visa + droits). */
+  onRegularizeCoswinClosure?: (id: string) => Promise<void>;
 }
 
 function getEquipmentNameOnly(wo?: WorkOrder | null, equipmentList: Equipment[] = []): string {
@@ -250,6 +253,20 @@ function getWorkOrderIntervenants(wo?: WorkOrder | null): IntervenantLog[] {
 // "technicien.test"), qui ne reflète que le compte de connexion, pas la
 // personne physique. Retombe sur `assignee` (compte réel via assigned_to)
 // puis `planner` (texte importé) si aucun intervenant n'est renseigné.
+/** Repère visible d'un OT clôturé via Coswin (cartes, liste) : distingue la clôture administrative de la clôture normale. */
+const ClosureChip: React.FC<{ order: WorkOrder }> = ({ order }) => {
+  if (order.closureSource !== 'coswin') return null;
+  return order.closureRegularizedAt ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5" title="Clôturé dans Coswin, puis régularisé : checklist et visa renseignés">
+      Coswin · régularisé
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5" title="Clôturé dans Coswin — sans checklist ni visa">
+      Clôturé dans Coswin
+    </span>
+  );
+};
+
 function getDisplayResponsible(wo?: WorkOrder | null): string {
   const names = getWorkOrderIntervenants(wo)
     .map((log) => log.name?.trim())
@@ -345,6 +362,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     onClearAllWorkOrders,
   onCoswinClosure,
   onCoswinRevert,
+  onRegularizeCoswinClosure,
 }) => {
   // Ajouté le 26/09/2026 — technicien(s) disponibles pour le sélecteur
   // d'assignation, et rôle de l'utilisateur connecté (seul un manager peut
@@ -682,6 +700,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     else if (selectedStatusFilter === 'En cours') matchesStatus = wo.status === 'En cours';
     else if (selectedStatusFilter === 'En attente') matchesStatus = wo.status === 'En attente';
     else if (selectedStatusFilter === 'Terminé') matchesStatus = wo.status === 'Terminé';
+    else if (selectedStatusFilter === 'Coswin non régularisé') matchesStatus = isCoswinUnregularized(wo);
     else if (selectedStatusFilter === 'Affecté à moi') matchesStatus = wo.assignee === 'ckom' || wo.assignee === 'Jean Dupont' || wo.assignee === 'Moi';
     else if (selectedStatusFilter === 'En retard') {
       matchesStatus = wo.dueDate < todayStr && wo.status !== 'Terminé';
@@ -1046,6 +1065,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               .badge-container { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
               .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: bold; }
               .badge-status { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+              .badge-coswin { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+              .coswin-band { background: #4f46e5; color: #fff; text-align: center; font-weight: 800; font-size: 13px; letter-spacing: 2px; padding: 7px 10px; margin-bottom: 14px; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .coswin-note { margin: 8px 0 12px; padding: 7px 10px; font-size: 11px; color: #3730a3; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; }
               .badge-priority { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
               
               .grid-info {
@@ -1120,6 +1142,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </button>
             </div>
             
+            ${selectedWorkOrder.closureSource === 'coswin' && !selectedWorkOrder.closureRegularizedAt ? `<div class="coswin-band">CLÔTURE COSWIN — NON RÉGULARISÉE</div>` : ''}
             <div class="header">
               <div class="title-group">
                 <div class="ot-code">${selectedWorkOrder.code}</div>
@@ -1128,8 +1151,12 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <div class="badge-container">
                 <span class="badge badge-status">Statut: ${selectedWorkOrder.status}</span>
                 <span class="badge badge-priority">Priorité: ${selectedWorkOrder.priority}</span>
+                ${selectedWorkOrder.closureSource === 'coswin' ? `<span class="badge badge-coswin">${selectedWorkOrder.closureRegularizedAt ? 'Clôturé dans Coswin — régularisé' : 'Clôturé dans Coswin — sans checklist ni visa'}</span>` : ''}
               </div>
             </div>
+            ${selectedWorkOrder.closureSource === 'coswin' ? `<div class="coswin-note">${selectedWorkOrder.closureRegularizedAt
+              ? `Clôture reprise de Coswin${selectedWorkOrder.closedAt ? ` (date de fin déclarée : ${new Date(selectedWorkOrder.closedAt).toLocaleDateString('fr-FR')})` : ''}, régularisée le ${new Date(selectedWorkOrder.closureRegularizedAt).toLocaleDateString('fr-FR')} : checklist et visa renseignés dans l'application.`
+              : `Clôture administrative reprise de Coswin${selectedWorkOrder.closedAt ? ` (date de fin déclarée : ${new Date(selectedWorkOrder.closedAt).toLocaleDateString('fr-FR')})` : ''} : cet OT n'a pas été clôturé via la checklist et le visa dans l'application. Les cases non cochées ne prouvent pas l'absence d'intervention.`}</div>` : ''}
 
             <div class="grid-info">
               <div class="info-block">
@@ -1413,7 +1440,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             </div>
 
             {/* Quick Status Pill Filters */}
-            {['Ouvert', 'En cours', 'En attente', 'Terminé', 'Affecté à moi', 'En retard'].map(pill => (
+            {['Ouvert', 'En cours', 'En attente', 'Terminé', 'Affecté à moi', 'En retard', 'Coswin non régularisé'].map(pill => (
               <button
                 key={pill}
                 onClick={() => setSelectedStatusFilter(selectedStatusFilter === pill ? null : pill)}
@@ -1707,8 +1734,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       <div
                         key={order.id}
                         onClick={() => { setSelectedWorkOrder(order); setIsEditMode(false); }}
-                        className="bg-white p-4 rounded-lg border border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer space-y-2.5 group relative"
+                        className={`p-4 rounded-lg border shadow-2xs hover:shadow-xs transition-all cursor-pointer space-y-2.5 group relative overflow-hidden ${isCoswinUnregularized(order) ? 'bg-slate-50 border-indigo-200' : 'bg-white border-gray-200'}`}
                       >
+                        {isCoswinUnregularized(order) && <CoswinStrikeBand className="-mx-4 -mt-4 mb-1" />}
                         <div className="flex items-start justify-between gap-2">
                           {order.code && order.code.toUpperCase() !== 'NC' && order.code !== 'OT-NC' ? (
                             <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{order.code}</span>
@@ -1745,6 +1773,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <h4 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-blue-600 transition-colors">
                           {order.title}
                         </h4>
+                        {!isCoswinUnregularized(order) && <ClosureChip order={order} />}
 
                         <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
                           <Wrench className="w-3.5 h-3.5 text-blue-500 shrink-0" />
@@ -1812,7 +1841,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   <tr 
                     key={order.id}
                     onClick={() => { setSelectedWorkOrder(order); setIsEditMode(false); }}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${isCoswinUnregularized(order) ? 'bg-slate-50 hover:bg-slate-100' : 'hover:bg-gray-50'}`}
                   >
                     {visibleColumns.code && (
                       <td className="px-4 py-3">
@@ -1826,7 +1855,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       </td>
                     )}
                     {visibleColumns.title && (
-                      <td className="px-4 py-3 font-medium text-gray-900">{order.title}</td>
+                      <td className={`px-4 py-3 font-medium ${isCoswinUnregularized(order) ? 'text-gray-600' : 'text-gray-900'}`}>{order.title}</td>
                     )}
                     {visibleColumns.equipment && (
                       <td className="px-4 py-3 text-gray-800 font-medium">{getEquipmentLabel(order, equipmentList)}</td>
@@ -1840,6 +1869,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     )}
                     {visibleColumns.status && (
                       <td className="px-4 py-3">
+                        <div className="mb-1">{isCoswinUnregularized(order) ? <CoswinStrikePill order={order} /> : <ClosureChip order={order} />}</div>
                         <select
                           value={order.status}
                           onClick={(e) => e.stopPropagation()}
@@ -2635,6 +2665,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       {selectedWorkOrder && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-100 print:max-w-none print:max-h-none print:shadow-none print:static">
+            {isCoswinUnregularized(selectedWorkOrder) && <CoswinStrikeBand className="shrink-0 print:hidden" />}
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0 print:bg-white">
               <div>
@@ -3029,12 +3060,37 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
                     {selectedWorkOrder.closureSource === 'coswin' && (
                       <div className="col-span-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1">
-                          <Check className="w-3.5 h-3.5" />
-                          Clôturé dans Coswin — sans checklist ni visa
-                        </span>
+                        {selectedWorkOrder.closureRegularizedAt ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+                            <Check className="w-3.5 h-3.5" />
+                            Clôturé dans Coswin — régularisé le {new Date(selectedWorkOrder.closureRegularizedAt).toLocaleDateString('fr-FR')} (checklist et visa renseignés)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1">
+                            <Check className="w-3.5 h-3.5" />
+                            Clôturé dans Coswin — sans checklist ni visa
+                          </span>
+                        )}
                         {selectedWorkOrder.closedAt && (
                           <span className="block text-[11px] text-indigo-700 mt-1">Date de fin déclarée dans Coswin : {new Date(selectedWorkOrder.closedAt).toLocaleDateString('fr-FR')} (clôture administrative, pas une preuve d'exécution)</span>
+                        )}
+                        {!selectedWorkOrder.closureRegularizedAt && onRegularizeCoswinClosure && (
+                          <div className="mt-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await onRegularizeCoswinClosure(selectedWorkOrder.id);
+                                  setSelectedWorkOrder(prev => prev ? { ...prev, closureRegularizedAt: new Date().toISOString() } : prev);
+                                } catch (e) {
+                                  window.alert((e as { message?: string })?.message || 'Régularisation impossible.');
+                                }
+                              }}
+                              className="px-3 py-1 text-xs font-semibold text-emerald-800 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50"
+                            >
+                              Régulariser la clôture
+                            </button>
+                            <span className="block text-[11px] text-gray-500 mt-1">À utiliser une fois toutes les actions cochées et le visa renseigné, puis enregistrés. La date de clôture Coswin est conservée.</span>
+                          </div>
                         )}
                       </div>
                     )}
