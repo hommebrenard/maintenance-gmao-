@@ -3,6 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
 
 interface Props { workOrders: WorkOrder[]; requests: MaintenanceRequest[]; locations: LocationItem[] }
 
@@ -34,6 +35,16 @@ function Bars({ rows, total }: { rows: { label: string; value: number; cls?: str
   );
 }
 
+const AGING_BAR: Record<AgingKey, string> = { d30: 'bg-amber-400', d90: 'bg-orange-500', d180: 'bg-red-500', d180p: 'bg-red-700' };
+const PAGE = 100;
+
+function downloadCsv(items: OverdueItem[], name: string) {
+  const url = URL.createObjectURL(new Blob([overdueToCsv(items)], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function DashboardView({ workOrders, requests, locations }: Props) {
   const [site, setSite] = React.useState('');
   const sites = React.useMemo(() => locations.filter(l => l.type === 'Site').sort((a, b) => a.name.localeCompare(b.name, 'fr')), [locations]);
@@ -41,6 +52,18 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const { di, ot } = React.useMemo(() => computeDashboard(input, site), [input, site]);
   const siteRows = React.useMemo(() => (site ? [] : computeSiteRows(input)), [input, site]);
   const siteName = sites.find(s => s.id === site)?.name;
+  const scopedOts = React.useMemo(() => filterWorkOrdersBySite(workOrders, locations, site), [workOrders, locations, site]);
+  const aging = React.useMemo(() => computeOverdueAging(scopedOts, new Date()), [scopedOts]);
+  const split = React.useMemo(() => computeCompletionSplit(scopedOts), [scopedOts]);
+  const [agingSel, setAgingSel] = React.useState<AgingKey | 'all' | null>(null);
+  const [agingCov, setAgingCov] = React.useState<'all' | 'loaded' | 'notLoaded'>('all');
+  const [agingLimit, setAgingLimit] = React.useState(PAGE);
+  const selectAging = (k: AgingKey | 'all' | null) => { setAgingSel(k); setAgingLimit(PAGE); };
+  const agingItems: OverdueItem[] = agingSel === null ? [] : agingSel === 'all'
+    ? aging.buckets.flatMap(b => b.items).sort((a, b) => b.daysLate - a.daysLate)
+    : aging.buckets.find(b => b.key === agingSel)?.items ?? [];
+  const agingShown = agingItems.filter(i => agingCov === 'all' || (agingCov === 'loaded') === i.coswinLoaded);
+  const agingLabel = agingSel === 'all' ? 'tous les retards' : aging.buckets.find(b => b.key === agingSel)?.label ?? '';
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
@@ -78,12 +101,96 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           <Kpi label="OT totaux" value={num(ot.total)} definition="Tous les OT chargés dans l'application (préventifs, correctifs, importés)." />
           <Kpi label="Taux d'achèvement" value={pct(ot.completionRate)} tone="ok" definition="OT « Terminé » ÷ (OT totaux − OT « Annulé »)." />
           <Kpi label="Taux d'annulation" value={pct(ot.cancellationRate)} definition="OT « Annulé » ÷ OT totaux." />
-          <Kpi label="Échus non terminés" value={num(ot.overdueNotDone)} tone={ot.overdueNotDone ? 'warn' : 'neutral'} definition="OT ni « Terminé » ni « Annulé » dont l'échéance est antérieure à aujourd'hui." />
+          <Kpi label="Échus non terminés" value={num(ot.overdueNotDone)} tone={ot.overdueNotDone ? 'warn' : 'neutral'} definition={`OT ni « Terminé » ni « Annulé » dont l'échéance est antérieure à aujourd'hui.${aging.notLoadedTotal ? ' Attention : ' + num(aging.notLoadedTotal) + ' de ces OT concernent des sites/mois dont l\'état Coswin n\'est pas chargé (voir « Retard par ancienneté »).' : ''}`} />
+          <Kpi label="Clôturés dans Coswin, non régularisés" value={num(split.coswinUnregularized)} tone={split.coswinUnregularized ? 'warn' : 'neutral'} definition="OT « Terminé » via l'import Coswin, sans checklist ni visa renseignés dans l'application : clôture administrative, pas une preuve d'exécution." />
+          <Kpi label="Achèvement hors clôtures Coswin non régularisées" value={pct(split.rateExcludingCoswin)} definition="(OT « Terminé » − clôturés dans Coswin non régularisés) ÷ (OT totaux − OT « Annulé »). À lire avec le taux d'achèvement ci-dessus, qui inclut ces clôtures administratives." />
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Répartition par statut</div>
           <Bars total={ot.total} rows={OT_STATUSES.map(s => ({ label: s, value: ot.byStatus[s] }))} />
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gray-800">Retard par ancienneté</h2>
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] leading-snug text-gray-500">
+            OT ni « Terminé » ni « Annulé » dont l'échéance est dépassée, classés selon le nombre de jours de retard. Aucun OT n'est exclu automatiquement : un retard ancien peut être une clôture oubliée dans l'application ou un OT réellement en souffrance, à vérifier avant toute conclusion. Cliquez sur une tranche pour afficher la liste nominative.
+          </p>
+          {aging.notLoadedTotal > 0 && (
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-snug text-amber-900">
+              <b>Retards calculés avant le chargement de l'état Coswin.</b> {num(aging.notLoadedTotal)} des {num(aging.total)} OT en retard ({pct(aging.total ? aging.notLoadedTotal / aging.total : null)}) appartiennent à des sites ou à des mois dont les clôtures Coswin n'ont pas encore été importées : ils peuvent déjà être terminés dans Coswin. Seuls <b>{num(aging.loadedTotal)}</b> retards sont confirmés par un état Coswin chargé. Importez l'état Coswin (bouton « Clôture Coswin » de l'onglet Ordres de travail) avant de tirer une conclusion.
+            </div>
+          )}
+          {aging.total === 0 ? (
+            <p className="text-sm text-gray-500">Aucun OT en retard pour ce périmètre.</p>
+          ) : (
+            <div className="space-y-1">
+              {aging.buckets.map(b => (
+                <button key={b.key} type="button" onClick={() => selectAging(agingSel === b.key ? null : b.key)}
+                  className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${agingSel === b.key ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-gray-50'}`}>
+                  <span className="w-36 shrink-0 text-gray-700">{b.label}</span>
+                  <div className="h-3 flex-1 rounded bg-gray-100"><div className={`h-3 rounded ${AGING_BAR[b.key]}`} style={{ width: `${aging.total ? (b.items.length / aging.total) * 100 : 0}%` }} /></div>
+                  <span className="w-44 shrink-0 text-right tabular-nums text-gray-700">{num(b.items.length)} <span className="text-gray-400">({pct(aging.total ? b.items.length / aging.total : null)}) · <span className="text-green-700">{num(b.items.filter(i => i.coswinLoaded).length)} confirmés</span></span></span>
+                </button>
+              ))}
+              <div className="flex items-center justify-between px-2 pt-1 text-xs text-gray-600">
+                <span>Total en retard : <b className="tabular-nums">{num(aging.total)}</b></span>
+                <button type="button" onClick={() => selectAging(agingSel === 'all' ? null : 'all')} className="font-medium text-blue-600 hover:underline">{agingSel === 'all' ? 'Masquer la liste' : 'Voir tous les retards'}</button>
+              </div>
+            </div>
+          )}
+          {aging.withoutDueDate > 0 && (
+            <p className="text-[11px] text-amber-700">{num(aging.withoutDueDate)} OT non terminés n'ont pas de date d'échéance : ils ne peuvent pas être classés par ancienneté.</p>
+          )}
+        </div>
+
+        {agingSel !== null && agingItems.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+              <div className="text-sm font-semibold text-gray-800">OT en retard — {agingLabel} <span className="font-normal text-gray-500">({num(agingShown.length)})</span></div>
+              <label className="text-xs text-gray-600">
+                État Coswin
+                <select value={agingCov} onChange={e => { setAgingCov(e.target.value as 'all' | 'loaded' | 'notLoaded'); setAgingLimit(PAGE); }} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs">
+                  <option value="all">Tous</option>
+                  <option value="loaded">Chargé (retard confirmé)</option>
+                  <option value="notLoaded">Non chargé (à confirmer)</option>
+                </select>
+              </label>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => downloadCsv(agingShown, `ot-en-retard-${new Date().toISOString().slice(0, 10)}.csv`)} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Exporter en CSV</button>
+                <button type="button" onClick={() => selectAging(null)} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Fermer</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Titre</th><th className="px-3 py-2">Équipement</th><th className="px-3 py-2">Site</th><th className="px-3 py-2">Échéance</th><th className="px-3 py-2 text-right">Retard</th><th className="px-3 py-2">Statut</th><th className="px-3 py-2">Responsable</th><th className="px-3 py-2">État Coswin</th></tr>
+                </thead>
+                <tbody>
+                  {agingShown.slice(0, agingLimit).map(({ wo, daysLate, coswinLoaded }) => (
+                    <tr key={wo.id} className="border-t border-gray-100">
+                      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-700">{wo.code}</td>
+                      <td className="max-w-xs truncate px-3 py-1.5 text-gray-900" title={wo.title}>{wo.title}</td>
+                      <td className="max-w-[200px] truncate px-3 py-1.5 text-gray-600" title={wo.equipmentName}>{wo.equipmentName || '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{wo.location || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-gray-600">{(wo.dueDate || '').slice(0, 10).split('-').reverse().join('/')}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-900">{num(daysLate)} j</td>
+                      <td className="px-3 py-1.5 text-gray-600">{wo.status}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{wo.assignee || wo.planner || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5">{coswinLoaded ? <span className="text-green-700">Chargé</span> : <span className="text-amber-700">Non chargé</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {agingShown.length > agingLimit && (
+              <div className="border-t border-gray-100 px-4 py-2 text-center">
+                <button type="button" onClick={() => setAgingLimit(l => l + PAGE)} className="text-xs font-medium text-blue-600 hover:underline">Afficher les {Math.min(PAGE, agingShown.length - agingLimit)} suivants ({num(agingShown.length - agingLimit)} restants)</button>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {!site && siteRows.length > 0 && (
