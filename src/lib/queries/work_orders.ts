@@ -75,6 +75,7 @@ interface WorkOrderRow extends WorkOrderExtrasRow, WorkOrderIdentityRow {
   closed_at: string | null;
   closure_source: string | null;
   closure_lot_id: string | null;
+  closure_regularized_at: string | null;
   assigned_to: string | null;
   equipment: { code: string; name: string } | null;
   locations: { name: string } | null;
@@ -144,6 +145,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     closedAt: row.closed_at ?? undefined,
     closureSource: row.closure_source ?? undefined,
     closureLotId: row.closure_lot_id ?? undefined,
+    closureRegularizedAt: row.closure_regularized_at ?? undefined,
     // Checklist, intervenants, visa, dates/heures : NULL en base => absent.
     ...rowToExtras(row),
     // Code d'intervention, n° de plan, entité : NULL en base => absent.
