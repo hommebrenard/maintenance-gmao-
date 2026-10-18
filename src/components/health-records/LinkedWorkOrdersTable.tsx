@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 import type { WorkOrder } from '../../types';
 import { getWorkOrderStatusBadgeClass, formatIsoDate } from '../../utils/equipmentDisplay';
+import { CoswinStrikePill } from '../CoswinStrikeBand';
 import {
   DEFAULT_REGISTER_FILTERS, REGISTER_STATUSES, REGISTER_TYPES, filterRegister, isDefaultFilters, periodLabel, registerYears,
   type RegisterFilters,
@@ -92,6 +93,7 @@ export const LinkedWorkOrdersTable: React.FC<LinkedWorkOrdersTableProps> = ({ li
                           <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{formatIsoDate(wo.dueDate)}</td>
                           <td className="px-3 py-1.5">
                             <span className={`px-1.5 py-0.5 rounded-full font-semibold ${getWorkOrderStatusBadgeClass(wo.status)}`}>{wo.status}</span>
+                            <div className="mt-1"><CoswinStrikePill order={wo} /></div>
                           </td>
                         </tr>
                       ))}
