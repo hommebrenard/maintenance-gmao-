@@ -24,3 +24,9 @@ export async function revertCoswinClosure(lot: string): Promise<{ lot: string; r
   if (error) throw error;
   return data as { lot: string; rouverts: number };
 }
+
+/** Régularise un OT clôturé via Coswin (checklist complète + visa exigés côté base). Lève l'erreur de la base si une condition manque. */
+export async function regularizeCoswinClosure(workOrderId: string): Promise<void> {
+  const { error } = await supabase.rpc('regularize_coswin_closure', { p_id: workOrderId });
+  if (error) throw error;
+}
