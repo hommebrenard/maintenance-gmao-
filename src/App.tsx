@@ -24,7 +24,7 @@ import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, deleteEquipment } from './lib/queries/equipment';
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
-import { closeWorkOrdersFromCoswin, revertCoswinClosure } from './lib/queries/coswinClosure';
+import { closeWorkOrdersFromCoswin, revertCoswinClosure, regularizeCoswinClosure } from './lib/queries/coswinClosure';
 import type { ClosureItem } from './utils/coswinClosure';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, countUnsyncedLocalExtras } from './utils/workOrderExtras';
@@ -669,6 +669,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     if (apply && res.applique) setWorkOrders(await fetchWorkOrders());
     return res;
   };
+  const handleCoswinRegularize = async (id: string) => {
+    await regularizeCoswinClosure(id);
+    setWorkOrders(await fetchWorkOrders());
+  };
   const handleCoswinRevert = async (lot: string) => {
     const res = await revertCoswinClosure(lot);
     setWorkOrders(await fetchWorkOrders());
@@ -1168,6 +1172,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onClearAllWorkOrders={handleClearAllWorkOrders}
             onCoswinClosure={isManager ? handleCoswinClosure : undefined}
             onCoswinRevert={isManager ? handleCoswinRevert : undefined}
+            onRegularizeCoswinClosure={handleCoswinRegularize}
           />
         );
       case 'requests':
