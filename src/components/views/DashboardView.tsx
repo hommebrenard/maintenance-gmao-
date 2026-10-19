@@ -3,6 +3,8 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { SnapshotsPanel } from './SnapshotsPanel';
+import { computeAllSnapshotRows, computeIndicators, siteScopeKey } from '../../utils/dashboardSnapshot';
 import { computeFunnel } from '../../utils/diFunnel';
 import { computeQuality, type QualityCheck } from '../../utils/dataQuality';
 import { DI_AGE_DEFS, DI_PRIORITIES, computeDiHeatmap, diHeatToCsv, filterRequestsBySite, type DiAgeKey, type DiHeatItem, type DiPriorityKey } from '../../utils/diHeatmap';
@@ -73,6 +75,9 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const heatMax = Math.max(1, ...DI_PRIORITIES.flatMap(p => DI_AGE_DEFS.map(a => heat.cells[p.key][a.key].length)));
   const heatItems: DiHeatItem[] = heatSel ? heat.cells[heatSel.p][heatSel.a] : [];
   const funnel = React.useMemo(() => computeFunnel(scopedReqs, workOrders), [scopedReqs, workOrders]);
+  const liveIndicators = React.useMemo(() => computeIndicators(scopedReqs, scopedOts, workOrders, new Date()), [scopedReqs, scopedOts, workOrders]);
+  const siteLoc = site ? locations.find(l => l.id === site) : undefined;
+  const snapScopeKey = siteLoc ? siteScopeKey(siteLoc) : 'ALL';
   const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts), [scopedReqs, scopedOts]);
   const [qualSel, setQualSel] = React.useState<string | null>(null);
   const [qualLimit, setQualLimit] = React.useState(PAGE);
@@ -376,6 +381,8 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           </div>
         )}
       </section>
+
+      <SnapshotsPanel live={liveIndicators} scopeKey={snapScopeKey} scopeLabel={siteName ?? 'Tous les sites'} buildRows={() => computeAllSnapshotRows(input, new Date())} />
 
       {!site && siteRows.length > 0 && (
         <section className="space-y-3">
