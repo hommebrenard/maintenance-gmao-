@@ -44,6 +44,25 @@ describe('equipmentRequests', () => {
     expect(archived.map(x => x.req.code)).toEqual(['B', 'D']);
     expect(archivedSummary(archived)).toEqual([{ year: '2025', codes: ['B'] }, { year: '2024', codes: ['D'] }]);
   });
+  it("DI liée à un autre équipement : absente du carnet de l'équipement source (cas DI00003300 : source APLC-04, liée SPT-26)", () => {
+    const aplc = { id: 'E-APLC', code: 'BAM-FEZ_AG-APLC-04' };
+    const spt = { id: 'E-SPT', code: 'BAM-FEZ_AG-SPT-26' };
+    const list = [
+      r({ code: 'DI00003300', equipmentId: 'E-SPT', equipmentCode: 'BAM-FEZ_AG-APLC-04', plannedEquipmentCode: 'BAM-FEZ_AG-SPT-26' }),
+      r({ code: 'DI00003303', equipmentId: 'E-APLC', equipmentCode: 'BAM-FEZ_AG-APLC-04' }),
+    ];
+    expect(requestsForEquipment(list, aplc).map(x => x.code)).toEqual(['DI00003303']);
+    expect(requestsForEquipment(list, spt).map(x => x.code)).toEqual(['DI00003300']);
+  });
+  it('DI sans lien : rapprochement par le code planifié d\'abord, source en repli', () => {
+    const spt = { id: 'E-SPT', code: 'BAM-FEZ_AG-SPT-26' };
+    const list = [
+      r({ code: 'X1', equipmentCode: 'BAM-FEZ_AG-APLC-04', plannedEquipmentCode: 'BAM-FEZ_AG-SPT-26' }),
+      r({ code: 'X2', equipmentCode: 'BAM-FEZ_AG-SPT-26' }),
+    ];
+    expect(requestsForEquipment(list, spt).map(x => x.code).sort()).toEqual(['X1', 'X2']);
+    expect(requestsForEquipment(list, { id: 'E-APLC', code: 'BAM-FEZ_AG-APLC-04' })).toEqual([]);
+  });
   it('code vide : aucun lien parasite', () => {
     expect(requestsForEquipment([r({ code: 'A', equipmentCode: '' })], { id: 'E9', code: '' })).toEqual([]);
   });
