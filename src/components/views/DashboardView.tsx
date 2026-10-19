@@ -3,6 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { computeFunnel } from '../../utils/diFunnel';
 import { computeQuality, type QualityCheck } from '../../utils/dataQuality';
 import { DI_AGE_DEFS, DI_PRIORITIES, computeDiHeatmap, diHeatToCsv, filterRequestsBySite, type DiAgeKey, type DiHeatItem, type DiPriorityKey } from '../../utils/diHeatmap';
 import { COSWIN_STATE_LABEL, computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
@@ -71,6 +72,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const [heatLimit, setHeatLimit] = React.useState(PAGE);
   const heatMax = Math.max(1, ...DI_PRIORITIES.flatMap(p => DI_AGE_DEFS.map(a => heat.cells[p.key][a.key].length)));
   const heatItems: DiHeatItem[] = heatSel ? heat.cells[heatSel.p][heatSel.a] : [];
+  const funnel = React.useMemo(() => computeFunnel(scopedReqs, workOrders), [scopedReqs, workOrders]);
   const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts), [scopedReqs, scopedOts]);
   const [qualSel, setQualSel] = React.useState<string | null>(null);
   const [qualLimit, setQualLimit] = React.useState(PAGE);
@@ -204,6 +206,39 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
             )}
           </div>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gray-800">Entonnoir DI → OT → clôture</h2>
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] leading-snug text-gray-500">
+            DI reçues = toutes les DI hors « Rejetée » et « DI annulée ». Avec OT = DI ayant un OT lié, un numéro d'OT Coswin ou un état d'OT Coswin. « Clôturée sans OT » (Coswin 17) est comptée à part. Les taux se lisent d'une étape à la suivante.
+          </p>
+          {funnel.recues === 0 ? <p className="text-sm text-gray-500">Aucune DI pour ce périmètre.</p> : (
+            <div className="space-y-2">
+              {([
+                { label: 'DI reçues', n: funnel.recues, base: funnel.recues, rate: null as number | null, color: 'bg-blue-500' },
+                { label: 'dont avec OT', n: funnel.avecOt, base: funnel.recues, rate: funnel.avecOt / funnel.recues, color: 'bg-indigo-500' },
+                { label: 'dont OT clôturé', n: funnel.otCloture, base: funnel.recues, rate: funnel.avecOt ? funnel.otCloture / funnel.avecOt : null, color: 'bg-green-600' },
+              ]).map(row => (
+                <div key={row.label} className="flex items-center gap-3">
+                  <div className="w-32 shrink-0 text-xs font-medium text-gray-700">{row.label}</div>
+                  <div className="h-5 flex-1 overflow-hidden rounded bg-gray-100"><div className={`h-full ${row.color}`} style={{ width: `${Math.max(1, (row.n / row.base) * 100)}%` }} /></div>
+                  <div className="w-14 shrink-0 text-right text-xs font-semibold tabular-nums text-gray-900">{num(row.n)}</div>
+                  <div className="w-24 shrink-0 text-right text-[11px] tabular-nums text-gray-500">{row.rate === null ? '' : `${pct(row.rate)} de l'étape précédente`}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-t border-gray-100 pt-3 text-xs sm:grid-cols-4">
+            {[
+              ['En attente, sans OT', funnel.enAttente], ['Prise en charge, sans OT', funnel.priseSansOt], ['Clôturées sans OT', funnel.clotureSansOt], ['OT annulés', funnel.otAnnule],
+              ['OT en cours', funnel.otEnCours], ['OT existants, non démarrés', funnel.otOuvert], ['Rejetées (application)', funnel.rejetees], ['Annulées (Coswin)', funnel.annulees],
+            ].map(([l, n]) => (
+              <div key={l as string} className="flex items-baseline justify-between gap-2"><span className="text-gray-600">{l}</span><b className="tabular-nums text-gray-900">{num(n as number)}</b></div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="space-y-3">
