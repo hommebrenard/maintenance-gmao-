@@ -3,11 +3,18 @@ import { displayState, indexWorkOrders, type RequestDisplayState } from './reque
 
 export interface LinkedRequestRow { req: MaintenanceRequest; state: RequestDisplayState }
 
-/** Demandes d'intervention d'un équipement : lien par id réel (demandes de l'application) ou par code (demandes Coswin rapprochées à l'affichage). */
+/**
+ * Demandes d'intervention d'un équipement : lien par id réel quand la demande est liée ; le rapprochement par code
+ * (équipement planifié d'abord, source en repli) ne sert qu'aux demandes SANS lien. Une demande liée à un équipement
+ * n'apparaît jamais dans le carnet d'un autre (ex. DI00003300 : source APLC-04, planifiée et liée SPT-26 → carnet de SPT-26 seulement).
+ */
 export function requestsForEquipment(requests: MaintenanceRequest[], eq: Pick<Equipment, 'id' | 'code'>): MaintenanceRequest[] {
   const code = (eq.code ?? '').trim().toUpperCase();
+  const norm = (v?: string) => (v ?? '').trim().toUpperCase();
   return requests
-    .filter(r => (r.equipmentId && r.equipmentId === eq.id) || (!!code && (r.equipmentCode ?? '').trim().toUpperCase() === code))
+    .filter(r => r.equipmentId
+      ? r.equipmentId === eq.id
+      : !!code && (norm(r.plannedEquipmentCode) || norm(r.equipmentCode)) === code)
     .sort((a, b) => (b.createdAtIso ?? '').localeCompare(a.createdAtIso ?? ''));
 }
 
