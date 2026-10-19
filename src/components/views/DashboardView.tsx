@@ -3,6 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { computeQuality, type QualityCheck } from '../../utils/dataQuality';
 import { DI_AGE_DEFS, DI_PRIORITIES, computeDiHeatmap, diHeatToCsv, filterRequestsBySite, type DiAgeKey, type DiHeatItem, type DiPriorityKey } from '../../utils/diHeatmap';
 import { COSWIN_STATE_LABEL, computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
 
@@ -70,6 +71,10 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const [heatLimit, setHeatLimit] = React.useState(PAGE);
   const heatMax = Math.max(1, ...DI_PRIORITIES.flatMap(p => DI_AGE_DEFS.map(a => heat.cells[p.key][a.key].length)));
   const heatItems: DiHeatItem[] = heatSel ? heat.cells[heatSel.p][heatSel.a] : [];
+  const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts), [scopedReqs, scopedOts]);
+  const [qualSel, setQualSel] = React.useState<string | null>(null);
+  const [qualLimit, setQualLimit] = React.useState(PAGE);
+  const qualCheck: QualityCheck | undefined = quality.find(c => c.key === qualSel);
   const agingLabel = agingSel === 'all' ? 'tous les retards' : aging.buckets.find(b => b.key === agingSel)?.label ?? '';
 
   return (
@@ -278,6 +283,59 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
             {heatItems.length > heatLimit && (
               <div className="border-t border-gray-100 px-4 py-2 text-center">
                 <button type="button" onClick={() => setHeatLimit(l => l + PAGE)} className="text-xs font-medium text-blue-600 hover:underline">Afficher les {Math.min(PAGE, heatItems.length - heatLimit)} suivantes ({num(heatItems.length - heatLimit)} restantes)</button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gray-800">Qualité des données</h2>
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] leading-snug text-gray-500">
+            Contrôles en lecture seule : aucune donnée n'est modifiée. Une anomalie signale une donnée à vérifier (dans Coswin ou dans l'application), pas une erreur prouvée. Cliquez sur une ligne pour afficher la liste nominative.
+          </p>
+          <table className="w-full text-left text-xs">
+            <thead className="text-[11px] uppercase tracking-wide text-gray-500">
+              <tr><th className="px-2 py-1.5">Contrôle</th><th className="px-2 py-1.5">Définition</th><th className="px-2 py-1.5 text-right">Anomalies</th><th className="px-2 py-1.5 text-right">Sur</th><th className="px-2 py-1.5 text-right">Part</th></tr>
+            </thead>
+            <tbody>
+              {quality.map(c => (
+                <tr key={c.key} onClick={() => { if (c.items.length) { setQualSel(qualSel === c.key ? null : c.key); setQualLimit(PAGE); } }}
+                  className={`border-t border-gray-100 ${c.items.length ? 'cursor-pointer hover:bg-gray-50' : ''} ${qualSel === c.key ? 'bg-blue-50' : ''}`}>
+                  <td className="px-2 py-1.5 font-medium text-gray-800"><span className="mr-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{c.scope}</span>{c.label}</td>
+                  <td className="px-2 py-1.5 text-gray-500">{c.definition}</td>
+                  <td className={`px-2 py-1.5 text-right font-semibold tabular-nums ${c.items.length ? 'text-amber-700' : 'text-green-700'}`}>{num(c.items.length)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{num(c.population)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{pct(c.population ? c.items.length / c.population : null)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {qualCheck && qualCheck.items.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div className="text-sm font-semibold text-gray-800">{qualCheck.label} <span className="font-normal text-gray-500">({num(qualCheck.items.length)})</span></div>
+              <button type="button" onClick={() => setQualSel(null)} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Fermer</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Titre</th><th className="px-3 py-2">Site</th></tr></thead>
+                <tbody>
+                  {qualCheck.items.slice(0, qualLimit).map(i => (
+                    <tr key={i.id} className="border-t border-gray-100">
+                      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-700">{i.code}</td>
+                      <td className="max-w-md truncate px-3 py-1.5 text-gray-900" title={i.title}>{i.title}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{i.site || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {qualCheck.items.length > qualLimit && (
+              <div className="border-t border-gray-100 px-4 py-2 text-center">
+                <button type="button" onClick={() => setQualLimit(l => l + PAGE)} className="text-xs font-medium text-blue-600 hover:underline">Afficher les {Math.min(PAGE, qualCheck.items.length - qualLimit)} suivantes ({num(qualCheck.items.length - qualLimit)} restantes)</button>
               </div>
             )}
           </div>
