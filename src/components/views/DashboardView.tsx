@@ -3,6 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { DI_AGE_DEFS, DI_PRIORITIES, computeDiHeatmap, diHeatToCsv, filterRequestsBySite, type DiAgeKey, type DiHeatItem, type DiPriorityKey } from '../../utils/diHeatmap';
 import { COSWIN_STATE_LABEL, computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
 
 interface Props { workOrders: WorkOrder[]; requests: MaintenanceRequest[]; locations: LocationItem[] }
@@ -38,8 +39,8 @@ function Bars({ rows, total }: { rows: { label: string; value: number; cls?: str
 const AGING_BAR: Record<AgingKey, string> = { d30: 'bg-amber-400', d90: 'bg-orange-500', d180: 'bg-red-500', d180p: 'bg-red-700' };
 const PAGE = 100;
 
-function downloadCsv(items: OverdueItem[], name: string) {
-  const url = URL.createObjectURL(new Blob([overdueToCsv(items)], { type: 'text/csv;charset=utf-8' }));
+function downloadCsv(items: OverdueItem[], name: string, csv: string = overdueToCsv(items)) {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   URL.revokeObjectURL(url);
@@ -63,6 +64,12 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
     ? aging.buckets.flatMap(b => b.items).sort((a, b) => b.daysLate - a.daysLate)
     : aging.buckets.find(b => b.key === agingSel)?.items ?? [];
   const agingShown = agingItems.filter(i => agingCov === 'all' || i.coswin === agingCov);
+  const scopedReqs = React.useMemo(() => filterRequestsBySite(requests, locations, site), [requests, locations, site]);
+  const heat = React.useMemo(() => computeDiHeatmap(scopedReqs, workOrders, new Date()), [scopedReqs, workOrders]);
+  const [heatSel, setHeatSel] = React.useState<{ p: DiPriorityKey; a: DiAgeKey } | null>(null);
+  const [heatLimit, setHeatLimit] = React.useState(PAGE);
+  const heatMax = Math.max(1, ...DI_PRIORITIES.flatMap(p => DI_AGE_DEFS.map(a => heat.cells[p.key][a.key].length)));
+  const heatItems: DiHeatItem[] = heatSel ? heat.cells[heatSel.p][heatSel.a] : [];
   const agingLabel = agingSel === 'all' ? 'tous les retards' : aging.buckets.find(b => b.key === agingSel)?.label ?? '';
 
   return (
@@ -188,6 +195,89 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
             {agingShown.length > agingLimit && (
               <div className="border-t border-gray-100 px-4 py-2 text-center">
                 <button type="button" onClick={() => setAgingLimit(l => l + PAGE)} className="text-xs font-medium text-blue-600 hover:underline">Afficher les {Math.min(PAGE, agingShown.length - agingLimit)} suivants ({num(agingShown.length - agingLimit)} restants)</button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gray-800">DI sans OT par priorité et par âge</h2>
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] leading-snug text-gray-500">
+            DI « En attente » ou « Prise en charge » qui n'ont ni OT lié dans l'application ni numéro d'OT Coswin. Sont exclues les DI annulées, rejetées et clôturées (dont « 17. Clôturée sans OT »). Âge = jours depuis la date de déclaration. Priorité = code Coswin U0 à U3. Cliquez sur une case pour afficher la liste nominative.
+          </p>
+          {heat.total === 0 ? (
+            <p className="text-sm text-gray-500">Aucune DI sans OT pour ce périmètre.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-center text-xs">
+                <thead className="text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr><th className="px-2 py-1.5 text-left">Priorité</th>{DI_AGE_DEFS.map(a => <th key={a.key} className="px-2 py-1.5">{a.label}</th>)}<th className="px-2 py-1.5">Total</th></tr>
+                </thead>
+                <tbody>
+                  {DI_PRIORITIES.map(p => {
+                    const rowTotal = DI_AGE_DEFS.reduce((n, a) => n + heat.cells[p.key][a.key].length, 0);
+                    return (
+                      <tr key={p.key} className="border-t border-gray-100">
+                        <td className="px-2 py-1.5 text-left font-medium text-gray-700">{p.label}</td>
+                        {DI_AGE_DEFS.map(a => {
+                          const n = heat.cells[p.key][a.key].length;
+                          const on = heatSel?.p === p.key && heatSel?.a === a.key;
+                          return (
+                            <td key={a.key} className="p-1">
+                              <button type="button" disabled={n === 0} onClick={() => { setHeatSel(on ? null : { p: p.key, a: a.key }); setHeatLimit(PAGE); }}
+                                className={`w-full rounded-md px-2 py-2 tabular-nums transition-colors ${n === 0 ? 'bg-gray-50 text-gray-300' : 'text-gray-900 hover:ring-2 hover:ring-blue-300'} ${on ? 'ring-2 ring-blue-500' : ''}`}
+                                style={n === 0 ? undefined : { backgroundColor: `rgba(220, 38, 38, ${0.12 + 0.6 * (n / heatMax)})` }}>
+                                {num(n)}
+                              </button>
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-1.5 font-semibold tabular-nums text-gray-800">{num(rowTotal)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="text-xs text-gray-600">Total DI sans OT : <b className="tabular-nums">{num(heat.total)}</b></div>
+          {heat.withoutDate > 0 && <p className="text-[11px] text-amber-700">{num(heat.withoutDate)} DI sans OT n'ont pas de date de déclaration : elles ne peuvent pas être classées par âge.</p>}
+        </div>
+
+        {heatSel && heatItems.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+              <div className="text-sm font-semibold text-gray-800">DI sans OT — {DI_PRIORITIES.find(p => p.key === heatSel.p)?.label} · {DI_AGE_DEFS.find(a => a.key === heatSel.a)?.label} <span className="font-normal text-gray-500">({num(heatItems.length)})</span></div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => downloadCsv([], `di-sans-ot-${heatSel.p}-${new Date().toISOString().slice(0, 10)}.csv`, diHeatToCsv(heatItems))} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Exporter en CSV</button>
+                <button type="button" onClick={() => setHeatSel(null)} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Fermer</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr><th className="px-3 py-2">Code DI</th><th className="px-3 py-2">Titre</th><th className="px-3 py-2">Équipement</th><th className="px-3 py-2">Site</th><th className="px-3 py-2">Déclarée le</th><th className="px-3 py-2 text-right">Âge</th><th className="px-3 py-2">État Coswin</th></tr>
+                </thead>
+                <tbody>
+                  {heatItems.slice(0, heatLimit).map(({ request: r, ageDays }) => (
+                    <tr key={r.id} className="border-t border-gray-100">
+                      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-700">{r.code || '—'}</td>
+                      <td className="max-w-xs truncate px-3 py-1.5 text-gray-900" title={r.title}>{r.title}</td>
+                      <td className="max-w-[200px] truncate px-3 py-1.5 text-gray-600">{r.equipmentCode || r.equipmentName || '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.siteCode || r.location || '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-gray-600">{(r.declaredAt || r.createdAtIso || '').slice(0, 10).split('-').reverse().join('/')}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-900">{num(ageDays)} j</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.coswinState || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {heatItems.length > heatLimit && (
+              <div className="border-t border-gray-100 px-4 py-2 text-center">
+                <button type="button" onClick={() => setHeatLimit(l => l + PAGE)} className="text-xs font-medium text-blue-600 hover:underline">Afficher les {Math.min(PAGE, heatItems.length - heatLimit)} suivantes ({num(heatItems.length - heatLimit)} restantes)</button>
               </div>
             )}
           </div>
