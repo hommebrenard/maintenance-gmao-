@@ -3,6 +3,7 @@ import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
+import { createSiteNameResolver } from '../../utils/siteLabel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { computeAllSnapshotRows, computeIndicators, siteScopeKey } from '../../utils/dashboardSnapshot';
 import { computeFunnel } from '../../utils/diFunnel';
@@ -78,7 +79,8 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const liveIndicators = React.useMemo(() => computeIndicators(scopedReqs, scopedOts, workOrders, new Date()), [scopedReqs, scopedOts, workOrders]);
   const siteLoc = site ? locations.find(l => l.id === site) : undefined;
   const snapScopeKey = siteLoc ? siteScopeKey(siteLoc) : 'ALL';
-  const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts), [scopedReqs, scopedOts]);
+  const resolveSite = React.useMemo(() => createSiteNameResolver(locations), [locations]);
+  const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts, resolveSite), [scopedReqs, scopedOts, resolveSite]);
   const [qualSel, setQualSel] = React.useState<string | null>(null);
   const [qualLimit, setQualLimit] = React.useState(PAGE);
   const qualCheck: QualityCheck | undefined = quality.find(c => c.key === qualSel);
@@ -296,7 +298,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
               <div className="text-sm font-semibold text-gray-800">DI sans OT — {DI_PRIORITIES.find(p => p.key === heatSel.p)?.label} · {DI_AGE_DEFS.find(a => a.key === heatSel.a)?.label} <span className="font-normal text-gray-500">({num(heatItems.length)})</span></div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => downloadCsv([], `di-sans-ot-${heatSel.p}-${new Date().toISOString().slice(0, 10)}.csv`, diHeatToCsv(heatItems))} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Exporter en CSV</button>
+                <button type="button" onClick={() => downloadCsv([], `di-sans-ot-${heatSel.p}-${new Date().toISOString().slice(0, 10)}.csv`, diHeatToCsv(heatItems, resolveSite))} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Exporter en CSV</button>
                 <button type="button" onClick={() => setHeatSel(null)} className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Fermer</button>
               </div>
             </div>
@@ -311,7 +313,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-700">{r.code || '—'}</td>
                       <td className="max-w-xs truncate px-3 py-1.5 text-gray-900" title={r.title}>{r.title}</td>
                       <td className="max-w-[200px] truncate px-3 py-1.5 text-gray-600">{r.equipmentCode || r.equipmentName || '—'}</td>
-                      <td className="px-3 py-1.5 text-gray-600">{r.siteCode || r.location || '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{resolveSite(r.siteCode) ?? (r.siteCode || r.location || '—')}</td>
                       <td className="whitespace-nowrap px-3 py-1.5 text-gray-600">{(r.declaredAt || r.createdAtIso || '').slice(0, 10).split('-').reverse().join('/')}</td>
                       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-900">{num(ageDays)} j</td>
                       <td className="px-3 py-1.5 text-gray-600">{r.coswinState || '—'}</td>
