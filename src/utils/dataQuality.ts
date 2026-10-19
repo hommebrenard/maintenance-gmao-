@@ -1,4 +1,5 @@
 import type { MaintenanceRequest, WorkOrder } from '../types';
+import type { SiteNameResolver } from './siteLabel';
 
 /**
  * Qualité des données — contrôles en lecture seule (aucune donnée n'est modifiée) :
@@ -10,10 +11,11 @@ export interface QualityCheck { key: string; scope: 'DI' | 'OT'; label: string; 
 
 const blank = (v?: string | null) => !v || !v.trim();
 const validDiCode = (c?: string) => /^DI\d{6,}$/i.test((c ?? '').trim());
-const diItem = (r: MaintenanceRequest): QualityItem => ({ id: r.id, code: r.code || '(vide)', title: r.title || '', site: r.siteCode || r.location || '' });
+
 const otItem = (w: WorkOrder): QualityItem => ({ id: w.id, code: w.code, title: w.title || '', site: w.location || '' });
 
-export function computeQuality(requests: MaintenanceRequest[], workOrders: WorkOrder[]): QualityCheck[] {
+export function computeQuality(requests: MaintenanceRequest[], workOrders: WorkOrder[], siteName?: SiteNameResolver): QualityCheck[] {
+  const diItem = (r: MaintenanceRequest): QualityItem => ({ id: r.id, code: r.code || '(vide)', title: r.title || '', site: siteName?.(r.siteCode) ?? (r.siteCode || r.location || '') });
   const diCodeCount = new Map<string, number>();
   for (const r of requests) if (!blank(r.code)) diCodeCount.set(r.code!.trim().toUpperCase(), (diCodeCount.get(r.code!.trim().toUpperCase()) ?? 0) + 1);
   const coswinDi = requests.filter(r => r.origin === 'coswin');

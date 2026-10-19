@@ -1,6 +1,7 @@
 import type { LocationItem, MaintenanceRequest, WorkOrder } from '../types';
 import { displayState, indexWorkOrders } from './requestDisplay';
 import { canonicalSiteKey } from './requestFilters';
+import type { SiteNameResolver } from './siteLabel';
 
 /**
  * DI sans OT par priorité et par âge — définitions (affichées dans l'écran) :
@@ -66,10 +67,10 @@ export function computeDiHeatmap(requests: MaintenanceRequest[], workOrders: Wor
 }
 
 const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-export function diHeatToCsv(items: DiHeatItem[]): string {
+export function diHeatToCsv(items: DiHeatItem[], siteName?: SiteNameResolver): string {
   const head = ['Code DI', 'Titre', 'Équipement', 'Site', 'Priorité', 'Déclarée le', 'Âge (jours)', 'État Coswin'];
   const rows = items.map(({ request: r, ageDays, priority }) => [
-    r.code ?? '', r.title ?? '', r.equipmentCode || r.equipmentName || '', r.siteCode || r.location || '', priority,
+    r.code ?? '', r.title ?? '', r.equipmentCode || r.equipmentName || '', siteName?.(r.siteCode) ?? (r.siteCode || r.location || ''), priority,
     (r.declaredAt || r.createdAtIso || '').slice(0, 10), String(ageDays), r.coswinState ?? '',
   ].map(esc).join(';'));
   return '\ufeff' + [head.map(esc).join(';'), ...rows].join('\n');
