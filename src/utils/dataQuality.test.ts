@@ -11,6 +11,17 @@ const wo = (id: string, x: Partial<WorkOrder> = {}): WorkOrder => ({
 } as WorkOrder);
 const get = (r: ReturnType<typeof computeQuality>, k: string) => r.find(c => c.key === k)!;
 
+describe('nom de site', () => {
+  it("affiche le nom de l'emplacement au lieu du code Coswin, avec repli sur le code", async () => {
+    const { createSiteNameResolver } = await import('./siteLabel');
+    const resolve = createSiteNameResolver([{ id: 'L1', name: 'Succursale régionale Type A FES', code: 'BAM_FEZ_AG', type: 'Site', equipmentCount: 0 }]);
+    expect(resolve('BAM_FEZ_AG')).toBe('Succursale régionale Type A FES');
+    expect(resolve('BAM_XXX_AG')).toBeUndefined();
+    const r = computeQuality([di('1', { code: '%', siteCode: 'BAM_FEZ_AG' }), di('2', { code: '%', siteCode: 'BAM_XXX_AG' })], [], resolve);
+    expect(r.find(c => c.key === 'di-code')!.items.map(i => i.site)).toEqual(['Succursale régionale Type A FES', 'BAM_XXX_AG']);
+  });
+});
+
 describe('computeQuality', () => {
   it('repère les anomalies des DI', () => {
     const r = computeQuality([

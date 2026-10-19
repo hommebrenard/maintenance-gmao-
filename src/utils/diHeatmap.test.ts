@@ -38,6 +38,12 @@ describe('computeDiHeatmap', () => {
     expect(r.cells.U0.a90.map(i => i.request.id)).toEqual(['b']);
     expect(r.cells.NA.a90p.map(i => i.request.id)).toEqual(['c']);
   });
+  it('exporte le nom du site quand il est connu', () => {
+    const r = computeDiHeatmap([di('a', { siteCode: 'BAM_FEZ_AG' })], [], TODAY);
+    const csv = diHeatToCsv(r.cells.U2.a7, code => (code === 'BAM_FEZ_AG' ? 'Succursale régionale Type A FES' : undefined));
+    expect(csv).toContain('"Succursale régionale Type A FES"');
+    expect(csv).not.toContain('"BAM_FEZ_AG"');
+  });
   it('exporte un CSV avec en-tête', () => {
     const r = computeDiHeatmap([di('a')], [], TODAY);
     const csv = diHeatToCsv(r.cells.U2.a7);
