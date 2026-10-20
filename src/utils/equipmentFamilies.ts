@@ -59,7 +59,23 @@ export const FAMILIES: Record<string, FamilyInfo> = {
   MTC: { label: 'Monte-charge', lot: 'CIRC' },
   TPR: { label: 'Tapis roulant', lot: 'CIRC' },
   // Divers
-  EQCUIS: { label: 'Équipements de cuisson', lot: 'DIVERS' },
+  // Confirmé le 20/10/2026 : les équipements de cuisine sont couverts par le contrat (lot électricité).
+  EQCUIS: { label: 'Équipements de cuisine', lot: 'ELEC' },
+  EQCUI: { label: 'Équipements de cuisine (variante de EQCUIS)', lot: 'ELEC' },
+  ECLSE: { label: 'Éclairage de secours (variante de ECLSEC)', lot: 'ELEC' },
+  // Codes absents de la nomenclature Coswin, observés sur les OT : variantes de SANT (à confirmer dans Coswin)
+  SANTI5: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANTI2: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANTI3: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANTI8: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANTI9: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANI7: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANI11: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANI12: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANI13: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SANI15: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SAI12: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
+  SAI13: { label: 'Équipements sanitaires (variante de SANT)', lot: 'FLUIDE' },
   // Ajouts du 15/10/2026 (export Coswin « Sélecteur des familles ») — lot ELEC, à valider
   AE: { label: 'Armoire de distribution électrique', lot: 'ELEC' },
   APLC: { label: 'Appareillage électrique', lot: 'ELEC' },
@@ -168,4 +184,43 @@ export function lotOfFamily(key: string): LotCode {
 /** Libellé propre d'une famille connue, sinon undefined. */
 export function familyLabel(key: string): string | undefined {
   return FAMILIES[key]?.label;
+}
+
+/**
+ * Lots du CONTRAT (confirmé le 20/10/2026) : deux lots, « Électricité » et « Fluide ». L'IFBT et les familles
+ * hors contrat sont hors lots. La « circulation mécanique » (ascenseurs, monte-charges, tapis roulants) est un
+ * sous-lot de l'électricité : elle reste un lot technique (CIRC) dans la matrice, mais un seul lot de contrat ici.
+ */
+export type ContractLot = 'ELECTRICITE' | 'FLUIDE' | 'HORS_CONTRAT';
+export const CONTRACT_LOT_ORDER: ContractLot[] = ['ELECTRICITE', 'FLUIDE', 'HORS_CONTRAT'];
+export const CONTRACT_LOT_LABELS: Record<ContractLot, string> = {
+  ELECTRICITE: 'Électricité',
+  FLUIDE: 'Fluide',
+  HORS_CONTRAT: 'Hors contrat ou non classé',
+};
+
+export function contractLotOf(lot: LotCode): ContractLot {
+  return lot === 'ELEC' || lot === 'CIRC' ? 'ELECTRICITE' : lot === 'FLUIDE' ? 'FLUIDE' : 'HORS_CONTRAT';
+}
+export function contractLotOfFamily(key: string): ContractLot {
+  return contractLotOf(lotOfFamily(key));
+}
+
+/** Sous-lot d'une famille (détail du lot de contrat). Les familles non listées tombent dans « Autres familles ». */
+const SUB_LOT: Record<string, string> = {
+  OND: 'Distribution et puissance', TD: 'Distribution et puissance', GPLC: 'Distribution et puissance', PTRSF: 'Distribution et puissance', TGBT: 'Distribution et puissance',
+  ASC: 'Appareils élévateurs', MTC: 'Appareils élévateurs', TPR: 'Appareils élévateurs', AEL: 'Appareils élévateurs',
+  ECLIN: 'Éclairage', ECLEX: 'Éclairage', ECLSEC: 'Éclairage', ECLSE: 'Éclairage',
+  PRAUT: 'Portes automatiques', SNOR: 'Courant faible', EQCUIS: 'Cuisine', EQCUI: 'Cuisine',
+  SANT: 'Plomberie · Sanitaire', PMP: 'Plomberie · Pompage', SURP: 'Plomberie · Pompage', PISC: 'Plomberie · Piscine', BCGR: 'Plomberie · Assainissement',
+  PAC: 'CVCD · Production thermique', GEG: 'CVCD · Production thermique', CHDR: 'CVCD · Production thermique',
+  SPT: 'CVCD · Climatisation terminale', VRV: 'CVCD · Climatisation terminale', ARCM: 'CVCD · Climatisation terminale', VTL: 'CVCD · Climatisation terminale',
+  CTA: "CVCD · Traitement d'air", CAN: "CVCD · Traitement d'air", DESH: "CVCD · Traitement d'air",
+  EXT: 'CVCD · Extraction et désenfumage', DSEF: 'CVCD · Extraction et désenfumage',
+};
+for (const c of ['SANTI5', 'SANTI2', 'SANTI3', 'SANTI8', 'SANTI9', 'SANI7', 'SANI11', 'SANI12', 'SANI13', 'SANI15', 'SAI12', 'SAI13']) SUB_LOT[c] = 'Plomberie · Sanitaire';
+
+export function subLotOfFamily(key: string): string {
+  if (contractLotOfFamily(key) === 'HORS_CONTRAT') return 'Hors contrat ou non classé';
+  return SUB_LOT[key] ?? 'Autres familles';
 }
