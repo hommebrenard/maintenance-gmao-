@@ -184,7 +184,7 @@ describe('lots (equipmentFamilies)', () => {
     expect(lotOfFamily('GEG')).toBe('FLUIDE'); // groupe d'EAU GLACÉE (GPLC = groupe électrogène)
     expect(lotOfFamily('GPLC')).toBe('ELEC');
     expect(lotOfFamily('ASC')).toBe('CIRC');
-    expect(lotOfFamily('EQCUIS')).toBe('DIVERS');
+    expect(lotOfFamily('EQCUIS')).toBe('ELEC'); // cuisine couverte par le contrat (20/10/2026)
     expect(lotOfFamily('NOUVELLE')).toBe('DIVERS');
   });
 
@@ -193,7 +193,7 @@ describe('lots (equipmentFamilies)', () => {
       TD: 'ELEC', TGBT: 'ELEC', PTRSF: 'ELEC', ECLIN: 'ELEC', ECLSEC: 'ELEC', ECLEX: 'ELEC', GPLC: 'ELEC', OND: 'ELEC', PRAUT: 'ELEC', SNOR: 'ELEC',
       ARCM: 'FLUIDE', CAN: 'FLUIDE', CTA: 'FLUIDE', DESH: 'FLUIDE', DSEF: 'FLUIDE', EXT: 'FLUIDE', G: 'FLUIDE', GEG: 'FLUIDE', PAC: 'FLUIDE',
       SPT: 'FLUIDE', VRV: 'FLUIDE', VTL: 'FLUIDE', BCGR: 'FLUIDE', COMP: 'FLUIDE', PMP: 'FLUIDE', SANT: 'FLUIDE', SURP: 'FLUIDE',
-      ASC: 'CIRC', MTC: 'CIRC', TPR: 'CIRC', EQCUIS: 'DIVERS',
+      ASC: 'CIRC', MTC: 'CIRC', TPR: 'CIRC', EQCUIS: 'ELEC', // EQCUIS : cuisine couverte par le contrat, confirmé le 20/10/2026
     };
     Object.entries(validated).forEach(([k, lot]) => expect(FAMILIES[k]?.lot).toBe(lot));
     expect(Object.keys(FAMILIES).length).toBeGreaterThanOrEqual(31);
