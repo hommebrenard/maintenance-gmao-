@@ -1,6 +1,8 @@
 import React from 'react';
 import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
-import { computeDashboard, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
+import { computeDashboard, computeDi, computeOt, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
+import { CONTRACT_LOT_LABELS, CONTRACT_LOT_ORDER, type ContractLot } from '../../utils/equipmentFamilies';
+import { computeLotRows, filterRequestsByLot, filterWorkOrdersByLot } from '../../utils/lotStats';
 import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
 import { createSiteNameResolver } from '../../utils/siteLabel';
@@ -55,10 +57,16 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const [site, setSite] = React.useState('');
   const sites = React.useMemo(() => locations.filter(l => l.type === 'Site').sort((a, b) => a.name.localeCompare(b.name, 'fr')), [locations]);
   const input = React.useMemo(() => ({ workOrders, requests, locations }), [workOrders, requests, locations]);
-  const { di, ot } = React.useMemo(() => computeDashboard(input, site), [input, site]);
+  const [lot, setLot] = React.useState<ContractLot | ''>('');
   const siteRows = React.useMemo(() => (site ? [] : computeSiteRows(input)), [input, site]);
   const siteName = sites.find(s => s.id === site)?.name;
-  const scopedOts = React.useMemo(() => filterWorkOrdersBySite(workOrders, locations, site), [workOrders, locations, site]);
+  // Périmètre du site seul (sert à l'état par lot et aux instantanés), puis périmètre site + lot (filtre « Lot »).
+  const siteOts = React.useMemo(() => filterWorkOrdersBySite(workOrders, locations, site), [workOrders, locations, site]);
+  const siteReqs = React.useMemo(() => filterRequestsBySite(requests, locations, site), [requests, locations, site]);
+  const scopedOts = React.useMemo(() => filterWorkOrdersByLot(siteOts, lot), [siteOts, lot]);
+  const scopedReqs = React.useMemo(() => filterRequestsByLot(siteReqs, lot), [siteReqs, lot]);
+  const { di, ot } = React.useMemo(() => (lot ? { di: computeDi(scopedReqs, workOrders, new Date()), ot: computeOt(scopedOts, new Date()) } : computeDashboard(input, site)), [lot, scopedReqs, scopedOts, workOrders, input, site]);
+  const lotResult = React.useMemo(() => computeLotRows(siteOts, siteReqs, workOrders, new Date()), [siteOts, siteReqs, workOrders]);
   const aging = React.useMemo(() => computeOverdueAging(scopedOts, new Date()), [scopedOts]);
   const split = React.useMemo(() => computeCompletionSplit(scopedOts), [scopedOts]);
   const [agingSel, setAgingSel] = React.useState<AgingKey | 'all' | null>(null);
@@ -69,14 +77,13 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
     ? aging.buckets.flatMap(b => b.items).sort((a, b) => b.daysLate - a.daysLate)
     : aging.buckets.find(b => b.key === agingSel)?.items ?? [];
   const agingShown = agingItems.filter(i => agingCov === 'all' || i.coswin === agingCov);
-  const scopedReqs = React.useMemo(() => filterRequestsBySite(requests, locations, site), [requests, locations, site]);
   const heat = React.useMemo(() => computeDiHeatmap(scopedReqs, workOrders, new Date()), [scopedReqs, workOrders]);
   const [heatSel, setHeatSel] = React.useState<{ p: DiPriorityKey; a: DiAgeKey } | null>(null);
   const [heatLimit, setHeatLimit] = React.useState(PAGE);
   const heatMax = Math.max(1, ...DI_PRIORITIES.flatMap(p => DI_AGE_DEFS.map(a => heat.cells[p.key][a.key].length)));
   const heatItems: DiHeatItem[] = heatSel ? heat.cells[heatSel.p][heatSel.a] : [];
   const funnel = React.useMemo(() => computeFunnel(scopedReqs, workOrders), [scopedReqs, workOrders]);
-  const liveIndicators = React.useMemo(() => computeIndicators(scopedReqs, scopedOts, workOrders, new Date()), [scopedReqs, scopedOts, workOrders]);
+  const liveIndicators = React.useMemo(() => computeIndicators(siteReqs, siteOts, workOrders, new Date()), [siteReqs, siteOts, workOrders]);
   const siteLoc = site ? locations.find(l => l.id === site) : undefined;
   const snapScopeKey = siteLoc ? siteScopeKey(siteLoc) : 'ALL';
   const resolveSite = React.useMemo(() => createSiteNameResolver(locations), [locations]);
@@ -93,14 +100,98 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           <h1 className="text-xl font-bold text-gray-900">Tableau de bord</h1>
           <p className="text-sm text-gray-500">Ordres de travail et demandes d'intervention{siteName ? ` — ${siteName}` : ' — tous les sites'}.</p>
         </div>
-        <label className="text-xs text-gray-600">
-          Site
-          <select value={site} onChange={e => setSite(e.target.value)} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm">
-            <option value="">Tous les sites</option>
-            {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs text-gray-600">
+            Lot
+            <select value={lot} onChange={e => setLot(e.target.value as ContractLot | '')} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm">
+              <option value="">Tous les lots</option>
+              {CONTRACT_LOT_ORDER.map(l => <option key={l} value={l}>{CONTRACT_LOT_LABELS[l]}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-gray-600">
+            Site
+            <select value={site} onChange={e => setSite(e.target.value)} className="ml-2 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm">
+              <option value="">Tous les sites</option>
+              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
+      {lot !== '' && (
+        <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-snug text-blue-900">
+          Filtre actif : lot <b>{CONTRACT_LOT_LABELS[lot]}</b>. Les indicateurs, retards, heatmap, entonnoir et contrôles ci-dessous ne portent que sur ce lot. Les instantanés mensuels et le tableau « Par site » restent calculés sur tous les lots.
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gray-800">État par lot du contrat</h2>
+        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] leading-snug text-gray-500">
+            Lots du contrat : Électricité (distribution, éclairage, appareils élévateurs, portes automatiques, courant faible, cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard (échéance dépassée, même définition que « Retard par ancienneté »), autres (non échus). Cette section ignore le filtre « Lot ».
+          </p>
+          {lotResult.rows.map(r => (
+            <div key={r.lot} className="space-y-1.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+                <span className="font-semibold text-gray-800">{CONTRACT_LOT_LABELS[r.lot]}</span>
+                <span className="text-gray-500">
+                  {num(r.ot)} OT · {num(r.di)} DI
+                  {r.otBase > 0 && <> · terminés <b className="text-green-700">{num(r.otDone)}</b> sur {num(r.otBase)} ({pct(r.otDone / r.otBase)}) · en retard <b className="text-red-700">{num(r.otOverdue)}</b> sur {num(r.otBase)} ({pct(r.otOverdue / r.otBase)})</>}
+                </span>
+              </div>
+              {r.otBase > 0 ? (
+                <div className="flex h-3 overflow-hidden rounded bg-gray-100" title={`${num(r.otDone)} terminés, ${num(r.otOverdue)} en retard, ${num(r.otOther)} autres, sur ${num(r.otBase)} OT hors annulés`}>
+                  <div className="bg-green-500" style={{ width: `${(r.otDone / r.otBase) * 100}%` }} />
+                  <div className="bg-red-500" style={{ width: `${(r.otOverdue / r.otBase) * 100}%` }} />
+                  <div className="bg-gray-300" style={{ width: `${(r.otOther / r.otBase) * 100}%` }} />
+                </div>
+              ) : <div className="text-[11px] text-gray-400">Aucun OT dans ce lot pour ce périmètre.</div>}
+              <div className="text-[11px] text-gray-600">
+                DI sans OT depuis plus de 90 jours : <b className="tabular-nums">{num(r.diNoOtOver90)}</b> sur {num(r.di)} DI
+                {r.diConflicts > 0 && <> · <span className="text-amber-700">{num(r.diConflicts)} DI en contradiction (la fonction Coswin et l'équipement donnent deux lots différents)</span></>}
+              </div>
+              {r.diReclassified > 0 && (
+                <div className="text-[11px] text-gray-600">
+                  dont <b className="tabular-nums">{num(r.diReclassified)}</b> DI saisies en « IFBT » dans Coswin, reclassées d'après leur description{r.diToCheck > 0 && <> (<span className="text-amber-700">{num(r.diToCheck)} à vérifier</span>)</>}
+                </div>
+              )}
+              {r.lot === 'HORS_CONTRAT' && Object.keys(r.diHorsSubs).length > 0 && (
+                <div className="text-[11px] text-gray-600">
+                  DI IFBT hors contrat : {['Bâtiment', 'Serrurerie', 'Divers', 'À examiner'].filter(k => r.diHorsSubs[k]).map(k => `${k} ${num(r.diHorsSubs[k])}`).join(' · ')}
+                </div>
+              )}
+              {r.subLots.length > 0 && (
+                <details className="text-[11px] text-gray-600">
+                  <summary className="cursor-pointer text-blue-600">Détail par sous-lot (OT)</summary>
+                  <table className="mt-1 w-full text-left">
+                    <thead className="text-[10px] uppercase tracking-wide text-gray-500"><tr><th className="py-1 pr-2">Sous-lot</th><th className="py-1 pr-2 text-right">OT</th><th className="py-1 pr-2 text-right">Terminés</th><th className="py-1 text-right">En retard</th></tr></thead>
+                    <tbody>{r.subLots.map(sl => (
+                      <tr key={sl.label} className="border-t border-gray-100"><td className="py-1 pr-2 text-gray-800">{sl.label}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.ot)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.done)}</td><td className="py-1 text-right tabular-nums">{num(sl.overdue)}</td></tr>
+                    ))}</tbody>
+                  </table>
+                </details>
+              )}
+            </div>
+          ))}
+          {lotResult.review.length > 0 && (
+            <details className="text-[11px] text-gray-600">
+              <summary className="cursor-pointer text-blue-600">DI IFBT à vérifier ou à examiner ({num(lotResult.review.length)})</summary>
+              <p className="mt-1 text-gray-500">Lot proposé d'après la description (deux domaines possibles, mot ambigu ou description non classable). À contrôler, puis à faire corriger dans Coswin.</p>
+              <table className="mt-1 w-full text-left">
+                <thead className="text-[10px] uppercase tracking-wide text-gray-500"><tr><th className="py-1 pr-2">DI</th><th className="py-1 pr-2">Description</th><th className="py-1">Lot proposé</th></tr></thead>
+                <tbody>{lotResult.review.slice(0, 80).map(x => (
+                  <tr key={x.code} className="border-t border-gray-100"><td className="py-1 pr-2 whitespace-nowrap text-gray-800">{x.code}</td><td className="py-1 pr-2">{x.title}</td><td className="py-1 whitespace-nowrap">{x.sub === 'À examiner' ? 'À examiner' : CONTRACT_LOT_LABELS[x.lot]}</td></tr>
+                ))}</tbody>
+              </table>
+              {lotResult.review.length > 80 && <p className="mt-1 text-gray-500">{num(lotResult.review.length - 80)} autres non affichées.</p>}
+            </details>
+          )}
+          {lotResult.unclassifiedOt > 0 && (
+            <p className="text-[11px] text-amber-700">
+              {num(lotResult.unclassifiedOt)} OT ont une famille d'équipement absente du référentiel (classés « Hors contrat ou non classé ») : {lotResult.unknownFamilies.slice(0, 8).map(u => `${u.family} (${num(u.ot)})`).join(', ')}{lotResult.unknownFamilies.length > 8 ? '…' : ''}. À ajouter dans le référentiel des familles.
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-800">Demandes d'intervention (DI)</h2>
