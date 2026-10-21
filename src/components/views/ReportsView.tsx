@@ -13,7 +13,7 @@ import {
 } from '../../utils/reportEquipment';
 import { buildCsv, exportFileName } from '../../utils/reportExport';
 import { ClassFilters, matchesClassFilters, classOptions, LOT_OPTIONS } from '../../utils/reportFilters';
-import { LOT_ORDER, LOT_LABELS, LOT_BADGE, familyLabel, lotOfFamily } from '../../utils/equipmentFamilies';
+import { CONTRACT_LOT_SHORT, CONTRACT_LOT_BADGE, SUB_LOT_OPTIONS, familyLabel, contractLotOfFamily, subLotOfFamily, type ContractLot } from '../../utils/equipmentFamilies';
 import { familyKeyOf } from '../../utils/annualMatrix';
 
 interface ReportsViewProps {
@@ -70,9 +70,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [lotFilter, setLotFilter] = useState('');
+  const [subLotFilter, setSubLotFilter] = useState('');
   const [familyFilter, setFamilyFilter] = useState('');
   const [freqFilter, setFreqFilter] = useState('');
-  const classFilters: ClassFilters = { lot: lotFilter, family: familyFilter, freq: freqFilter };
+  const classFilters: ClassFilters = { lot: lotFilter, subLot: subLotFilter, family: familyFilter, freq: freqFilter };
   const { families: familyOptions, freqs: freqOptions } = useMemo(() => classOptions(workOrders, lotFilter, equipmentList.map(e => e.code)), [workOrders, lotFilter, equipmentList]);
 
   // --- Options disponibles pour les filtres, dérivées des données réelles ---
@@ -82,10 +83,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
   const statusOptions = ['Ouvert', 'En cours', 'En attente', 'Terminé'];
   const priorityOptions = ['Faible', 'Moyenne', 'Élevée', 'Urgente'];
 
-  const hasActiveFilters = !!(assigneeFilter || locationFilter || priorityFilter || typeFilter || statusFilter || lotFilter || familyFilter || freqFilter);
+  const hasActiveFilters = !!(assigneeFilter || locationFilter || priorityFilter || typeFilter || statusFilter || lotFilter || subLotFilter || familyFilter || freqFilter);
   const clearFilters = () => {
     setAssigneeFilter(''); setLocationFilter(''); setPriorityFilter(''); setTypeFilter(''); setStatusFilter('');
-    setLotFilter(''); setFamilyFilter(''); setFreqFilter('');
+    setLotFilter(''); setSubLotFilter(''); setFamilyFilter(''); setFreqFilter('');
   };
 
   // --- Fenêtre de dates selon la période choisie (basée sur la date d'échéance) ---
@@ -111,12 +112,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
 
   const filteredOrders = useMemo(
     () => workOrders.filter(w => inPeriod(w) && applyCommonFilters(w)),
-    [workOrders, periodStartStr, todayStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, familyFilter, freqFilter]
+    [workOrders, periodStartStr, todayStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, subLotFilter, familyFilter, freqFilter]
   );
 
   const prevPeriodOrders = useMemo(
     () => workOrders.filter(w => inPrevPeriod(w) && applyCommonFilters(w)),
-    [workOrders, prevPeriodStartStr, prevPeriodEndStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, familyFilter, freqFilter]
+    [workOrders, prevPeriodStartStr, prevPeriodEndStr, assigneeFilter, locationFilter, priorityFilter, typeFilter, statusFilter, lotFilter, subLotFilter, familyFilter, freqFilter]
   );
 
   // --- KPIs ---
@@ -154,14 +155,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
   const filteredEquipmentList = useMemo(
     () => equipmentList.filter(e => {
       if (locationFilter && e.location !== locationFilter) return false;
-      if (lotFilter || familyFilter) {
+      if (lotFilter || subLotFilter || familyFilter) {
         const fam = familyKeyOf(e.code);
         if (familyFilter && fam !== familyFilter) return false;
-        if (lotFilter && lotOfFamily(fam) !== lotFilter) return false;
+        if (lotFilter && contractLotOfFamily(fam) !== lotFilter) return false;
+        if (subLotFilter && subLotOfFamily(fam) !== subLotFilter) return false;
       }
       return true;
     }),
-    [equipmentList, locationFilter, lotFilter, familyFilter]
+    [equipmentList, locationFilter, lotFilter, subLotFilter, familyFilter]
   );
 
   const activeEquipmentCount = filteredEquipmentList.filter(e => e.status === 'En service').length;
@@ -309,11 +311,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
 
         <select
           value={lotFilter}
-          onChange={(e) => { setLotFilter(e.target.value); setFamilyFilter(''); }}
+          onChange={(e) => { setLotFilter(e.target.value); setSubLotFilter(''); setFamilyFilter(''); }}
           className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
         >
           <option value="">Lot</option>
           {LOT_OPTIONS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+        </select>
+
+        <select
+          value={subLotFilter}
+          onChange={(e) => { setSubLotFilter(e.target.value); setFamilyFilter(''); }}
+          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none"
+        >
+          <option value="">Sous-lot</option>
+          {(lotFilter ? SUB_LOT_OPTIONS[lotFilter as ContractLot] : Object.values(SUB_LOT_OPTIONS).flat().filter((x, i, a) => a.indexOf(x) === i)).map(sl => <option key={sl} value={sl}>{sl}</option>)}
         </select>
 
         <select
@@ -465,6 +476,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
               const siteRows = allRows.filter(r =>
                 (!locationFilter || r.eq.location === locationFilter) &&
                 (!lotFilter || r.lot === lotFilter) &&
+                (!subLotFilter || r.subLot === subLotFilter) &&
                 (!familyFilter || r.family === familyFilter));
               const summary = summarizeEquipment(siteRows);
               const filtered = filterEquipmentRows(siteRows, equipFilters);
@@ -605,7 +617,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
                                 <td className="px-4 py-2 font-medium text-gray-800 max-w-[260px] truncate">{r.eq.name}</td>
                                 <td className="px-4 py-2 text-gray-600 hidden md:table-cell">{r.family === 'AUTRES' ? '—' : r.family}</td>
                                 <td className="px-4 py-2 hidden md:table-cell">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${LOT_BADGE[r.lot]}`}>{LOT_LABELS[r.lot].split(' (')[0]}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${CONTRACT_LOT_BADGE[r.lot]}`} title={r.subLot}>{CONTRACT_LOT_SHORT[r.lot]}</span>
                                 </td>
                                 <td className="px-4 py-2 text-gray-500">{r.eq.location || '—'}</td>
                                 <td className="px-4 py-2">
@@ -702,7 +714,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
                             <td className="px-4 py-2 font-mono text-gray-600 whitespace-nowrap">{r.wo.code}</td>
                             <td className="px-4 py-2 font-medium text-gray-800 max-w-xs truncate">{r.wo.title}</td>
                             <td className="px-4 py-2 text-gray-600 max-w-[200px] truncate">{r.wo.equipmentName || '—'}</td>
-                            <td className="px-4 py-2 text-gray-600">{r.lot}</td>
+                            <td className="px-4 py-2 text-gray-600" title={r.subLot}>{CONTRACT_LOT_SHORT[r.lot as ContractLot] ?? r.lot}</td>
                             <td className="px-4 py-2 text-gray-600">{r.family === 'AUTRES' ? '—' : r.family}</td>
                             <td className="px-4 py-2 text-gray-600">{r.freq || '—'}</td>
                             <td className="px-4 py-2 text-gray-600">{r.wo.status}<div className="mt-1"><CoswinStrikePill order={r.wo} /></div></td>
@@ -775,7 +787,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ workOrders: allWorkOrd
                   {filteredOrders.length} ordre(s) de travail seront exportés au format CSV (19 colonnes : site, famille, lot, fréquence, N° OT Coswin, dates…), en tenant compte de la période et des filtres actuellement appliqués. La date de clôture est posée automatiquement par la base ; elle est vide pour un OT non clos.
                 </p>
                 <button
-                  onClick={() => downloadCSV(filteredOrders, exportFileName({ site: locationFilter, lot: lotFilter ? LOT_OPTIONS.find(l => l.key === lotFilter)?.label : '', family: familyFilter, freq: freqFilter }, formatLocalDate(new Date())))}
+                  onClick={() => downloadCSV(filteredOrders, exportFileName({ site: locationFilter, lot: lotFilter ? CONTRACT_LOT_SHORT[lotFilter as ContractLot] : '', family: familyFilter, freq: freqFilter }, formatLocalDate(new Date())))}
                   disabled={filteredOrders.length === 0}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
                 >
