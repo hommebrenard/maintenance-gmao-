@@ -1933,7 +1933,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       </td>
                     )}
                     {visibleColumns.location && (
-                      <td className="px-4 py-3 text-gray-600 text-xs">{order.location || 'Atelier'}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">{order.location || order.entity || '—'}</td>
                     )}
                     {visibleColumns.actions && (
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -2311,7 +2311,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                     ? 'bg-red-50 border-red-200 text-red-950'
                                     : 'bg-blue-50/80 border-blue-200 text-blue-950'
                                 }`}
-                                title={`${wo.code} - ${wo.title} (${wo.location || 'Atelier'})`}
+                                title={`${wo.code} - ${wo.title} (${wo.location || wo.entity || '—'})`}
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <div className="flex items-center gap-1 min-w-0 flex-1">
@@ -3268,7 +3268,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       type="button"
                       onClick={() => {
                         setDispatchWO(selectedWorkOrder);
-                        const otherSites = availableSiteNames.filter(s => s !== (selectedWorkOrder.location || 'Atelier Principal'));
+                        const otherSites = availableSiteNames.filter(s => s !== (selectedWorkOrder.location || selectedWorkOrder.entity || 'Atelier Principal'));
                         setSelectedTargetSites(otherSites);
                         setIsMultiSiteModalOpen(true);
                       }}
@@ -3788,7 +3788,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     {dispatchWO.code}
                   </span>
                   <span className="text-[10px] text-purple-700 font-bold">
-                    Site d'origine : {dispatchWO.location || 'Atelier Principal'}
+                    Site d'origine : {dispatchWO.location || dispatchWO.entity || 'Atelier Principal'}
                   </span>
                 </div>
                 <h4 className="font-bold text-purple-950 text-xs">{dispatchWO.title}</h4>
@@ -3804,7 +3804,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto p-1">
                   {availableSiteNames.map(site => {
-                    const isOrigin = site === (dispatchWO.location || 'Atelier Principal');
+                    const isOrigin = site === (dispatchWO.location || dispatchWO.entity || 'Atelier Principal');
                     const isChecked = selectedTargetSites.includes(site);
                     return (
                       <button
