@@ -11,9 +11,9 @@ interface FamilyInfo { label: string; lot: LotCode }
 
 export const FAMILIES: Record<string, FamilyInfo> = {
   // Électricité (incl. portes automatiques et sonorisation : on y suit moteurs et accessoires)
-  TD: { label: 'Tableau de distribution', lot: 'ELEC' },
+  TD: { label: 'Tableau électrique', lot: 'ELEC' },
   TGBT: { label: 'Tableau général basse tension', lot: 'ELEC' },
-  PTRSF: { label: 'Transformateur', lot: 'ELEC' },
+  PTRSF: { label: 'Transformateur moyenne tension', lot: 'ELEC' },
   ECLIN: { label: 'Éclairage intérieur', lot: 'ELEC' },
   ECLSEC: { label: 'Éclairage de secours', lot: 'ELEC' },
   ECLEX: { label: 'Éclairage extérieur', lot: 'ELEC' },
@@ -151,7 +151,12 @@ export const FAMILIES: Record<string, FamilyInfo> = {
   VRD: { label: 'Voirie et réseaux divers', lot: 'DIVERS' },
   FOR: { label: 'Coffre-fort', lot: 'DIVERS' },
   ITL: { label: 'Jeux intelligents', lot: 'DIVERS' },
-  CUIS: { label: 'Équipements cuisine', lot: 'DIVERS' },
+  CUIS: { label: 'Équipements cuisine', lot: 'ELEC' },
+  // Segments de code que Coswin range dans la famille EQCUIS / ECLSEC / C-ACC (Selecteur_des_equipements, 21/10/2026)
+  FRD: { label: 'Équipements de cuisine', lot: 'ELEC' },
+  LAV: { label: 'Équipements de cuisine', lot: 'ELEC' },
+  ECLS: { label: 'Éclairage de secours', lot: 'ELEC' },
+  BRAUT: { label: 'Barrière automatique', lot: 'ELEC' },
   'EQ-TRANS': { label: 'Équipements transverses', lot: 'DIVERS' },
   EQCS: { label: 'EQCS', lot: 'DIVERS' },
   FDEF: { label: 'Famille à définir', lot: 'DIVERS' },
@@ -193,10 +198,14 @@ export function contractLotOfFamily(key: string): ContractLot {
 
 /** Sous-lot d'une famille (détail du lot de contrat). Les familles non listées tombent dans « Autres familles ». */
 const SUB_LOT: Record<string, string> = {
-  OND: 'Distribution et puissance', TD: 'Distribution et puissance', GPLC: 'Distribution et puissance', PTRSF: 'Distribution et puissance', TGBT: 'Distribution et puissance',
+  OND: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', TD: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', GPLC: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', PTRSF: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', TGBT: 'Tableaux, transformateurs, onduleurs et groupes électrogènes',
   ASC: 'Appareils élévateurs', MTC: 'Appareils élévateurs', TPR: 'Appareils élévateurs', AEL: 'Appareils élévateurs',
   ECLIN: 'Éclairage', ECLEX: 'Éclairage', ECLSEC: 'Éclairage', ECLSE: 'Éclairage',
-  PRAUT: 'Portes automatiques', SNOR: 'Courant faible', EQCUIS: 'Cuisine', EQCUI: 'Cuisine',
+  PRAUT: 'Portes automatiques', SNOR: 'Équipements de sonorisation', EQCUIS: 'Cuisine', EQCUI: 'Cuisine',
+  // Familles Coswin (validées le 21/10/2026)
+  TE: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', APLC: 'Tableaux, transformateurs, onduleurs et groupes électrogènes', TRSF: 'Tableaux, transformateurs, onduleurs et groupes électrogènes',
+  'C-ACC': 'Portes automatiques', BRAUT: 'Portes automatiques', CUIS: 'Cuisine', FRD: 'Cuisine', LAV: 'Cuisine', ECLS: 'Éclairage',
+  RESAS: 'Plomberie · Assainissement', RESEP: 'Plomberie · Assainissement', COMP: 'Plomberie · Air comprimé',
   SANT: 'Plomberie · Sanitaire', PMP: 'Plomberie · Pompage', SURP: 'Plomberie · Pompage', PISC: 'Plomberie · Piscine', BCGR: 'Plomberie · Assainissement',
   PAC: 'CVCD · Production thermique', GEG: 'CVCD · Production thermique', CHDR: 'CVCD · Production thermique',
   SPT: 'CVCD · Climatisation terminale', VRV: 'CVCD · Climatisation terminale', ARCM: 'CVCD · Climatisation terminale', VTL: 'CVCD · Climatisation terminale',
@@ -219,7 +228,7 @@ export const CONTRACT_LOT_BADGE: Record<ContractLot, string> = {
 };
 /** Sous-lots proposés dans les filtres, dans l'ordre d'affichage. */
 export const SUB_LOT_OPTIONS: Record<ContractLot, string[]> = {
-  ELECTRICITE: ['Distribution et puissance', 'Appareils élévateurs', 'Éclairage', 'Portes automatiques', 'Courant faible', 'Cuisine', 'Autres familles'],
-  FLUIDE: ['Plomberie · Sanitaire', 'Plomberie · Pompage', 'Plomberie · Piscine', 'Plomberie · Assainissement', 'CVCD · Production thermique', 'CVCD · Climatisation terminale', "CVCD · Traitement d'air", 'CVCD · Extraction et désenfumage', 'Autres familles'],
+  ELECTRICITE: ['Tableaux, transformateurs, onduleurs et groupes électrogènes', 'Appareils élévateurs', 'Éclairage', 'Portes automatiques', 'Équipements de sonorisation', 'Cuisine', 'Autres familles'],
+  FLUIDE: ['Plomberie · Sanitaire', 'Plomberie · Pompage', 'Plomberie · Piscine', 'Plomberie · Assainissement', 'Plomberie · Air comprimé', 'CVCD · Production thermique', 'CVCD · Climatisation terminale', "CVCD · Traitement d'air", 'CVCD · Extraction et désenfumage', 'Autres familles'],
   HORS_CONTRAT: ['Hors contrat ou non classé'],
 };
