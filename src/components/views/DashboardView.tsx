@@ -143,15 +143,31 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                   {r.otBase > 0 && <> · terminés <b className="text-green-700">{num(r.otDone)}</b> sur {num(r.otBase)} ({pct(r.otDone / r.otBase)}) · en retard confirmé <b className="text-red-700">{num(r.otOverdueConfirmed)}</b> ({pct(r.otOverdueConfirmed / r.otBase)}){r.otOverdueNotCreated > 0 && <> · NC <b className="text-red-400">{num(r.otOverdueNotCreated)}</b></>} · à confirmer <b className="text-amber-600">{num(r.otOverdueUnconfirmed)}</b> ({pct(r.otOverdueUnconfirmed / r.otBase)})</>}
                 </span>
               </div>
-              {r.otBase > 0 ? (
-                <div className="flex h-3 overflow-hidden rounded bg-gray-100" title={`${num(r.otDone)} terminés, ${num(r.otOverdueConfirmed)} en retard confirmés, ${num(r.otOverdueNotCreated)} NC en retard, ${num(r.otOverdueUnconfirmed)} en retard à confirmer, ${num(r.otOther)} autres, sur ${num(r.otBase)} OT hors annulés`}>
-                  <div className="bg-green-500" style={{ width: `${(r.otDone / r.otBase) * 100}%` }} />
-                  <div className="bg-red-500" style={{ width: `${(r.otOverdueConfirmed / r.otBase) * 100}%` }} />
-                  <div className="bg-red-300" style={{ width: `${(r.otOverdueNotCreated / r.otBase) * 100}%` }} />
-                  <div className="bg-amber-300" style={{ width: `${(r.otOverdueUnconfirmed / r.otBase) * 100}%` }} />
-                  <div className="bg-gray-300" style={{ width: `${(r.otOther / r.otBase) * 100}%` }} />
-                </div>
-              ) : <div className="text-[11px] text-gray-400">Aucun OT dans ce lot pour ce périmètre.</div>}
+              {r.otBase > 0 ? (() => {
+                const segs = [
+                  { k: 'Terminés', n: r.otDone, bar: 'bg-green-500', txt: 'text-white' },
+                  { k: 'En retard confirmé', n: r.otOverdueConfirmed, bar: 'bg-red-500', txt: 'text-white' },
+                  { k: 'En retard NC (sans numéro Coswin)', n: r.otOverdueNotCreated, bar: 'bg-red-300', txt: 'text-red-900' },
+                  { k: 'En retard à confirmer', n: r.otOverdueUnconfirmed, bar: 'bg-amber-300', txt: 'text-amber-900' },
+                  { k: 'Autres (non échus)', n: r.otOther, bar: 'bg-gray-300', txt: 'text-gray-700' },
+                ];
+                return (
+                  <>
+                    <div className="flex h-5 overflow-hidden rounded bg-gray-100">
+                      {segs.map(sg => sg.n > 0 && (
+                        <div key={sg.k} className={`${sg.bar} ${sg.txt} flex items-center justify-center overflow-hidden text-[10px] font-semibold tabular-nums`} style={{ width: `${(sg.n / r.otBase) * 100}%` }} title={`${sg.k} : ${num(sg.n)} (${pct(sg.n / r.otBase)})`}>
+                          {sg.n / r.otBase >= 0.15 ? `${num(sg.n)} · ${pct(sg.n / r.otBase)}` : sg.n / r.otBase >= 0.05 ? num(sg.n) : ''}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-600">
+                      {segs.map(sg => (
+                        <span key={sg.k} className="inline-flex items-center gap-1"><span className={`inline-block h-2 w-2 rounded-sm ${sg.bar}`} />{sg.k} <b className="tabular-nums text-gray-800">{num(sg.n)}</b> ({pct(sg.n / r.otBase)})</span>
+                      ))}
+                    </div>
+                  </>
+                );
+              })() : <div className="text-[11px] text-gray-400">Aucun OT dans ce lot pour ce périmètre.</div>}
               <div className="text-[11px] text-gray-600">
                 DI sans OT depuis plus de 90 jours : <b className="tabular-nums">{num(r.diNoOtOver90)}</b> sur {num(r.di)} DI
                 {r.diConflicts > 0 && <> · <span className="text-amber-700">{num(r.diConflicts)} DI en contradiction (la fonction Coswin et l'équipement donnent deux lots différents)</span></>}
