@@ -127,7 +127,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
         <h2 className="text-sm font-semibold text-gray-800">État par lot du contrat</h2>
         <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-[11px] leading-snug text-gray-500">
-            Lots du contrat : Électricité (distribution, éclairage, appareils élévateurs, portes automatiques, courant faible, cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard confirmé (état Coswin chargé), sans numéro Coswin (NC), en retard à confirmer (état Coswin non chargé : peut être déjà terminé), autres (non échus). Cette section ignore le filtre « Lot ».
+            Lots du contrat : Électricité (tableaux, transformateurs, onduleurs et groupes ; éclairage ; appareils élévateurs ; portes automatiques ; équipements de sonorisation ; cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard confirmé (état Coswin chargé), sans numéro Coswin (NC), en retard à confirmer (état Coswin non chargé : peut être déjà terminé), autres (non échus). Cette section ignore le filtre « Lot ».
           </p>
           {lotResult.rows.some(r => r.otOverdueUnconfirmed > 0) && (
             <p className="rounded border border-amber-200 bg-amber-50 p-2 text-[11px] leading-snug text-amber-800">
@@ -172,7 +172,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                   <table className="mt-1 w-full text-left">
                     <thead className="text-[10px] uppercase tracking-wide text-gray-500"><tr><th className="py-1 pr-2">Sous-lot</th><th className="py-1 pr-2 text-right">OT</th><th className="py-1 pr-2 text-right">Terminés</th><th className="py-1 pr-2 text-right">Retard confirmé</th><th className="py-1 text-right">Retard total</th></tr></thead>
                     <tbody>{r.subLots.map(sl => (
-                      <tr key={sl.label} className="border-t border-gray-100"><td className="py-1 pr-2 text-gray-800">{sl.label}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.ot)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.done)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.overdueConfirmed)}</td><td className="py-1 text-right tabular-nums text-gray-500">{num(sl.overdue)}</td></tr>
+                      <tr key={sl.label} className="border-t border-gray-100"><td className="py-1 pr-2 text-gray-800">{sl.label}{sl.families.length > 1 && <div className="text-[10px] leading-snug text-gray-500">{sl.families.slice(0, 8).map(f => `${f.label} ${num(f.ot)}`).join(' · ')}{sl.families.length > 8 ? ` · +${sl.families.length - 8} autres` : ''}</div>}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.ot)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.done)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.overdueConfirmed)}</td><td className="py-1 text-right tabular-nums text-gray-500">{num(sl.overdue)}</td></tr>
                     ))}</tbody>
                   </table>
                 </details>
