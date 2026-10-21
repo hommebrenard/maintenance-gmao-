@@ -34,7 +34,7 @@ describe('reportEquipment', () => {
 
   it('déduit famille et lot depuis le code (éclairage extérieur = Électricité)', () => {
     const { rows } = buildEquipmentRows(EQUIPMENT, []);
-    expect(rows.map(r => [r.family, r.lot])).toEqual([['ASC', 'CIRC'], ['OND', 'ELEC'], ['SPT', 'FLUIDE'], ['ECLEX', 'ELEC']]);
+    expect(rows.map(r => [r.family, r.lot])).toEqual([['ASC', 'ELECTRICITE'], ['OND', 'ELECTRICITE'], ['SPT', 'FLUIDE'], ['ECLEX', 'ELECTRICITE']]);
   });
 
   it('synthèse : critiques à l\'arrêt (Élevée ou Critique + arrêt non planifié) et équipements sans OT', () => {
@@ -45,14 +45,15 @@ describe('reportEquipment', () => {
   it('filtres : lot, famille, statut, criticité, filtres rapides et recherche', () => {
     const { rows } = buildEquipmentRows(EQUIPMENT, ORDERS);
     const f = (o: any) => filterEquipmentRows(rows, { ...EMPTY_EQUIPMENT_FILTERS, ...o }).map(r => r.eq.code);
-    expect(f({ lot: 'ELEC' })).toEqual(['BAM-KNT_AG-OND-01', 'BAM-KNT_AG-ECLEX-01']);
+    expect(f({ lot: 'ELECTRICITE' })).toEqual(['BAM-KNT_AG-ASC-01', 'BAM-KNT_AG-OND-01', 'BAM-KNT_AG-ECLEX-01']);
+    expect(f({ subLot: 'Appareils élévateurs' })).toEqual(['BAM-KNT_AG-ASC-01']);
     expect(f({ family: 'SPT' })).toEqual(['BAM-KNT_AG-SPT-01']);
     expect(f({ status: 'Arrêt planifié' })).toEqual(['BAM-KNT_AG-SPT-01']);
     expect(f({ criticality: 'Faible' })).toEqual(['BAM-KNT_AG-SPT-01']);
     expect(f({ quick: 'withoutWo' })).toEqual(['BAM-KNT_AG-ECLEX-01']);
     expect(f({ quick: 'criticalDown' })).toEqual(['BAM-KNT_AG-ASC-01', 'BAM-KNT_AG-OND-01']);
     expect(f({ search: 'ond-01' })).toEqual(['BAM-KNT_AG-OND-01']);
-    expect(f({ lot: 'ELEC', quick: 'criticalDown' })).toEqual(['BAM-KNT_AG-OND-01']);
+    expect(f({ lot: 'ELECTRICITE', quick: 'criticalDown' })).toEqual(['BAM-KNT_AG-ASC-01', 'BAM-KNT_AG-OND-01']);
   });
 
   it('tri par criticité et par OT ouverts, sens inversé, valeurs vides en fin', () => {

@@ -12,7 +12,8 @@ describe('reportTable', () => {
   it('déduit famille, lot et fréquence', () => {
     const r = toDetailRow(wo({ code: 'OT-1', equipmentCode: 'BAM-KNT_AG-ASC-01', title: 'PREVENTIF SYSTEMATIQUE HEBDOMADAIRE ASCENSEUR' }));
     expect(r.family).toBe('ASC');
-    expect(r.lot).toBe('CIRC');
+    expect(r.lot).toBe('ELECTRICITE');
+    expect(r.subLot).toBe('Appareils élévateurs');
     expect(r.freq).toBe('H');
   });
   it('tri par échéance, sens inversé, vides en fin dans les deux sens', () => {

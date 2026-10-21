@@ -25,6 +25,7 @@ describe('reportExport', () => {
     expect(h('Site')).toBe('Fès');
     expect(h('Famille')).toBe('TD');
     expect(h('Lot')).toBe('Électricité');
+    expect(h('Sous-lot')).toBeTruthy();
     expect(h('Fréquence')).toBe('M');
     expect(h("Date d'échéance")).toBe('29/06/2026');
     expect(h('N° de plan')).toBe('159');
