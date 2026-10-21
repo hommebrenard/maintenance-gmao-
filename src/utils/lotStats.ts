@@ -65,7 +65,7 @@ export const filterWorkOrdersByLot = (ots: WorkOrder[], lot: ContractLot | ''): 
 export const filterRequestsByLot = (reqs: MaintenanceRequest[], lot: ContractLot | ''): MaintenanceRequest[] =>
   lot ? reqs.filter(r => contractLotOfRequest(r).lot === lot) : reqs;
 
-export interface SubLotRow { label: string; ot: number; overdue: number; overdueConfirmed: number; done: number }
+export interface SubLotRow { label: string; ot: number; overdue: number; overdueConfirmed: number; done: number; /** Détail par famille (libellé Coswin), du plus fréquent au moins fréquent. */ families: { label: string; ot: number }[] }
 export interface LotRow {
   lot: ContractLot;
   ot: number; otBase: number; otOverdue: number; otDone: number; otOther: number;
@@ -99,8 +99,11 @@ export function computeLotRows(ots: WorkOrder[], reqs: MaintenanceRequest[], all
     row.ot += 1;
     if (!FAMILIES[fam]) { unknown.set(fam, (unknown.get(fam) ?? 0) + 1); unclassifiedOt += 1; }
     const sk = `${lot}|${subLotOfFamily(fam)}`;
-    const sub = subs.get(sk) ?? { label: subLotOfFamily(fam), ot: 0, overdue: 0, overdueConfirmed: 0, done: 0 };
+    const sub = subs.get(sk) ?? { label: subLotOfFamily(fam), ot: 0, overdue: 0, overdueConfirmed: 0, done: 0, families: [] };
     sub.ot += 1;
+    const fl = FAMILIES[fam]?.label ?? fam;
+    const fe = sub.families.find(x => x.label === fl);
+    if (fe) fe.ot += 1; else sub.families.push({ label: fl, ot: 1 });
     subs.set(sk, sub);
     if (w.status === 'Annulé') continue;
     row.otBase += 1;
@@ -129,6 +132,7 @@ export function computeLotRows(ots: WorkOrder[], reqs: MaintenanceRequest[], all
     }
     if (over90.has(r.id)) row.diNoOtOver90 += 1;
   }
+  for (const v of subs.values()) v.families.sort((a, b) => b.ot - a.ot);
   for (const [k, v] of subs) rows.get(k.split('|')[0] as ContractLot)!.subLots.push(v);
   for (const row of rows.values()) row.subLots.sort((a, b) => b.ot - a.ot);
   return {
