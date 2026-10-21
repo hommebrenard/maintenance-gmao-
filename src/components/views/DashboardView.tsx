@@ -127,21 +127,28 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
         <h2 className="text-sm font-semibold text-gray-800">État par lot du contrat</h2>
         <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-[11px] leading-snug text-gray-500">
-            Lots du contrat : Électricité (distribution, éclairage, appareils élévateurs, portes automatiques, courant faible, cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard (échéance dépassée, même définition que « Retard par ancienneté »), autres (non échus). Cette section ignore le filtre « Lot ».
+            Lots du contrat : Électricité (distribution, éclairage, appareils élévateurs, portes automatiques, courant faible, cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard confirmé (état Coswin chargé), sans numéro Coswin (NC), en retard à confirmer (état Coswin non chargé : peut être déjà terminé), autres (non échus). Cette section ignore le filtre « Lot ».
           </p>
+          {lotResult.rows.some(r => r.otOverdueUnconfirmed > 0) && (
+            <p className="rounded border border-amber-200 bg-amber-50 p-2 text-[11px] leading-snug text-amber-800">
+              <b>Retards à confirmer.</b> {num(lotResult.rows.reduce((n, r) => n + r.otOverdueUnconfirmed, 0))} OT échus appartiennent à des sites ou mois dont l'état Coswin n'est pas chargé : ils peuvent déjà être terminés dans Coswin. Seuls les retards « confirmés » sont fiables (même règle que « Retard par ancienneté »).
+            </p>
+          )}
           {lotResult.rows.map(r => (
             <div key={r.lot} className="space-y-1.5">
               <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
                 <span className="font-semibold text-gray-800">{CONTRACT_LOT_LABELS[r.lot]}</span>
                 <span className="text-gray-500">
                   {num(r.ot)} OT · {num(r.di)} DI
-                  {r.otBase > 0 && <> · terminés <b className="text-green-700">{num(r.otDone)}</b> sur {num(r.otBase)} ({pct(r.otDone / r.otBase)}) · en retard <b className="text-red-700">{num(r.otOverdue)}</b> sur {num(r.otBase)} ({pct(r.otOverdue / r.otBase)})</>}
+                  {r.otBase > 0 && <> · terminés <b className="text-green-700">{num(r.otDone)}</b> sur {num(r.otBase)} ({pct(r.otDone / r.otBase)}) · en retard confirmé <b className="text-red-700">{num(r.otOverdueConfirmed)}</b> ({pct(r.otOverdueConfirmed / r.otBase)}){r.otOverdueNotCreated > 0 && <> · NC <b className="text-red-400">{num(r.otOverdueNotCreated)}</b></>} · à confirmer <b className="text-amber-600">{num(r.otOverdueUnconfirmed)}</b> ({pct(r.otOverdueUnconfirmed / r.otBase)})</>}
                 </span>
               </div>
               {r.otBase > 0 ? (
-                <div className="flex h-3 overflow-hidden rounded bg-gray-100" title={`${num(r.otDone)} terminés, ${num(r.otOverdue)} en retard, ${num(r.otOther)} autres, sur ${num(r.otBase)} OT hors annulés`}>
+                <div className="flex h-3 overflow-hidden rounded bg-gray-100" title={`${num(r.otDone)} terminés, ${num(r.otOverdueConfirmed)} en retard confirmés, ${num(r.otOverdueNotCreated)} NC en retard, ${num(r.otOverdueUnconfirmed)} en retard à confirmer, ${num(r.otOther)} autres, sur ${num(r.otBase)} OT hors annulés`}>
                   <div className="bg-green-500" style={{ width: `${(r.otDone / r.otBase) * 100}%` }} />
-                  <div className="bg-red-500" style={{ width: `${(r.otOverdue / r.otBase) * 100}%` }} />
+                  <div className="bg-red-500" style={{ width: `${(r.otOverdueConfirmed / r.otBase) * 100}%` }} />
+                  <div className="bg-red-300" style={{ width: `${(r.otOverdueNotCreated / r.otBase) * 100}%` }} />
+                  <div className="bg-amber-300" style={{ width: `${(r.otOverdueUnconfirmed / r.otBase) * 100}%` }} />
                   <div className="bg-gray-300" style={{ width: `${(r.otOther / r.otBase) * 100}%` }} />
                 </div>
               ) : <div className="text-[11px] text-gray-400">Aucun OT dans ce lot pour ce périmètre.</div>}
@@ -163,9 +170,9 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
                 <details className="text-[11px] text-gray-600">
                   <summary className="cursor-pointer text-blue-600">Détail par sous-lot (OT)</summary>
                   <table className="mt-1 w-full text-left">
-                    <thead className="text-[10px] uppercase tracking-wide text-gray-500"><tr><th className="py-1 pr-2">Sous-lot</th><th className="py-1 pr-2 text-right">OT</th><th className="py-1 pr-2 text-right">Terminés</th><th className="py-1 text-right">En retard</th></tr></thead>
+                    <thead className="text-[10px] uppercase tracking-wide text-gray-500"><tr><th className="py-1 pr-2">Sous-lot</th><th className="py-1 pr-2 text-right">OT</th><th className="py-1 pr-2 text-right">Terminés</th><th className="py-1 pr-2 text-right">Retard confirmé</th><th className="py-1 text-right">Retard total</th></tr></thead>
                     <tbody>{r.subLots.map(sl => (
-                      <tr key={sl.label} className="border-t border-gray-100"><td className="py-1 pr-2 text-gray-800">{sl.label}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.ot)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.done)}</td><td className="py-1 text-right tabular-nums">{num(sl.overdue)}</td></tr>
+                      <tr key={sl.label} className="border-t border-gray-100"><td className="py-1 pr-2 text-gray-800">{sl.label}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.ot)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.done)}</td><td className="py-1 pr-2 text-right tabular-nums">{num(sl.overdueConfirmed)}</td><td className="py-1 text-right tabular-nums text-gray-500">{num(sl.overdue)}</td></tr>
                     ))}</tbody>
                   </table>
                 </details>
