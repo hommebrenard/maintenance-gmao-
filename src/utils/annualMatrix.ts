@@ -1,5 +1,5 @@
 import type { WorkOrder } from '../types';
-import { familyLabel, lotOfFamily, type LotCode } from './equipmentFamilies';
+import { familyLabel, contractLotOfFamily, subLotOfFamily, type ContractLot } from './equipmentFamilies';
 
 /** État d'une case équipement × mois. */
 export type CellState = 'none' | 'done' | 'reserve' | 'partial' | 'overdue' | 'pending';
@@ -51,8 +51,9 @@ export interface MatrixRow {
   code: string;
   /** Famille d'équipement : segment « type » du code (BAM-KNT_AG-ASC-01 → ASC). */
   family: string;
-  /** Lot de la famille (ELEC, FLUIDE, CIRC, DIVERS) : voir equipmentFamilies.ts. */
-  lot: LotCode;
+  /** Lot du contrat de la famille (Électricité, Fluide, Hors contrat) et son sous-lot : voir equipmentFamilies.ts. */
+  lot: ContractLot;
+  subLot: string;
   location: string;
   cells: MatrixCell[]; // une case par colonne (12 mois, ou 52/53 semaines)
   total: number;
@@ -208,7 +209,8 @@ export function buildAnnualMatrix(orders: WorkOrder[], year: number, today: stri
         label: wo.equipmentName || wo.equipmentCode || NO_EQUIPMENT,
         code: wo.equipmentCode || '',
         family: familyKeyOf(wo.equipmentCode),
-        lot: lotOfFamily(familyKeyOf(wo.equipmentCode)),
+        lot: contractLotOfFamily(familyKeyOf(wo.equipmentCode)),
+        subLot: subLotOfFamily(familyKeyOf(wo.equipmentCode)),
         location: wo.location || '',
         cells: Array.from({ length: nCols }, () => ({ total: 0, done: 0, state: 'none' as CellState, orders: [], anomalies: 0, freqs: [] as string[] })),
         total: 0, done: 0, overdue: 0, anomalies: 0, percent: 0,
