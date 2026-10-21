@@ -47,7 +47,7 @@ import type { ClosureItem } from '../../utils/coswinClosure';
 import { AnnualMatrixView } from './AnnualMatrixView';
 import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
-import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher, normalizeSiteName } from '../../utils/siteNormalization';
+import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher, findMasterLocationName } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
@@ -566,10 +566,12 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const siteLabelOf = (wo: { location?: string; entity?: string }): string => {
     const raw = wo.location || wo.entity || '';
     if (!raw) return '—';
-    let label = siteLabelCache.get(raw);
+    const key = `${wo.location ?? ''}\u0001${wo.entity ?? ''}`;
+    let label = siteLabelCache.get(key);
     if (label === undefined) {
-      label = normalizeSiteName(raw, locations) || raw;
-      siteLabelCache.set(raw, label);
+      // Même règle que la liste déroulante des sites (getAvailableSiteNames) : insensible à « - » / « _ » (BAM_AGD-AG = BAM_AGD_AG).
+      label = findMasterLocationName(wo.location, locations) ?? findMasterLocationName(wo.entity, locations) ?? raw;
+      siteLabelCache.set(key, label);
     }
     return label;
   };
@@ -989,7 +991,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       `"${(wo.equipmentName || '').replace(/"/g, '""')}"`,
       `"${getDisplayResponsible(wo)}"`,
       `"${wo.dueDate}"`,
-      `"${(wo.location || '').replace(/"/g, '""')}"`,
+      `"${(wo.location || wo.entity ? siteLabelOf(wo) : '').replace(/"/g, '""')}"`,
       `"${wo.createdAt}"`
     ]);
 
@@ -2342,7 +2344,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                   </div>
                                   {(wo.location || wo.entity) && (
                                     <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-purple-100 text-purple-900 border border-purple-200 shrink-0 truncate max-w-[65px]">
-                                      {(wo.location || wo.entity).split(' ')[0]}
+                                      {siteLabelOf(wo).split(' ').pop()}
                                     </span>
                                   )}
                                 </div>
