@@ -2,7 +2,7 @@ import type { MaintenanceRequest, WorkOrder } from '../types';
 import { familyKeyOf } from './annualMatrix';
 import { CONTRACT_LOT_ORDER, FAMILIES, contractLotOfFamily, subLotOfFamily, type ContractLot } from './equipmentFamilies';
 import { computeDiHeatmap } from './diHeatmap';
-import { computeOverdueAging } from './otAging';
+import { computeCoswinCoverage, computeOverdueAging } from './otAging';
 import { classifyIfbtDescription, type IfbtSub } from './ifbtDescription';
 
 /**
@@ -11,7 +11,7 @@ import { classifyIfbtDescription, type IfbtSub } from './ifbtDescription';
  * - Lot d'un OT = lot de la famille de son équipement (3e segment du code équipement). Un OT sans code équipement exploitable est « non classé ».
  * - Lot d'une DI = lot de sa fonction Coswin (renseignée à 100 %), à défaut celui de la famille de l'équipement (planifié d'abord).
  *   Une DI dont la fonction et la famille donnent deux lots de contrat différents est comptée « en contradiction » : elle n'est jamais déplacée.
- * - OT en retard = même définition que « Retard par ancienneté » ; OT terminés = statut « Terminé » ; base = OT hors « Annulé ».
+ * - OT en retard = même définition et même couverture Coswin que « Retard par ancienneté » (confirmé / à confirmer / NC) ; OT terminés = statut « Terminé » ; base = OT hors « Annulé ».
  * - DI sans OT > 90 j = même définition que la heatmap (colonne « Plus de 90 j », toutes priorités).
  */
 export type { ContractLot };
@@ -65,10 +65,12 @@ export const filterWorkOrdersByLot = (ots: WorkOrder[], lot: ContractLot | ''): 
 export const filterRequestsByLot = (reqs: MaintenanceRequest[], lot: ContractLot | ''): MaintenanceRequest[] =>
   lot ? reqs.filter(r => contractLotOfRequest(r).lot === lot) : reqs;
 
-export interface SubLotRow { label: string; ot: number; overdue: number; done: number }
+export interface SubLotRow { label: string; ot: number; overdue: number; overdueConfirmed: number; done: number }
 export interface LotRow {
   lot: ContractLot;
   ot: number; otBase: number; otOverdue: number; otDone: number; otOther: number;
+  /** Détail de otOverdue : confirmés (état Coswin chargé pour le site et le mois), à confirmer (état non chargé), sans numéro Coswin (OT « NC »). */
+  otOverdueConfirmed: number; otOverdueUnconfirmed: number; otOverdueNotCreated: number;
   di: number; diNoOtOver90: number; diConflicts: number;
   /** DI de fonction IFBT reclassées dans ce lot d'après leur description (lots Électricité et Fluide). */
   diReclassified: number;
@@ -82,10 +84,10 @@ export interface ReviewItem { code: string; title: string; lot: ContractLot; sub
 export interface LotResult { rows: LotRow[]; unknownFamilies: { family: string; ot: number }[]; unclassifiedOt: number; review: ReviewItem[] }
 
 export function computeLotRows(ots: WorkOrder[], reqs: MaintenanceRequest[], allWorkOrders: WorkOrder[], today: Date): LotResult {
-  const overdueIds = new Set(computeOverdueAging(ots, today).buckets.flatMap(b => b.items.map(i => i.wo.id)));
+  const overdueState = new Map(computeOverdueAging(ots, today, computeCoswinCoverage(allWorkOrders)).buckets.flatMap(b => b.items.map(i => [i.wo.id, i.coswin] as const)));
   const heat = computeDiHeatmap(reqs, allWorkOrders, today);
   const over90 = new Set(Object.values(heat.cells).flatMap(byAge => byAge.a90p.map(i => i.request.id)));
-  const rows = new Map<ContractLot, LotRow>(CONTRACT_LOT_ORDER.map(l => [l, { lot: l, ot: 0, otBase: 0, otOverdue: 0, otDone: 0, otOther: 0, di: 0, diNoOtOver90: 0, diConflicts: 0, diReclassified: 0, diToCheck: 0, diToExamine: 0, diHorsSubs: {}, subLots: [] }]));
+  const rows = new Map<ContractLot, LotRow>(CONTRACT_LOT_ORDER.map(l => [l, { lot: l, ot: 0, otBase: 0, otOverdue: 0, otOverdueConfirmed: 0, otOverdueUnconfirmed: 0, otOverdueNotCreated: 0, otDone: 0, otOther: 0, di: 0, diNoOtOver90: 0, diConflicts: 0, diReclassified: 0, diToCheck: 0, diToExamine: 0, diHorsSubs: {}, subLots: [] }]));
   const subs = new Map<string, SubLotRow>();
   const unknown = new Map<string, number>();
   let unclassifiedOt = 0;
@@ -97,13 +99,19 @@ export function computeLotRows(ots: WorkOrder[], reqs: MaintenanceRequest[], all
     row.ot += 1;
     if (!FAMILIES[fam]) { unknown.set(fam, (unknown.get(fam) ?? 0) + 1); unclassifiedOt += 1; }
     const sk = `${lot}|${subLotOfFamily(fam)}`;
-    const sub = subs.get(sk) ?? { label: subLotOfFamily(fam), ot: 0, overdue: 0, done: 0 };
+    const sub = subs.get(sk) ?? { label: subLotOfFamily(fam), ot: 0, overdue: 0, overdueConfirmed: 0, done: 0 };
     sub.ot += 1;
     subs.set(sk, sub);
     if (w.status === 'Annulé') continue;
     row.otBase += 1;
     if (w.status === 'Terminé') { row.otDone += 1; sub.done += 1; }
-    else if (overdueIds.has(w.id)) { row.otOverdue += 1; sub.overdue += 1; }
+    else if (overdueState.has(w.id)) {
+      const st = overdueState.get(w.id);
+      row.otOverdue += 1; sub.overdue += 1;
+      if (st === 'loaded') { row.otOverdueConfirmed += 1; sub.overdueConfirmed += 1; }
+      else if (st === 'notCreated') row.otOverdueNotCreated += 1;
+      else row.otOverdueUnconfirmed += 1;
+    }
     else row.otOther += 1;
   }
   for (const r of reqs) {
