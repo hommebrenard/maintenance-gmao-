@@ -47,7 +47,7 @@ import type { ClosureItem } from '../../utils/coswinClosure';
 import { AnnualMatrixView } from './AnnualMatrixView';
 import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
-import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher } from '../../utils/siteNormalization';
+import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher, normalizeSiteName } from '../../utils/siteNormalization';
 import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
@@ -560,6 +560,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   // Le champ `entity` (code Zone brut, ex. BAM_KNT_AG) n'est plus listé tel quel : il
   // sert seulement à retrouver l'emplacement officiel (voir getAvailableSiteNames,
   // src/utils/siteNormalization.ts). Corrigé le 20/09/2026.
+  // Libellé du site d'un OT : même nom officiel que la liste déroulante des sites (« Succursale régionale Type B AGADIR »),
+  // jamais le code brut (BAM_AGD-AG). Mis en cache par valeur brute : un OT sur deux partage le même site.
+  const siteLabelCache = useMemo(() => new Map<string, string>(), [locations]);
+  const siteLabelOf = (wo: { location?: string; entity?: string }): string => {
+    const raw = wo.location || wo.entity || '';
+    if (!raw) return '—';
+    let label = siteLabelCache.get(raw);
+    if (label === undefined) {
+      label = normalizeSiteName(raw, locations) || raw;
+      siteLabelCache.set(raw, label);
+    }
+    return label;
+  };
+
   const availableSiteNames = useMemo(
     () => getAvailableSiteNames(workOrders, locations),
     [locations, workOrders]
@@ -1933,7 +1947,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                       </td>
                     )}
                     {visibleColumns.location && (
-                      <td className="px-4 py-3 text-gray-600 text-xs">{order.location || order.entity || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">{siteLabelOf(order)}</td>
                     )}
                     {visibleColumns.actions && (
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -2311,7 +2325,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                                     ? 'bg-red-50 border-red-200 text-red-950'
                                     : 'bg-blue-50/80 border-blue-200 text-blue-950'
                                 }`}
-                                title={`${wo.code} - ${wo.title} (${wo.location || wo.entity || '—'})`}
+                                title={`${wo.code} - ${wo.title} (${siteLabelOf(wo)})`}
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <div className="flex items-center gap-1 min-w-0 flex-1">
