@@ -91,8 +91,8 @@ describe('computeLotRows', () => {
   const res = computeLotRows(ots, reqs, ots, TODAY);
   const by = Object.fromEntries(res.rows.map(r => [r.lot, r]));
   it('compte les OT par lot avec la base hors annulés', () => {
-    expect(by.ELECTRICITE).toMatchObject({ ot: 2, otBase: 2, otOverdue: 1, otDone: 1, otOther: 0 });
-    expect(by.FLUIDE).toMatchObject({ ot: 3, otBase: 2, otOverdue: 1, otDone: 0, otOther: 1 });
+    expect(by.ELECTRICITE).toMatchObject({ ot: 2, otBase: 2, otOverdue: 1, otOverdueConfirmed: 0, otOverdueUnconfirmed: 1, otOverdueNotCreated: 0, otDone: 1, otOther: 0 });
+    expect(by.FLUIDE).toMatchObject({ ot: 3, otBase: 2, otOverdue: 1, otOverdueConfirmed: 0, otOverdueUnconfirmed: 1, otOverdueNotCreated: 0, otDone: 0, otOther: 1 });
     expect(by.HORS_CONTRAT).toMatchObject({ ot: 1, otBase: 1 });
     expect(res.rows.reduce((n, r) => n + r.ot, 0)).toBe(ots.length);
   });
@@ -104,9 +104,22 @@ describe('computeLotRows', () => {
   });
   it('détaille les sous-lots et liste les familles absentes du référentiel', () => {
     expect(by.ELECTRICITE.subLots.map(s => s.label).sort()).toEqual(['Appareils élévateurs', 'Distribution et puissance']);
-    expect(by.ELECTRICITE.subLots.find(s => s.label === 'Appareils élévateurs')).toMatchObject({ ot: 1, overdue: 1, done: 0 });
+    expect(by.ELECTRICITE.subLots.find(s => s.label === 'Appareils élévateurs')).toMatchObject({ ot: 1, overdue: 1, overdueConfirmed: 0, done: 0 });
     expect(res.unknownFamilies).toEqual([{ family: 'ZZZ', ot: 1 }]);
     expect(res.unclassifiedOt).toBe(1);
+  });
+  it('sépare les retards confirmés (état Coswin chargé), à confirmer et NC', () => {
+    const L = 'SITE_A';
+    const ots2 = [
+      ot('a', 'BAM-X-ASC-01', { dueDate: '2026-06-10', location: L }),                                   // élec, retard, site|mois couvert → confirmé
+      ot('b', 'BAM-X-OND-01', { dueDate: '2026-06-20', status: 'Terminé', closureSource: 'coswin', location: L } as never), // couvre SITE_A|2026-06
+      ot('c', 'BAM-X-SPT-01', { dueDate: '2026-07-10', location: L }),                                   // fluide, retard, mois non couvert → à confirmer
+      ot('d', 'BAM-X-SPT-02', { dueDate: '2026-06-05', location: L, code: 'NC-1' }),                     // fluide, retard, sans n° Coswin → NC
+    ];
+    const r2 = computeLotRows(ots2, [], ots2, TODAY);
+    const b2 = Object.fromEntries(r2.rows.map(x => [x.lot, x]));
+    expect(b2.ELECTRICITE).toMatchObject({ otOverdue: 1, otOverdueConfirmed: 1, otOverdueUnconfirmed: 0, otOverdueNotCreated: 0 });
+    expect(b2.FLUIDE).toMatchObject({ otOverdue: 2, otOverdueConfirmed: 0, otOverdueUnconfirmed: 1, otOverdueNotCreated: 1 });
   });
   it('filtres par lot', () => {
     expect(filterWorkOrdersByLot(ots, 'FLUIDE').map(w => w.id)).toEqual(['3', '4', '5']);
