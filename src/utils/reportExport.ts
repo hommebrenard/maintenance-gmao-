@@ -1,16 +1,10 @@
 import type { WorkOrder } from '../types';
 import { toDetailRow, formatDateFr } from './reportTable';
 
-/** Libellés courts des lots pour l'export (les libellés d'écran sont plus longs). */
-const LOT_EXPORT_LABEL: Record<string, string> = {
-  ELEC: 'Électricité',
-  FLUIDE: 'Fluides',
-  CIRC: 'Circulation mécanique',
-  DIVERS: 'Divers',
-};
+import { CONTRACT_LOT_LABELS, type ContractLot } from './equipmentFamilies';
 
 export const EXPORT_HEADERS = [
-  'Code OT', 'N° OT Coswin', 'Site', 'Code équipement', 'Équipement', 'Famille', 'Lot', 'Fréquence',
+  'Code OT', 'N° OT Coswin', 'Site', 'Code équipement', 'Équipement', 'Famille', 'Lot', 'Sous-lot', 'Fréquence',
   'Titre', 'Type', 'Statut', 'Priorité', 'Intervenant', "Code d'intervention", 'N° de plan',
   "Date d'échéance", 'Début (saisi)', 'Fin (saisie)', 'Date de clôture (système)',
 ];
@@ -38,7 +32,7 @@ export function toExportRow(wo: WorkOrder): string[] {
   const r = toDetailRow(wo);
   return [
     wo.code || '', coswinNumber(wo.code), wo.location || '', wo.equipmentCode || '', wo.equipmentName || '',
-    r.family, LOT_EXPORT_LABEL[r.lot] ?? r.lot, r.freq,
+    r.family, CONTRACT_LOT_LABELS[r.lot as ContractLot] ?? r.lot, r.subLot, r.freq,
     wo.title || '', wo.type || '', wo.status || '', wo.priority || '', r.responsible,
     wo.interventionCode || '', wo.planNumber || '',
     dateFr(wo.dueDate), dateFr(wo.startDate), dateFr(wo.endDate), formatDateTimeFr(wo.closedAt),

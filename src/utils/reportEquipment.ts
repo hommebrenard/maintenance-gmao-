@@ -1,6 +1,6 @@
 import type { Equipment, WorkOrder } from '../types';
 import { familyKeyOf } from './annualMatrix';
-import { lotOfFamily, LotCode } from './equipmentFamilies';
+import { contractLotOfFamily, subLotOfFamily, type ContractLot } from './equipmentFamilies';
 
 /** Onglet « État des équipements » du module Rapports : lignes, synthèse, filtres et tri (fonctions pures). */
 
@@ -10,7 +10,8 @@ export type EquipSortKey =
 export interface EquipmentRow {
   eq: Equipment;
   family: string;
-  lot: LotCode;
+  lot: ContractLot;
+  subLot: string;
   /** OT rattachés à l'équipement, tous statuts confondus. */
   totalWo: number;
   /** OT ni terminés ni annulés (Ouvert / En cours / En attente). */
@@ -33,7 +34,7 @@ export function buildEquipmentRows(equipment: Equipment[], workOrders: WorkOrder
   const byCode = new Map<string, EquipmentRow>();
   const rows: EquipmentRow[] = equipment.map(eq => {
     const family = familyKeyOf(eq.code);
-    const row: EquipmentRow = { eq, family, lot: lotOfFamily(family), totalWo: 0, openWo: 0 };
+    const row: EquipmentRow = { eq, family, lot: contractLotOfFamily(family), subLot: subLotOfFamily(family), totalWo: 0, openWo: 0 };
     byId.set(eq.id, row);
     if (eq.code) byCode.set(eq.code, row);
     return row;
@@ -77,18 +78,20 @@ export function summarizeEquipment(rows: EquipmentRow[]): EquipmentSummary {
 export interface EquipmentFilters {
   search: string;
   lot: string;
+  subLot: string;
   family: string;
   status: string;
   criticality: string;
   quick: '' | 'withoutWo' | 'criticalDown';
 }
 
-export const EMPTY_EQUIPMENT_FILTERS: EquipmentFilters = { search: '', lot: '', family: '', status: '', criticality: '', quick: '' };
+export const EMPTY_EQUIPMENT_FILTERS: EquipmentFilters = { search: '', lot: '', subLot: '', family: '', status: '', criticality: '', quick: '' };
 
 export function filterEquipmentRows(rows: EquipmentRow[], f: EquipmentFilters): EquipmentRow[] {
   const q = f.search.trim().toLowerCase();
   return rows.filter(r => {
     if (f.lot && r.lot !== f.lot) return false;
+    if (f.subLot && r.subLot !== f.subLot) return false;
     if (f.family && r.family !== f.family) return false;
     if (f.status && r.eq.status !== f.status) return false;
     if (f.criticality && r.eq.criticality !== f.criticality) return false;

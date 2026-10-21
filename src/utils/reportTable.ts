@@ -1,6 +1,6 @@
 import type { WorkOrder } from '../types';
 import { frequencyOf, familyKeyOf } from './annualMatrix';
-import { lotOfFamily } from './equipmentFamilies';
+import { contractLotOfFamily, subLotOfFamily } from './equipmentFamilies';
 import { responsibleOf } from './workOrderResponsible';
 
 export type DetailSortKey =
@@ -20,6 +20,7 @@ export interface DetailRow {
   wo: WorkOrder;
   family: string;
   lot: string;
+  subLot: string;
   freq: string;
   responsible: string;
 }
@@ -27,7 +28,7 @@ export interface DetailRow {
 /** Colonnes dérivées d'un OT (famille/lot depuis le code équipement, fréquence H/M/T/S/A). */
 export function toDetailRow(wo: WorkOrder): DetailRow {
   const family = familyKeyOf(wo.equipmentCode);
-  return { wo, family, lot: lotOfFamily(family), freq: frequencyOf(wo) || '', responsible: responsibleOf(wo) };
+  return { wo, family, lot: contractLotOfFamily(family), subLot: subLotOfFamily(family), freq: frequencyOf(wo) || '', responsible: responsibleOf(wo) };
 }
 
 function sortValue(r: DetailRow, key: DetailSortKey): string | number {

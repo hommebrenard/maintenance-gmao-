@@ -1,22 +1,20 @@
 import type { WorkOrder } from '../types';
 import { familyKeyOf, frequencyOf, FREQUENCY_ORDER, FREQUENCY_LABELS } from './annualMatrix';
-import { lotOfFamily, familyLabel, LOT_ORDER, type LotCode } from './equipmentFamilies';
+import { contractLotOfFamily, subLotOfFamily, familyLabel, CONTRACT_LOT_ORDER, CONTRACT_LOT_LABELS } from './equipmentFamilies';
 
 /** Filtres de classement d'un OT (Rapports) : lot, famille d'équipement, fréquence H/M/T/S/A. '' = tous. */
-export interface ClassFilters { lot: string; family: string; freq: string }
-export const EMPTY_CLASS_FILTERS: ClassFilters = { lot: '', family: '', freq: '' };
+export interface ClassFilters { lot: string; subLot: string; family: string; freq: string }
+export const EMPTY_CLASS_FILTERS: ClassFilters = { lot: '', subLot: '', family: '', freq: '' };
 
-/** Libellés courts des lots (les libellés d'écran de equipmentFamilies sont plus longs). */
-export const LOT_SHORT_LABEL: Record<LotCode, string> = {
-  ELEC: 'Électricité', FLUIDE: 'Fluides', CIRC: 'Circulation mécanique', DIVERS: 'Divers',
-};
-export const LOT_OPTIONS: { key: LotCode; label: string }[] = LOT_ORDER.map(k => ({ key: k, label: LOT_SHORT_LABEL[k] }));
+/** Lots du contrat (mêmes libellés que le tableau de bord et la matrice annuelle). */
+export const LOT_OPTIONS: { key: string; label: string }[] = CONTRACT_LOT_ORDER.map(k => ({ key: k, label: CONTRACT_LOT_LABELS[k] }));
 
 export function matchesClassFilters(wo: WorkOrder, f: ClassFilters): boolean {
-  if (!f.lot && !f.family && !f.freq) return true;
+  if (!f.lot && !f.subLot && !f.family && !f.freq) return true;
   const family = familyKeyOf(wo.equipmentCode);
   if (f.family && family !== f.family) return false;
-  if (f.lot && lotOfFamily(family) !== f.lot) return false;
+  if (f.lot && contractLotOfFamily(family) !== f.lot) return false;
+  if (f.subLot && subLotOfFamily(family) !== f.subLot) return false;
   if (f.freq && (frequencyOf(wo) || '') !== f.freq) return false;
   return true;
 }
@@ -30,14 +28,14 @@ export function classOptions(orders: WorkOrder[], lot: string, equipmentCodes: (
   const freqKeys = new Set<string>();
   for (const wo of orders) {
     const fam = familyKeyOf(wo.equipmentCode);
-    if (!lot || lotOfFamily(fam) === lot) familyKeys.add(fam);
+    if (!lot || contractLotOfFamily(fam) === lot) familyKeys.add(fam);
     const fq = frequencyOf(wo);
     if (fq) freqKeys.add(fq);
   }
   // Familles d'équipements sans aucun OT : elles doivent aussi être filtrables dans « État des équipements ».
   for (const code of equipmentCodes) {
     const fam = familyKeyOf(code);
-    if (!lot || lotOfFamily(fam) === lot) familyKeys.add(fam);
+    if (!lot || contractLotOfFamily(fam) === lot) familyKeys.add(fam);
   }
   const families = Array.from(familyKeys)
     .sort((a, b) => a.localeCompare(b, 'fr'))

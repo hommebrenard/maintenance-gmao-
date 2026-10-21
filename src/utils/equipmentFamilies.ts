@@ -5,22 +5,7 @@
  */
 export type LotCode = 'ELEC' | 'FLUIDE' | 'CIRC' | 'DIVERS';
 
-export const LOT_ORDER: LotCode[] = ['ELEC', 'FLUIDE', 'CIRC', 'DIVERS'];
-
-export const LOT_LABELS: Record<LotCode, string> = {
-  ELEC: 'Électricité',
-  FLUIDE: 'Fluides (climatisation, ventilation, plomberie)',
-  CIRC: 'Circulation mécanique',
-  DIVERS: 'Divers (non classé)',
-};
-
-/** Couleurs du badge de lot (volontairement différentes des couleurs d'état des cases). */
-export const LOT_BADGE: Record<LotCode, string> = {
-  ELEC: 'bg-amber-100 text-amber-800',
-  FLUIDE: 'bg-sky-100 text-sky-800',
-  CIRC: 'bg-teal-100 text-teal-800',
-  DIVERS: 'bg-gray-100 text-gray-600',
-};
+/** Lot TECHNIQUE interne (table FAMILIES). Ne jamais l'afficher : l'affichage utilise les lots du contrat (CONTRACT_LOT_*) ci-dessous. */
 
 interface FamilyInfo { label: string; lot: LotCode }
 
@@ -224,3 +209,17 @@ export function subLotOfFamily(key: string): string {
   if (contractLotOfFamily(key) === 'HORS_CONTRAT') return 'Hors contrat ou non classé';
   return SUB_LOT[key] ?? 'Autres familles';
 }
+
+/** Libellé court d'un lot du contrat (badges, colonnes, exports) : la seule forme abrégée autorisée. */
+export const CONTRACT_LOT_SHORT: Record<ContractLot, string> = { ELECTRICITE: 'Électricité', FLUIDE: 'Fluide', HORS_CONTRAT: 'Hors contrat' };
+export const CONTRACT_LOT_BADGE: Record<ContractLot, string> = {
+  ELECTRICITE: 'bg-amber-100 text-amber-800',
+  FLUIDE: 'bg-sky-100 text-sky-800',
+  HORS_CONTRAT: 'bg-gray-100 text-gray-600',
+};
+/** Sous-lots proposés dans les filtres, dans l'ordre d'affichage. */
+export const SUB_LOT_OPTIONS: Record<ContractLot, string[]> = {
+  ELECTRICITE: ['Distribution et puissance', 'Appareils élévateurs', 'Éclairage', 'Portes automatiques', 'Courant faible', 'Cuisine', 'Autres familles'],
+  FLUIDE: ['Plomberie · Sanitaire', 'Plomberie · Pompage', 'Plomberie · Piscine', 'Plomberie · Assainissement', 'CVCD · Production thermique', 'CVCD · Climatisation terminale', "CVCD · Traitement d'air", 'CVCD · Extraction et désenfumage', 'Autres familles'],
+  HORS_CONTRAT: ['Hors contrat ou non classé'],
+};
