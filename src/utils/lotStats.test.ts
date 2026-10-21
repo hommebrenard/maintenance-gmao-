@@ -16,7 +16,10 @@ describe('lots du contrat (équipements)', () => {
   it('deux lots de contrat : électricité (dont appareils élévateurs, cuisine) et fluide ; IFBT hors contrat', () => {
     expect(['OND', 'ASC', 'MTC', 'TPR', 'PRAUT', 'SNOR', 'EQCUIS', 'ECLIN'].map(contractLotOfFamily)).toEqual(Array(8).fill('ELECTRICITE'));
     expect(['SANT', 'PMP', 'PAC', 'EXT', 'GEG', 'DSEF', 'SANTI5', 'COMP'].map(contractLotOfFamily)).toEqual(Array(8).fill('FLUIDE'));
-    expect(['IFBT', 'EXI', 'PDI', 'LAV', 'FRD', 'INCONNU'].map(contractLotOfFamily)).toEqual(Array(6).fill('HORS_CONTRAT'));
+    expect(['IFBT', 'EXI', 'PDI', 'INCONNU'].map(contractLotOfFamily)).toEqual(Array(4).fill('HORS_CONTRAT'));
+    // LAV et FRD = famille Coswin EQCUIS (cuisine, couverte par le contrat)
+    expect(['LAV', 'FRD', 'CUIS', 'TE', 'APLC', 'TRSF', 'C-ACC', 'BRAUT', 'ECLS'].map(contractLotOfFamily)).toEqual(Array(9).fill('ELECTRICITE'));
+    expect(['RESAS', 'RESEP'].map(contractLotOfFamily)).toEqual(['FLUIDE', 'FLUIDE']);
     expect(CONTRACT_LOT_LABELS.HORS_CONTRAT).toMatch(/Hors contrat/);
   });
   it('sous-lots validés le 20/10/2026', () => {
@@ -26,6 +29,20 @@ describe('lots du contrat (équipements)', () => {
     expect(subLotOfFamily('GEG')).toBe('CVCD · Production thermique');
     expect(subLotOfFamily('SAI12')).toBe('Plomberie · Sanitaire');
     expect(subLotOfFamily('IFBT')).toBe('Hors contrat ou non classé');
+  });
+  it('détaille chaque sous-lot par famille (libellé Coswin, TD et TE fusionnés)', () => {
+    const o = [ot('1', 'BAM-X-TD-01'), ot('2', 'BAM-X-TD-02'), ot('3', 'BAM-X-OND-01')];
+    const r3 = computeLotRows(o, [], o, TODAY);
+    const sl = r3.rows.find(x => x.lot === 'ELECTRICITE')!.subLots[0];
+    expect(sl.families).toEqual([{ label: 'Tableau électrique', ot: 2 }, { label: 'Onduleur', ot: 1 }]);
+  });
+  it('sous-lots des familles Coswin validés le 21/10/2026', () => {
+    for (const f of ['TE', 'APLC', 'TRSF']) expect(subLotOfFamily(f)).toBe('Tableaux, transformateurs, onduleurs et groupes électrogènes');
+    for (const f of ['C-ACC', 'BRAUT']) expect(subLotOfFamily(f)).toBe('Portes automatiques');
+    for (const f of ['CUIS', 'FRD', 'LAV']) expect(subLotOfFamily(f)).toBe('Cuisine');
+    for (const f of ['RESAS', 'RESEP']) expect(subLotOfFamily(f)).toBe('Plomberie · Assainissement');
+    expect(subLotOfFamily('COMP')).toBe('Plomberie · Air comprimé');
+    expect(subLotOfFamily('CHDR')).toBe('CVCD · Production thermique');
   });
   it('lot d\'un OT par la famille de son équipement', () => {
     expect(contractLotOfWorkOrder(ot('1', 'BAM-KNT_AG-ASC-01'))).toBe('ELECTRICITE');
@@ -103,7 +120,7 @@ describe('computeLotRows', () => {
     expect(res.rows.reduce((n, r) => n + r.di, 0)).toBe(reqs.length);
   });
   it('détaille les sous-lots et liste les familles absentes du référentiel', () => {
-    expect(by.ELECTRICITE.subLots.map(s => s.label).sort()).toEqual(['Appareils élévateurs', 'Distribution et puissance']);
+    expect(by.ELECTRICITE.subLots.map(s => s.label).sort()).toEqual(['Appareils élévateurs', 'Tableaux, transformateurs, onduleurs et groupes électrogènes']);
     expect(by.ELECTRICITE.subLots.find(s => s.label === 'Appareils élévateurs')).toMatchObject({ ot: 1, overdue: 1, overdueConfirmed: 0, done: 0 });
     expect(res.unknownFamilies).toEqual([{ family: 'ZZZ', ot: 1 }]);
     expect(res.unclassifiedOt).toBe(1);
