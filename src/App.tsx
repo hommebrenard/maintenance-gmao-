@@ -1159,6 +1159,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         return (
           <WorkOrdersView
             workOrders={workOrders}
+            isLoading={isLoadingWorkOrders}
             equipmentList={equipmentList}
             locations={locations}
             profiles={profiles}
@@ -1334,6 +1335,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         return (
           <WorkOrdersView
             workOrders={workOrders}
+            isLoading={isLoadingWorkOrders}
             equipmentList={equipmentList}
             locations={locations}
             profiles={profiles}
