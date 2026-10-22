@@ -119,12 +119,12 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
       </div>
       {lot !== '' && (
         <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-snug text-blue-900">
-          Filtre actif : lot <b>{CONTRACT_LOT_LABELS[lot]}</b>. Les indicateurs, retards, heatmap, entonnoir et contrôles ci-dessous ne portent que sur ce lot. Les instantanés mensuels et le tableau « Par site » restent calculés sur tous les lots.
+          Filtre actif : lot <b>{CONTRACT_LOT_LABELS[lot]}</b>. La section « État par lot du contrat » ci-dessous affiche toujours les trois lots (le filtre ne s'y applique pas). Les indicateurs, retards, heatmap, entonnoir et contrôles situés après cette section ne portent que sur le lot choisi. Les instantanés mensuels et le tableau « Par site » restent calculés sur tous les lots.
         </div>
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-800">État par lot du contrat</h2>
+        <h2 className="text-sm font-semibold text-gray-800">État par lot du contrat{lot !== '' && <span className="ml-2 text-xs font-normal text-blue-700">(tous les lots : le filtre « Lot » ne s'applique pas ici)</span>}</h2>
         <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-[11px] leading-snug text-gray-500">
             Lots du contrat : Électricité (tableaux, transformateurs, onduleurs et groupes ; éclairage ; appareils élévateurs ; portes automatiques ; équipements de sonorisation ; cuisine) et Fluide (plomberie, CVCD). Lot d'un OT = lot de la famille de son équipement ; lot d'une DI = lot de sa fonction Coswin (pour la fonction IFBT, souvent saisie à tort : lot déduit de la description), à défaut celui de son équipement. Barre = OT hors annulés : terminés, en retard confirmé (état Coswin chargé), sans numéro Coswin (NC), en retard à confirmer (état Coswin non chargé : peut être déjà terminé), autres (non échus). Cette section ignore le filtre « Lot ».
