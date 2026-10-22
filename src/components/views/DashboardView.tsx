@@ -210,7 +210,7 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           )}
           {lotResult.unclassifiedOt > 0 && (
             <p className="text-[11px] text-amber-700">
-              {num(lotResult.unclassifiedOt)} OT ont une famille d'équipement absente du référentiel (classés « Hors contrat ou non classé ») : {lotResult.unknownFamilies.slice(0, 8).map(u => `${u.family} (${num(u.ot)})`).join(', ')}{lotResult.unknownFamilies.length > 8 ? '…' : ''}. À ajouter dans le référentiel des familles.
+              {num(lotResult.unclassifiedOt)} OT ont une famille d'équipement absente du référentiel (classés « Non classé ») : {lotResult.unknownFamilies.slice(0, 8).map(u => `${u.family} (${num(u.ot)})`).join(', ')}{lotResult.unknownFamilies.length > 8 ? '…' : ''}. À ajouter dans le référentiel des familles (ou à régénérer depuis la cartographie).
             </p>
           )}
         </div>
