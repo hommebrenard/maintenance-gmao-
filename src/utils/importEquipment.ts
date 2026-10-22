@@ -20,7 +20,9 @@ export function resolveImportLocationId(
   codeToId: Map<string, string>,
   nameToId: Map<string, string> = new Map()
 ): string | undefined {
-  const norm = (s?: string) => (s || '').trim().toUpperCase();
+  // Insensible à la casse, aux espaces ET au tiret/tiret bas : Coswin donne parfois BAM-CAS_ST (tiret)
+  // là où la table des emplacements a BAM_CAS_ST (tiret bas) — même piège que `findMasterLocationName`.
+  const norm = (s?: string) => (s || '').trim().toUpperCase().replace(/-/g, '_');
   const codes = new Map<string, string>();
   codeToId.forEach((id, code) => { if (code) codes.set(norm(code), id); });
   const names = new Map<string, string>();

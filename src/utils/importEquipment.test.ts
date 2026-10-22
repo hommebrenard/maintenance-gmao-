@@ -12,6 +12,12 @@ const wo = (over: Partial<WorkOrder>): WorkOrder => ({
 } as WorkOrder);
 
 describe('resolveImportLocationId', () => {
+  it('tolère le tiret à la place du tiret bas dans le code Zone (BAM-CAS_ST = BAM_CAS_ST)', () => {
+    const ids = new Map([['BAM_CAS_ST', 'loc-cas-st']]);
+    expect(resolveImportLocationId({ entity: 'BAM-CAS_ST' }, ids)).toBe('loc-cas-st');
+    expect(resolveImportLocationId({ entity: 'BAM_AGD-AG' }, new Map([['BAM_AGD_AG', 'loc-agd']]))).toBe('loc-agd');
+  });
+
   it('le code Zone brut (entity) est utilisé en premier', () => {
     expect(resolveImportLocationId({ entity: 'BAM_FEZ_AG', location: 'Nom sans rapport' }, codeToId, nameToId)).toBe('loc-fez');
   });
