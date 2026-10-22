@@ -181,19 +181,21 @@ export function familyLabel(key: string): string | undefined {
  * hors contrat sont hors lots. La « circulation mécanique » (ascenseurs, monte-charges, tapis roulants) est un
  * sous-lot de l'électricité : elle reste un lot technique (CIRC) dans la matrice, mais un seul lot de contrat ici.
  */
-export type ContractLot = 'ELECTRICITE' | 'FLUIDE' | 'HORS_CONTRAT';
-export const CONTRACT_LOT_ORDER: ContractLot[] = ['ELECTRICITE', 'FLUIDE', 'HORS_CONTRAT'];
+export type ContractLot = 'ELECTRICITE' | 'FLUIDE' | 'HORS_CONTRAT' | 'NON_CLASSE';
+/** HORS_CONTRAT = décision métier (IFBT, familles hors contrat) ; NON_CLASSE = anomalie de données (famille inconnue ou code illisible), doit rester proche de 0. */
+export const CONTRACT_LOT_ORDER: ContractLot[] = ['ELECTRICITE', 'FLUIDE', 'HORS_CONTRAT', 'NON_CLASSE'];
 export const CONTRACT_LOT_LABELS: Record<ContractLot, string> = {
   ELECTRICITE: 'Électricité',
   FLUIDE: 'Fluide',
-  HORS_CONTRAT: 'Hors contrat ou non classé',
+  HORS_CONTRAT: 'Hors contrat',
+  NON_CLASSE: 'Non classé',
 };
 
 export function contractLotOf(lot: LotCode): ContractLot {
   return lot === 'ELEC' || lot === 'CIRC' ? 'ELECTRICITE' : lot === 'FLUIDE' ? 'FLUIDE' : 'HORS_CONTRAT';
 }
 export function contractLotOfFamily(key: string): ContractLot {
-  return contractLotOf(lotOfFamily(key));
+  return FAMILIES[key] ? contractLotOf(lotOfFamily(key)) : 'NON_CLASSE';
 }
 
 /** Sous-lot d'une famille (détail du lot de contrat). Les familles non listées tombent dans « Autres familles ». */
@@ -215,20 +217,24 @@ const SUB_LOT: Record<string, string> = {
 for (const c of ['SANTI5', 'SANTI2', 'SANTI3', 'SANTI8', 'SANTI9', 'SANI7', 'SANI11', 'SANI12', 'SANI13', 'SANI15', 'SAI12', 'SAI13']) SUB_LOT[c] = 'Plomberie · Sanitaire';
 
 export function subLotOfFamily(key: string): string {
-  if (contractLotOfFamily(key) === 'HORS_CONTRAT') return 'Hors contrat ou non classé';
+  const cl = contractLotOfFamily(key);
+  if (cl === 'HORS_CONTRAT') return 'Hors contrat';
+  if (cl === 'NON_CLASSE') return 'Non classé';
   return SUB_LOT[key] ?? 'Autres familles';
 }
 
 /** Libellé court d'un lot du contrat (badges, colonnes, exports) : la seule forme abrégée autorisée. */
-export const CONTRACT_LOT_SHORT: Record<ContractLot, string> = { ELECTRICITE: 'Électricité', FLUIDE: 'Fluide', HORS_CONTRAT: 'Hors contrat' };
+export const CONTRACT_LOT_SHORT: Record<ContractLot, string> = { ELECTRICITE: 'Électricité', FLUIDE: 'Fluide', HORS_CONTRAT: 'Hors contrat', NON_CLASSE: 'Non classé' };
 export const CONTRACT_LOT_BADGE: Record<ContractLot, string> = {
   ELECTRICITE: 'bg-amber-100 text-amber-800',
   FLUIDE: 'bg-sky-100 text-sky-800',
   HORS_CONTRAT: 'bg-gray-100 text-gray-600',
+  NON_CLASSE: 'bg-red-100 text-red-700',
 };
 /** Sous-lots proposés dans les filtres, dans l'ordre d'affichage. */
 export const SUB_LOT_OPTIONS: Record<ContractLot, string[]> = {
   ELECTRICITE: ['Tableaux, transformateurs, onduleurs et groupes électrogènes', 'Appareils élévateurs', 'Éclairage', 'Portes automatiques', 'Équipements de sonorisation', 'Cuisine', 'Autres familles'],
   FLUIDE: ['Plomberie · Sanitaire', 'Plomberie · Pompage', 'Plomberie · Piscine', 'Plomberie · Assainissement', 'Plomberie · Air comprimé', 'CVCD · Production thermique', 'CVCD · Climatisation terminale', "CVCD · Traitement d'air", 'CVCD · Extraction et désenfumage', 'Autres familles'],
-  HORS_CONTRAT: ['Hors contrat ou non classé'],
+  HORS_CONTRAT: ['Hors contrat'],
+  NON_CLASSE: ['Non classé'],
 };

@@ -7,8 +7,8 @@ import { classifyIfbtDescription, type IfbtSub } from './ifbtDescription';
 
 /**
  * État par lot de contrat — définitions (affichées dans l'écran) :
- * - Lots du contrat : « Électricité » et « Fluide ». L'IFBT et les familles hors contrat ou absentes du référentiel sont « Hors contrat ou non classé ».
- * - Lot d'un OT = lot de la famille de son équipement (3e segment du code équipement). Un OT sans code équipement exploitable est « non classé ».
+ * - Lots du contrat : « Électricité » et « Fluide ». L'IFBT et les familles hors contrat sont « Hors contrat » ; une famille absente du référentiel est « Non classé » (anomalie de données, à garder proche de 0).
+ * - Lot d'un OT = lot de la famille de son équipement (famille Coswin du référentiel `equipmentReference.ts`, à défaut dernier segment du code équipement). Un OT sans code équipement exploitable est « non classé ».
  * - Lot d'une DI = lot de sa fonction Coswin (renseignée à 100 %), à défaut celui de la famille de l'équipement (planifié d'abord).
  *   Une DI dont la fonction et la famille donnent deux lots de contrat différents est comptée « en contradiction » : elle n'est jamais déplacée.
  * - OT en retard = même définition et même couverture Coswin que « Retard par ancienneté » (confirmé / à confirmer / NC) ; OT terminés = statut « Terminé » ; base = OT hors « Annulé ».
@@ -57,7 +57,7 @@ export function contractLotOfRequest(r: MaintenanceRequest): RequestLot {
     return { lot: fromFn, source: 'function', conflict };
   }
   if (fromEq) return { lot: fromEq, source: 'equipment', conflict: false };
-  return { lot: 'HORS_CONTRAT', source: 'none', conflict: false };
+  return { lot: 'NON_CLASSE', source: 'none', conflict: false };
 }
 
 export const filterWorkOrdersByLot = (ots: WorkOrder[], lot: ContractLot | ''): WorkOrder[] =>

@@ -1,4 +1,5 @@
 import type { WorkOrder } from '../types';
+import { EQUIPMENT_FAMILY_REF } from '../data/equipmentReference';
 import { familyLabel, contractLotOfFamily, subLotOfFamily, type ContractLot } from './equipmentFamilies';
 
 /** État d'une case équipement × mois. */
@@ -125,7 +126,11 @@ export function statusBucketOf(wo: Pick<WorkOrder, 'status' | 'dueDate'>, today:
 
 /** Segment « type » d'un code équipement : BAM-KNT_AG-ASC-01 → ASC ; « AUTRES » si le code n'a pas ce format. */
 export function familyKeyOf(code?: string): string {
-  const m = /-([A-Z0-9]+)-\d+\s*$/i.exec((code || '').trim());
+  const c = (code || '').trim();
+  // 1) famille Coswin du référentiel (cartographie) ; 2) repli : dernier segment du code.
+  const ref = EQUIPMENT_FAMILY_REF[c];
+  if (ref) return ref;
+  const m = /-([A-Z0-9]+)-\d+\s*$/i.exec(c);
   return m ? m[1].toUpperCase() : 'AUTRES';
 }
 
