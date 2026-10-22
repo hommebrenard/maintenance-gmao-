@@ -439,10 +439,11 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
           </label>}
           <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none">
             <option value="">Emplacement ∨</option>
+            {/* En tête de liste avec son compteur : en bas d'une liste de ~37 sites, l'option passait inaperçue. */}
+            <option value="__none__">⚠ Sans emplacement ({equipmentList.filter(e => !e.locationId && isBlankField(e.location)).length})</option>
             {sortedLocations.map(l => (
               <option key={l.id} value={l.id}>{locationLabel(l)} ({countByLocation(l.id)})</option>
             ))}
-            <option value="__none__">Sans emplacement</option>
           </select>
           {hasActiveFilter && (
             <button
