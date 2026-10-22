@@ -55,6 +55,8 @@ import { safeSetItem } from '../../utils/safeStorage';
 
 interface WorkOrdersViewProps {
   workOrders: WorkOrder[];
+  /** Chargement initial des OT en cours : affiche « Chargement… » au lieu de « Aucun ordre de travail ne correspond ». */
+  isLoading?: boolean;
   equipmentList: Equipment[];
   locations?: LocationItem[];
   // Ajouté le 26/09/2026 — sélecteur d'assignation réel de technicien.
@@ -351,6 +353,7 @@ function formatEcartLabel(durationMins: number, intervenantsMins: number): { lab
 
 export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   workOrders,
+  isLoading = false,
   equipmentList,
   locations = [],
   profiles = [],
@@ -1751,7 +1754,13 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
       {/* Content Area */}
       <div className="flex-1 p-6 bg-gray-50/50">
-        {filteredOrders.length === 0 ? (
+        {filteredOrders.length === 0 && isLoading ? (
+          <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto">
+            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900">Chargement des ordres de travail…</h3>
+            <p className="text-sm text-gray-500 mt-1">Cela peut prendre quelques secondes à l'ouverture.</p>
+          </div>
+        ) : filteredOrders.length === 0 ? (
           /* Empty State Box */
           <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center bg-white my-6 max-w-4xl mx-auto shadow-2xs">
             <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 text-blue-500">
