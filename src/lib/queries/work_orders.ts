@@ -156,28 +156,52 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
 /** Récupère tous les ordres de travail (champs cœur + checklist/visa/temps). */
 export async function fetchWorkOrders(): Promise<WorkOrder[]> {
   // Supabase/PostgREST plafonne à 1000 lignes par requête par défaut.
-  // On paginate par lots de 1000 jusqu'à avoir tout récupéré.
+  // Depuis le 22/10/2026 : on compte d'abord les OT (requête légère), puis on récupère les pages de 1000
+  // EN PARALLÈLE (5 à la fois) au lieu d'une par une — 17 pages en série = ~15 s d'attente à l'ouverture.
   const PAGE_SIZE = 1000;
-  const allRows: WorkOrderRow[] = [];
-  let page = 0;
+  const CONCURRENCY = 5;
+  const SELECT = '*, equipment(code,name), locations(name), profiles!assigned_to(full_name)';
 
-  while (true) {
+  const fetchPage = async (page: number): Promise<WorkOrderRow[]> => {
     const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from('work_orders')
-      .select('*, equipment(code,name), locations(name), profiles!assigned_to(full_name)')
+      .select(SELECT)
       .order('due_date', { ascending: false })
       .order('id', { ascending: true }) // tri stable entre les pages (évite doublons/oublis)
-      .range(from, to);
-
+      .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
-    const rows = (data as unknown as WorkOrderRow[]) || [];
-    allRows.push(...rows);
+    return (data as unknown as WorkOrderRow[]) || [];
+  };
 
-    if (rows.length < PAGE_SIZE) break;
-    page += 1;
+  const { count, error: countError } = await supabase
+    .from('work_orders')
+    .select('id', { count: 'exact', head: true });
+
+  const allRows: WorkOrderRow[] = [];
+  if (countError || count === null || count === undefined) {
+    // Repli : lecture séquentielle (ancienne méthode) si le comptage échoue.
+    let page = 0;
+    while (true) {
+      const rows = await fetchPage(page);
+      allRows.push(...rows);
+      if (rows.length < PAGE_SIZE) break;
+      page += 1;
+    }
+    return allRows.map(rowToWorkOrder);
   }
+
+  const pageCount = Math.ceil(count / PAGE_SIZE);
+  const pages: WorkOrderRow[][] = new Array(pageCount);
+  let next = 0;
+  const worker = async () => {
+    while (next < pageCount) {
+      const p = next++;
+      pages[p] = await fetchPage(p);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pageCount) }, worker));
+  for (const rows of pages) allRows.push(...rows);
 
   return allRows.map(rowToWorkOrder);
 }
