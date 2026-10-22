@@ -26,18 +26,18 @@ describe('reportFilters', () => {
     expect(matchesClassFilters(td, { lot: '', subLot: '', family: '', freq: 'H' })).toBe(false);
   });
   it('filtres combinés (ET)', () => {
-    expect(matchesClassFilters(td, { lot: 'ELECTRICITE', subLot: '', family: 'TD', freq: 'M' })).toBe(true);
-    expect(matchesClassFilters(td, { lot: 'ELECTRICITE', subLot: '', family: 'TD', freq: 'T' })).toBe(false);
+    expect(matchesClassFilters(td, { lot: 'ELECTRICITE', subLot: '', family: 'TE', freq: 'M' })).toBe(true);
+    expect(matchesClassFilters(td, { lot: 'ELECTRICITE', subLot: '', family: 'TE', freq: 'T' })).toBe(false);
   });
   it('options : familles restreintes au lot, fréquences dans l\'ordre H→A', () => {
     const all = classOptions([td, asc, pmp], '');
-    expect(all.families.map(f => f.key)).toEqual(['ASC', 'PMP', 'TD']);
+    expect(all.families.map(f => f.key)).toEqual(['ASC', 'PMP', 'TE']);
     expect(all.freqs.map(f => f.key)).toEqual(['H', 'M', 'T']);
-    expect(classOptions([td, asc, pmp], 'ELECTRICITE').families.map(f => f.key)).toEqual(['ASC', 'TD']);
+    expect(classOptions([td, asc, pmp], 'ELECTRICITE').families.map(f => f.key)).toEqual(['ASC', 'TE']);
   });
   it('options : inclut les familles d\'équipements sans OT', () => {
     const o = classOptions([td], '', ['BAM-FEZ_AG-EXT-01', 'bizarre']);
-    expect(o.families.map(f => f.key)).toEqual(['AUTRES', 'EXT', 'TD']);
+    expect(o.families.map(f => f.key)).toEqual(['AUTRES', 'EXT', 'TE']);
     expect(classOptions([td], 'FLUIDE', ['BAM-FEZ_AG-EXT-01']).families.map(f => f.key)).toEqual(['EXT']);
   });
   it('filtre par sous-lot (Appareils élévateurs = ancienne « circulation mécanique »)', () => {

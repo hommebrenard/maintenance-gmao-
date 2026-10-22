@@ -218,6 +218,6 @@ describe('lots (equipmentFamilies)', () => {
       wo({ code: 'A', equipmentId: 'e1', equipmentCode: 'BAM-KNT_AG-PRAUT-01' }),
       wo({ code: 'B', equipmentId: 'e2', equipmentCode: 'BAM-KNT_AG-SPT-01', equipmentName: 'SPLIT' }),
     ], 2026, TODAY);
-    expect(m.rows.map(r => [r.family, r.lot]).sort()).toEqual([['PRAUT', 'ELECTRICITE'], ['SPT', 'FLUIDE']]);
+    expect(m.rows.map(r => [r.family, r.lot]).sort()).toEqual([['C-ACC', 'ELECTRICITE'], ['SPT', 'FLUIDE']]);
   });
 });

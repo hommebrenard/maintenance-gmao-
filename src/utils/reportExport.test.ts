@@ -23,7 +23,7 @@ describe('reportExport', () => {
     const r = toExportRow(base());
     const h = (n: string) => r[EXPORT_HEADERS.indexOf(n)];
     expect(h('Site')).toBe('Fès');
-    expect(h('Famille')).toBe('TD');
+    expect(h('Famille')).toBe('TE');   // BAM-FEZ_AG-TD-16 : famille Coswin TE (référentiel), le segment du code dit TD
     expect(h('Lot')).toBe('Électricité');
     expect(h('Sous-lot')).toBeTruthy();
     expect(h('Fréquence')).toBe('M');

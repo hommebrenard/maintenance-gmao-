@@ -16,7 +16,9 @@ describe('lots du contrat (équipements)', () => {
   it('deux lots de contrat : électricité (dont appareils élévateurs, cuisine) et fluide ; IFBT hors contrat', () => {
     expect(['OND', 'ASC', 'MTC', 'TPR', 'PRAUT', 'SNOR', 'EQCUIS', 'ECLIN'].map(contractLotOfFamily)).toEqual(Array(8).fill('ELECTRICITE'));
     expect(['SANT', 'PMP', 'PAC', 'EXT', 'GEG', 'DSEF', 'SANTI5', 'COMP'].map(contractLotOfFamily)).toEqual(Array(8).fill('FLUIDE'));
-    expect(['IFBT', 'EXI', 'PDI', 'INCONNU'].map(contractLotOfFamily)).toEqual(Array(4).fill('HORS_CONTRAT'));
+    expect(['IFBT', 'EXI', 'PDI'].map(contractLotOfFamily)).toEqual(Array(3).fill('HORS_CONTRAT'));
+    // famille absente du référentiel = anomalie de données, pas un choix métier
+    expect(['INCONNU', 'AUTRES'].map(contractLotOfFamily)).toEqual(['NON_CLASSE', 'NON_CLASSE']);
     // LAV et FRD = famille Coswin EQCUIS (cuisine, couverte par le contrat)
     expect(['LAV', 'FRD', 'CUIS', 'TE', 'APLC', 'TRSF', 'C-ACC', 'BRAUT', 'ECLS'].map(contractLotOfFamily)).toEqual(Array(9).fill('ELECTRICITE'));
     expect(['RESAS', 'RESEP'].map(contractLotOfFamily)).toEqual(['FLUIDE', 'FLUIDE']);
@@ -28,7 +30,7 @@ describe('lots du contrat (équipements)', () => {
     expect(subLotOfFamily('PRAUT')).toBe('Portes automatiques');
     expect(subLotOfFamily('GEG')).toBe('CVCD · Production thermique');
     expect(subLotOfFamily('SAI12')).toBe('Plomberie · Sanitaire');
-    expect(subLotOfFamily('IFBT')).toBe('Hors contrat ou non classé');
+    expect(subLotOfFamily('IFBT')).toBe('Hors contrat');
   });
   it('détaille chaque sous-lot par famille (libellé Coswin, TD et TE fusionnés)', () => {
     const o = [ot('1', 'BAM-X-TD-01'), ot('2', 'BAM-X-TD-02'), ot('3', 'BAM-X-OND-01')];
@@ -47,7 +49,7 @@ describe('lots du contrat (équipements)', () => {
   it('lot d\'un OT par la famille de son équipement', () => {
     expect(contractLotOfWorkOrder(ot('1', 'BAM-KNT_AG-ASC-01'))).toBe('ELECTRICITE');
     expect(contractLotOfWorkOrder(ot('2', 'BAM-KNT_AG-SPT-12'))).toBe('FLUIDE');
-    expect(contractLotOfWorkOrder(ot('3', ''))).toBe('HORS_CONTRAT');
+    expect(contractLotOfWorkOrder(ot('3', ''))).toBe('NON_CLASSE');
   });
 });
 
@@ -68,7 +70,7 @@ describe('lot d\'une DI (fonction Coswin)', () => {
     expect(contractLotOfRequest(di('b', { equipmentCode: 'BAM-KNT_AG-SPT-01' }))).toEqual({ lot: 'FLUIDE', source: 'equipment', conflict: false });
     expect(contractLotOfRequest(di('c', { functionCode: 'ELC_CFO', plannedEquipmentCode: 'BAM-FEZ_AG-SPT-26' }))).toEqual({ lot: 'ELECTRICITE', source: 'function', conflict: true });
     expect(contractLotOfRequest(di('d', { functionCode: 'IFBT', equipmentCode: 'BAM-FEZ_AG-SPT-26' })).conflict).toBe(false);
-    expect(contractLotOfRequest(di('e'))).toEqual({ lot: 'HORS_CONTRAT', source: 'none', conflict: false });
+    expect(contractLotOfRequest(di('e'))).toEqual({ lot: 'NON_CLASSE', source: 'none', conflict: false });
   });
 });
 
@@ -97,7 +99,7 @@ describe('computeLotRows', () => {
     ot('3', 'BAM-X-SPT-01', { dueDate: '2026-09-01' }),                      // fluide, en retard
     ot('4', 'BAM-X-SANT-01', { status: 'Annulé' }),                          // fluide, annulé : hors base
     ot('5', 'BAM-X-SANT-02'),                                                // fluide, non échu
-    ot('6', 'BAM-X-ZZZ-01'),                                                 // famille inconnue
+    ot('6', 'BAM-X-ZZZ-01'),                                                 // famille inconnue → Non classé
   ];
   const reqs = [
     di('d1', { functionCode: 'ELC_CFO', declaredAt: '2026-06-01' }),         // élec, > 90 j sans OT
@@ -110,7 +112,8 @@ describe('computeLotRows', () => {
   it('compte les OT par lot avec la base hors annulés', () => {
     expect(by.ELECTRICITE).toMatchObject({ ot: 2, otBase: 2, otOverdue: 1, otOverdueConfirmed: 0, otOverdueUnconfirmed: 1, otOverdueNotCreated: 0, otDone: 1, otOther: 0 });
     expect(by.FLUIDE).toMatchObject({ ot: 3, otBase: 2, otOverdue: 1, otOverdueConfirmed: 0, otOverdueUnconfirmed: 1, otOverdueNotCreated: 0, otDone: 0, otOther: 1 });
-    expect(by.HORS_CONTRAT).toMatchObject({ ot: 1, otBase: 1 });
+    expect(by.NON_CLASSE).toMatchObject({ ot: 1, otBase: 1 });   // ZZZ : famille inconnue
+    expect(by.HORS_CONTRAT).toMatchObject({ ot: 0 });
     expect(res.rows.reduce((n, r) => n + r.ot, 0)).toBe(ots.length);
   });
   it('compte les DI par lot, sans OT > 90 j et contradictions', () => {
