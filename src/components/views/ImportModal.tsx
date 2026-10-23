@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
 import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
+import { checkImportFiles } from '../../utils/importFileCheck';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { fetchExistingWorkOrdersCore, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
 import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
@@ -234,6 +235,18 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const fileArray = Array.from(files);
   const contents = await Promise.all(fileArray.map(readFileAsText));
   const fileNames = fileArray.map(f => f.name);
+  // Contrôle nom de fichier / contenu (23/10/2026) : évite les OT « NC » mal identifiés.
+  if (activeTab === 'planning') {
+    const infos = fileArray.map((f, i) => {
+      const wos = parsePlanningCSV(contents[i], [], undefined, locations);
+      return { fileName: f.name, entities: wos.map(w => w.entity || ''), hasNcRows: wos.some(w => w.code.startsWith('NC-')) };
+    });
+    const issues = checkImportFiles(infos, locations);
+    if (issues.length > 0 && !window.confirm(`${issues.map(i => i.message).join('\n\n')}\n\nContinuer quand même ? (Annuler = rien n'est chargé)`)) {
+      inputEl.value = '';
+      return;
+    }
+  }
   const { merged, lineFileNames } = mergeCSVContents(contents, fileNames);
   setSelectedFileNames(fileNames);
   setPastedText(merged);
