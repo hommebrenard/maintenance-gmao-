@@ -550,7 +550,7 @@ const FRENCH_MONTH_ABBREV: Record<string, string> = {
   'décembre': 'DEC'
 };
 
-function extractSiteMonthYearFromFileName(fileName: string): string | null {
+export function extractSiteMonthYearFromFileName(fileName: string): string | null {
   const withoutExt = fileName.replace(/\.(csv|xlsx|xls|txt|tsv)$/i, '').trim();
   const tokens = withoutExt.split(/\s+/);
   if (tokens.length < 3) return null;
