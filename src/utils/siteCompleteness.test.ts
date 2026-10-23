@@ -12,8 +12,9 @@ describe('référentiel attendu par site', () => {
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_ORZ_HB).toBe(87);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_ESR_CV).toBe(47);
   });
-  it('exclut les locaux (ex. SAFI : 45 techniques et non 67 ; IMMOUZER : 150)', () => {
-    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_SAF_AG).toBe(45);
+  it('exclut les locaux (SAFI : 48 = 45 + 3 pompes rattachées à Safi ; SETTAT : 181 ; IMMOUZER : 150)', () => {
+    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_SAF_AG).toBe(48);
+    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_STT_AG).toBe(181);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_IMZ_CV).toBe(150);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_RAK_TR).toBe(598);
   });
