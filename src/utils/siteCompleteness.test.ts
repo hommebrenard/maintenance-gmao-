@@ -3,14 +3,19 @@ import { EXPECTED_EQUIPMENT_BY_ZONE } from '../data/equipmentExpectedBySite';
 import { siteCompleteness, normZoneCode } from './siteCompleteness';
 
 describe('référentiel attendu par site', () => {
-  it('compte 5 103 équipements techniques au total', () => {
-    expect(Object.values(EXPECTED_EQUIPMENT_BY_ZONE).reduce((a, b) => a + b, 0)).toBe(5103);
+  it('compte 4 695 équipements techniques au total (locaux IFBT exclus)', () => {
+    expect(Object.values(EXPECTED_EQUIPMENT_BY_ZONE).reduce((a, b) => a + b, 0)).toBe(4695);
   });
   it('reprend les sites vérifiés sur captures du 23/10', () => {
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_LYN_AG).toBe(94);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_HCM_AG).toBe(73);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_ORZ_HB).toBe(87);
     expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_ESR_CV).toBe(47);
+  });
+  it('exclut les locaux (ex. SAFI : 45 techniques et non 67 ; IMMOUZER : 150)', () => {
+    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_SAF_AG).toBe(45);
+    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_IMZ_CV).toBe(150);
+    expect(EXPECTED_EQUIPMENT_BY_ZONE.BAM_RAK_TR).toBe(598);
   });
 });
 
