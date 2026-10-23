@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { siteCompleteness } from '../../utils/siteCompleteness';
 import { CoswinStrikePill } from '../CoswinStrikeBand';
 import QRCode from 'qrcode';
 import { filterBySiteIntegration, countNonOperational } from '../../utils/siteIntegration';
@@ -228,6 +229,20 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
     return dup;
   }, [locations]);
   const locationLabel = (l: LocationItem) => (duplicateLocationNames.has(l.name) ? `${l.name} (${l.type})` : l.name);
+  // Complétude (23/10/2026) : nombre réel par emplacement sur la liste COMPLÈTE (un site non opérationnel,
+  // masqué dans la liste, ne doit pas apparaître « vide »), comparé à l'attendu Coswin (cartographie).
+  const completenessByLocation = useMemo(() => {
+    const counts = new Map<string, number>();
+    allEquipment.forEach(e => { if (e.locationId) counts.set(e.locationId, (counts.get(e.locationId) || 0) + 1); });
+    const out = new Map<string, ReturnType<typeof siteCompleteness>>();
+    locations.forEach(l => out.set(l.id, siteCompleteness(l.code, counts.get(l.id) || 0)));
+    return out;
+  }, [allEquipment, locations]);
+  const incompleteSitesCount = useMemo(
+    () => [...completenessByLocation.values()].filter(c => c.incomplete).length,
+    [completenessByLocation]
+  );
+  const selectedCompleteness = locationFilter && locationFilter !== '__none__' ? completenessByLocation.get(locationFilter) : undefined;
 
   // Ouvre « Nouvel équipement » avec un formulaire entièrement remis à zéro
   // (avant le 20/09/2026, seuls le nom et le code l'étaient : les autres champs
@@ -442,9 +457,16 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             {/* En tête de liste avec son compteur : en bas d'une liste de ~37 sites, l'option passait inaperçue. */}
             <option value="__none__">⚠ Sans emplacement ({equipmentList.filter(e => !e.locationId && isBlankField(e.location)).length})</option>
             {sortedLocations.map(l => (
-              <option key={l.id} value={l.id}>{locationLabel(l)} ({countByLocation(l.id)})</option>
+              <option key={l.id} value={l.id}>
+                {locationLabel(l)} ({countByLocation(l.id)}{completenessByLocation.get(l.id)?.expected != null ? `/${completenessByLocation.get(l.id)!.expected}` : ''}){completenessByLocation.get(l.id)?.incomplete ? ' ⚠' : ''}
+              </option>
             ))}
           </select>
+          {incompleteSitesCount > 0 && (
+            <span className="text-xs font-medium text-amber-700" title="Sites dont le nombre d'équipements est inférieur à celui de Coswin (cartographie)">
+              ⚠ {incompleteSitesCount} site(s) incomplet(s)
+            </span>
+          )}
           {hasActiveFilter && (
             <button
               onClick={resetFilters}
@@ -455,6 +477,13 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
           )}
         </div>
       </div>
+
+      {selectedCompleteness?.incomplete && (
+        <div className="px-4 py-2 text-xs bg-amber-50 border-y border-amber-200 text-amber-800">
+          Site incomplet : {selectedCompleteness.count} équipement(s) dans l'app sur {selectedCompleteness.expected} attendus dans Coswin
+          ({selectedCompleteness.missing} manquant(s)). Utilisez « Import Coswin » avec l'export des équipements de ce site.
+        </div>
+      )}
 
       {/* Split Main Body matching Screenshot 7 */}
       <div className="flex-1 flex overflow-hidden bg-gray-50/20">
