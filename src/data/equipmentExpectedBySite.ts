@@ -33,8 +33,8 @@ export const EXPECTED_EQUIPMENT_BY_ZONE: Record<string, number> = {
   BAM_RAK_PL: 118,
   BAM_RAK_SM: 81,
   BAM_RAK_TR: 598,
-  BAM_SAF_AG: 45,
-  BAM_STT_AG: 184,
+  BAM_SAF_AG: 48, // 45 + 3 pompes BAM-SAF_AG-PMP-01..03 (zone Coswin = Settat par erreur ; rattachées à Safi dans l'app)
+  BAM_STT_AG: 181, // 184 dans la cartographie − les 3 pompes PMP rattachées à Safi dans l'app
   BAM_TAZ_AG: 134,
   BAM_TNG_AG: 235,
   BAM_TNG_CV: 166,
