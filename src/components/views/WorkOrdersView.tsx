@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import type { ImportMeta } from '../../utils/importLog';
 import { 
   Plus, 
   Search, 
@@ -72,7 +73,7 @@ interface WorkOrdersViewProps {
   onUpdateStatus: (id: string, status: WorkOrderStatus) => void;
   onDeleteWorkOrder?: (id: string) => void;
   onEditWorkOrder?: (id: string, updated: Partial<WorkOrder>) => void;
-  onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => void;
+  onBulkImportWorkOrders?: (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[], meta?: ImportMeta) => void;
    onClearAllWorkOrders?: () => void;
   /** Clôture Coswin (responsable uniquement) : absent = bouton masqué. */
   onCoswinClosure?: (items: ClosureItem[], lot: string, apply: boolean) => Promise<ClosureResult>;
@@ -813,12 +814,12 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   // Bulk Import Handlers
-  const handleImportWorkOrders = (importedOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => {
+  const handleImportWorkOrders = (importedOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[], meta?: ImportMeta) => {
     if (replaceExisting && onClearAllWorkOrders) {
       onClearAllWorkOrders();
     }
     if (onBulkImportWorkOrders) {
-      onBulkImportWorkOrders(importedOrders, replaceExisting, patchCandidates);
+      onBulkImportWorkOrders(importedOrders, replaceExisting, patchCandidates, meta);
     } else {
       importedOrders.forEach(wo => {
         onAddWorkOrder({

@@ -7,6 +7,7 @@ import { DISPLAY_STATE_CLASS } from '../../utils/requestDisplay';
 import { STATE_ORDER } from '../../utils/requestFilters';
 import { createSiteNameResolver } from '../../utils/siteLabel';
 import { SnapshotsPanel } from './SnapshotsPanel';
+import { ImportLogPanel } from './ImportLogPanel';
 import { computeAllSnapshotRows, computeIndicators, siteScopeKey } from '../../utils/dashboardSnapshot';
 import { computeFunnel } from '../../utils/diFunnel';
 import { computeQuality, type QualityCheck } from '../../utils/dataQuality';
@@ -497,6 +498,8 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
           </div>
         )}
       </section>
+
+      <ImportLogPanel workOrders={workOrders} />
 
       <SnapshotsPanel live={liveIndicators} scopeKey={snapScopeKey} scopeLabel={siteName ?? 'Tous les sites'} buildRows={() => computeAllSnapshotRows(input, new Date())} />
 

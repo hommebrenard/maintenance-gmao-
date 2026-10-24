@@ -4,6 +4,7 @@ import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChec
 import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
 import { checkImportFiles } from '../../utils/importFileCheck';
+import type { ImportMeta } from '../../utils/importLog';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { fetchExistingWorkOrdersCore, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
 import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
@@ -11,7 +12,7 @@ import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => void;
+  onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[], meta?: ImportMeta) => void;
   onImportGammes: (gammes: GammePlan[]) => void;
   onClearGammes?: () => void;
   existingGammes: GammePlan[];
@@ -356,6 +357,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         finalWorkOrders = workOrdersToImport;
       }
 
+      // Nombre de lignes lues dans les fichiers (avant écartement des doublons) : sert au journal d'import.
+      const rowsInFiles = finalWorkOrders.length;
+
       // Vérification anti-doublon AVANT toute écriture (locale ou Supabase),
       // ajoutée le 13/09/2026 pour éviter la confusion de l'erreur Postgres
       // 23505 (contrainte unique work_orders_code_key) en cas de réimport
@@ -419,7 +423,12 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         finalWorkOrders = newRows;
       }
 
-      onImportWorkOrders(finalWorkOrders, importBehavior === 'replace', patchCandidates);
+      onImportWorkOrders(finalWorkOrders, importBehavior === 'replace', patchCandidates, {
+        fileNames: selectedFileNames,
+        rowsInFiles,
+        rowsNew: finalWorkOrders.length,
+        rowsIgnored: ignoredCount,
+      });
       const actionLabel = importBehavior === 'replace' ? 'Remplacement effectué' : 'Ajout effectué';
       const patchedNote = patchCandidates.length > 0 ? ` (${patchCandidates.length} OT existant(s) complété(s))` : '';
       const skippedNote = ignoredCount > 0 ? ` (${ignoredCount} déjà complet(s) ignoré(s))` : '';
