@@ -4,6 +4,7 @@ import { checkImportFiles } from './importFileCheck';
 const locations = [
   { name: 'CV MDIQ', code: 'BAM_MDQ_CV' },
   { name: 'CV MARINA', code: 'BAM-MRN_CV' },
+  { name: 'Musée FES', code: 'BAM_FEZ_MU' },
 ];
 
 describe('checkImportFiles', () => {
@@ -33,6 +34,11 @@ describe('checkImportFiles', () => {
 
   it('ignore une zone inconnue de la liste des emplacements (pas de fausse alerte)', () => {
     const r = checkImportFiles([{ fileName: 'pmp cv mdiq juin 2026.xlsx', entities: ['BAM_XXX_CV'], hasNcRows: true }], locations);
+    expect(r).toEqual([]);
+  });
+
+  it('ignore les accents : « MUSEE FES » dans le nom = « Musée FES » (cas réel du 24/10/2026)', () => {
+    const r = checkImportFiles([{ fileName: 'PMP MUSEE FES  Avril  2026.xlsx', entities: ['BAM_FEZ_MU'], hasNcRows: true }], locations);
     expect(r).toEqual([]);
   });
 });
