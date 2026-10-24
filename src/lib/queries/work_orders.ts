@@ -141,6 +141,7 @@ function rowToWorkOrder(row: WorkOrderRow): WorkOrder {
     planner: row.planner ?? undefined,
     dueDate: row.due_date ? row.due_date.slice(0, 10) : row.due_date,
         createdAt: row.created_at ? new Date(row.created_at).toLocaleString('fr-FR') : row.created_at,
+    createdAtIso: row.created_at ?? undefined,
     updatedAt: row.updated_at ? new Date(row.updated_at).toLocaleString('fr-FR') : row.updated_at,
     closedAt: row.closed_at ?? undefined,
     closureSource: row.closure_source ?? undefined,
