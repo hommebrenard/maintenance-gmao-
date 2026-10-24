@@ -24,6 +24,7 @@ import { TechniciensView } from './components/views/TechniciensView';
 import { SuppliersView } from './components/views/SuppliersView';
 import { ClientsView } from './components/views/ClientsView';
 import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, deleteEquipment } from './lib/queries/equipment';
+import { setEquipmentFamilies } from './utils/annualMatrix';
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
 import { closeWorkOrdersFromCoswin, revertCoswinClosure, regularizeCoswinClosure } from './lib/queries/coswinClosure';
@@ -184,6 +185,11 @@ const [isLoadingWorkOrders, setIsLoadingWorkOrders] = useState(true);
     getInitialState('gmao_messages', INITIAL_MESSAGES)
   );
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
+  // Familles Coswin lues en base → familyKeyOf (lots, matrice, rapports). Si elles changent, on renouvelle la liste d'OT
+  // (même contenu) pour que les calculs déjà faits avec le repli soient refaits.
+  useEffect(() => {
+    if (setEquipmentFamilies(equipmentList)) setWorkOrders(prev => prev.slice());
+  }, [equipmentList]);
 const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // Ajouté le 26/09/2026 — profils réels (table `profiles`), pour le
   // sélecteur d'assignation d'OT et savoir si l'utilisateur connecté est
@@ -934,6 +940,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       criticality: 'Normal' as const,
       locationId: r.locationId,
       location: locationName.get(r.locationId) ?? '',
+      coswinFamily: r.coswinFamily,
     }));
     let createdAll: Equipment[] = [];
     for (let i = 0; i < items.length; i += 200) {
