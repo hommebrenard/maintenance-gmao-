@@ -3,8 +3,8 @@ import { canonicalSiteKey } from './requestFilters';
 
 // Import des équipements recensés par Coswin (export « Sélecteur des équipements ») — ÉTAPE A : analyse
 // seule, rien n'est écrit. Règles : rapprochement par CODE équipement uniquement (jamais réécrit ; la
-// clé normalisée ne sert qu'à comparer, car Coswin mélange « - » et « _ ») ; la colonne « Famille » est
-// ignorée (le type vient du segment du code) ; la colonne « État » (actif ?) est ignorée ; aucun
+// clé normalisée ne sert qu'à comparer, car Coswin mélange « - » et « _ ») ; la colonne « Famille » (code famille
+// Coswin) est lue depuis le 24/10/2026 et stockée dans `coswinFamily` des équipements créés ; la colonne « État » (actif ?) est ignorée ; aucun
 // équipement n'est supprimé ni désactivé ; un site absent de `locations` est signalé, pas créé.
 
 /** Clé de comparaison d'un code équipement (majuscules, « - » et « _ » confondus). */
@@ -22,6 +22,7 @@ const COL = {
   zoneName: 'description de la zone',
   parent: 'equipement parent',
   type: 'type d equipement',
+  family: 'famille',
 } as const;
 
 export interface ExistingEquipment { code: string; locationId?: string }
@@ -32,6 +33,8 @@ export interface NewEquipmentRow {
   siteKey: string;
   locationId: string;
   parentCode?: string;
+  /** Code famille Coswin (colonne « Famille »), en majuscules ; absent si la colonne est vide ou manquante. */
+  coswinFamily?: string;
 }
 
 export interface SiteBlock {
@@ -130,6 +133,7 @@ export function analyzeEquipmentRows(
     toCreate.push({
       code, name: get(row, COL.name) || code, siteKey, locationId: loc.id,
       parentCode: get(row, COL.parent) || undefined,
+      coswinFamily: get(row, COL.family).toUpperCase() || undefined,
     });
   }
 
