@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { logImport } from './lib/queries/importLog';
+import type { ImportMeta } from './utils/importLog';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { WorkOrdersView } from './components/views/WorkOrdersView';
@@ -460,7 +462,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     });
   };
 
-  const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[]) => {
+  const handleBulkImportWorkOrders = (newOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[], meta?: ImportMeta) => {
     if (replaceExisting) {
       setWorkOrders(newOrders);
       // Depuis le 13/09/2026 : `locations` est une liste maîtresse persistée
@@ -575,6 +577,13 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
         if (patchResults.size > 0) {
           console.info(`${patchResults.size} OT déjà en base complété(s) (champs vides uniquement) suite à cet import.`);
+        }
+
+        // Journal d'import (24/10/2026) : une ligne par import, pour repérer tout écart entre lignes lues et OT créés.
+        // Un échec d'écriture du journal n'affecte jamais l'import lui-même.
+        if (meta) {
+          logImport('OT', meta, createdAll.length, patchResults.size, session.user.id)
+            .catch(err => console.error("Journal d'import non enregistré :", err));
         }
       } catch (err) {
         console.error('Erreur import Supabase (OT) :', err);
