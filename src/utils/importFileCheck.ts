@@ -20,7 +20,8 @@ export interface ImportFileIssue {
   message: string;
 }
 
-const key = (v: string) => v.trim().toUpperCase().replace(/[\s_-]+/g, '_');
+// Accents ignorés (« MUSEE FES » du nom de fichier = « Musée FES » de l'emplacement).
+const key = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[\s_-]+/g, '_');
 
 export function checkImportFiles(files: ImportFileInfo[], locations: SiteLocationItem[]): ImportFileIssue[] {
   const issues: ImportFileIssue[] = [];
