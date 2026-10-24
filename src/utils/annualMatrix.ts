@@ -124,10 +124,35 @@ export function statusBucketOf(wo: Pick<WorkOrder, 'status' | 'dueDate'>, today:
   return wo.status === 'En cours' ? 'progress' : 'planned';
 }
 
+const codeKey = (code: string): string => code.trim().toUpperCase().replace(/[\s_-]+/g, '_');
+let familyByCodeKey = new Map<string, string>();
+let familySignature = '';
+
+/**
+ * Enregistre les familles Coswin lues en base (`equipment.coswin_family`) pour que familyKeyOf les utilise en premier.
+ * Renvoie true si la correspondance a changé : l'appelant doit alors relancer les calculs qui en dépendent.
+ */
+export function setEquipmentFamilies(equipment: { code: string; coswinFamily?: string }[]): boolean {
+  const next = new Map<string, string>();
+  for (const e of equipment) {
+    const fam = (e.coswinFamily || '').trim().toUpperCase();
+    if (fam && e.code) next.set(codeKey(e.code), fam);
+  }
+  let sig = String(next.size);
+  next.forEach((v, k) => { sig += `|${k}=${v}`; });
+  if (sig === familySignature) return false;
+  familyByCodeKey = next;
+  familySignature = sig;
+  return true;
+}
+
 /** Segment « type » d'un code équipement : BAM-KNT_AG-ASC-01 → ASC ; « AUTRES » si le code n'a pas ce format. */
 export function familyKeyOf(code?: string): string {
   const c = (code || '').trim();
-  // 1) famille Coswin du référentiel (cartographie) ; 2) repli : dernier segment du code.
+  // 1) colonne `equipment.coswin_family` (chargée par setEquipmentFamilies, « - » = « _ ») ; 2) table statique du référentiel ;
+  // 3) repli : dernier segment du code.
+  const fromDb = familyByCodeKey.get(codeKey(c));
+  if (fromDb) return fromDb;
   const ref = EQUIPMENT_FAMILY_REF[c];
   if (ref) return ref;
   const m = /-([A-Z0-9]+)-\d+\s*$/i.exec(c);
