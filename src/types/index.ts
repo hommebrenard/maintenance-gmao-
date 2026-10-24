@@ -106,6 +106,8 @@ export interface WorkOrder {
   assignedToId?: string | null;
   dueDate: string;
   createdAt: string;
+  /** Date de création en base (ISO), pour les compteurs « ajoutés ces N jours ». */
+  createdAtIso?: string;
   updatedAt: string;
   /** Date de clôture ISO, posée UNIQUEMENT par la base (déclencheur trg_wo_closure,
    * 07/10/2026). Jamais écrite par l'app ; absente si l'OT n'est pas « Terminé »
