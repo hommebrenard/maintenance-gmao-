@@ -65,6 +65,7 @@ interface EquipmentRow {
   purchase_date: string | null;
   purchase_price: number | null;
   warranty_end_date: string | null;
+  coswin_family: string | null;
   locations: { name: string } | null;
   suppliers: { name: string } | null;
 }
@@ -122,6 +123,7 @@ function rowToEquipment(row: EquipmentRow, workOrdersCount = 0): Equipment {
     purchaseDate: row.purchase_date ?? '',
     purchasePrice: row.purchase_price ?? undefined,
     warrantyEndDate: row.warranty_end_date ?? '',
+    coswinFamily: row.coswin_family ?? undefined,
   };
 }
 
@@ -180,6 +182,7 @@ interface EquipmentWritableRow {
   purchase_date?: string;
   purchase_price?: number;
   warranty_end_date?: string;
+  coswin_family?: string | null;
 }
 
 function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
@@ -206,6 +209,7 @@ function equipmentToRow(eq: Partial<Equipment>): EquipmentWritableRow {
   if (eq.purchaseDate !== undefined) row.purchase_date = eq.purchaseDate;
   if (eq.purchasePrice !== undefined) row.purchase_price = eq.purchasePrice;
   if (eq.warrantyEndDate !== undefined) row.warranty_end_date = eq.warrantyEndDate;
+  if (eq.coswinFamily !== undefined) row.coswin_family = eq.coswinFamily || null;
   return row;
 }
 
