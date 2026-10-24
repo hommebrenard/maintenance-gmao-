@@ -260,6 +260,8 @@ export interface Equipment {
   purchaseDate?: string;
   purchasePrice?: number;
   warrantyEndDate?: string;
+  /** Code famille Coswin (ex. « APLC »), colonne `equipment.coswin_family` (24/10/2026). Vide = repli sur la table statique puis sur le code. */
+  coswinFamily?: string;
 }
 
 export interface HealthRecordEntry {
