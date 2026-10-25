@@ -83,6 +83,17 @@ describe('maintenanceRequests', () => {
       expect(Object.keys(calls[0].payload)).not.toContain(k);
     }
   });
+  it('création : source de constatation, DAF, superviseur et courriel envoyés (ou null)', async () => {
+    state.rows = [ROW];
+    await createMaintenanceRequest({
+      title: 'Fuite', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'K',
+      interventionType: 'CSR', dafNumber: ' DAF-2026-104 ', supervisorName: 'YBADI', requesterEmail: ' k@exemple.ma ',
+    }, 'u1');
+    expect(calls[0].payload).toMatchObject({ intervention_type: 'CSR', daf_number: 'DAF-2026-104', supervisor_name: 'YBADI', requester_email: 'k@exemple.ma' });
+    calls.length = 0;
+    await createMaintenanceRequest({ title: 'F', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'K' }, 'u1');
+    expect(calls[0].payload).toMatchObject({ intervention_type: null, daf_number: null, supervisor_name: null, requester_email: null });
+  });
   it('création : code déjà pris (23505 sur code) → nouvel essai avec un autre code, puis succès', async () => {
     state.rows = [ROW];
     state.queue = [{ code: '23505', message: 'duplicate key value violates unique constraint "maintenance_requests_code_key"' }, null];
