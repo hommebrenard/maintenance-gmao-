@@ -186,7 +186,10 @@ export interface MaintenanceRequest {
   qseType?: string;
   dafNumber?: string;
   declaredAt?: string;
+  /** Échéance : date de fin prévue Coswin (DI importée) ou date RETENUE par le manager à l'approbation (demande de l'app). */
   dueDate?: string;
+  /** Date de fin prévue PROPOSÉE à la création (colonne `proposed_due_date`), AAAA-MM-JJ. Jamais écrasée par le manager. */
+  proposedDueDate?: string;
   priorityCode?: string;
   otNumber?: string;
   otState?: string;
