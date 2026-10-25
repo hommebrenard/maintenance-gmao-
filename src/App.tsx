@@ -710,6 +710,10 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       requesterName: reqData.requestedBy,
       declaredAt: reqData.declaredAt,
       proposedDueDate: reqData.proposedDueDate,
+      interventionType: reqData.interventionType,
+      dafNumber: reqData.dafNumber,
+      supervisorName: reqData.supervisorName,
+      requesterEmail: reqData.requesterEmail,
     }, session.user.id)
       .then(created => { setRequests(prev => [created, ...prev]); })
       .catch(err => {
