@@ -77,6 +77,7 @@ import {
 import { fetchProfiles } from './lib/queries/profiles';
 import { fetchTechniciens, createTechnicien, updateTechnicien } from './lib/queries/techniciens';
 import { fetchMaintenanceRequests, createMaintenanceRequest, decideMaintenanceRequest, updateRequestRejectionReason, importMaintenanceRequests, syncMaintenanceRequests, type SyncResult } from './lib/queries/maintenanceRequests';
+import { isValidIsoDate, proposedDueDate } from './utils/requestDueDate';
 import type { RequestInsertRow } from './utils/importRequests';
 
 // Helper for localStorage state persistence
@@ -694,21 +695,23 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     return res;
   };
 
-  const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => {
+  const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>): Promise<void> => {
     if (!reqData.equipmentId) {
       alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
-      return;
+      return Promise.resolve();
     }
     const eq = equipmentList.find(e => e.id === reqData.equipmentId);
-    createMaintenanceRequest({
+    return createMaintenanceRequest({
       title: reqData.title,
       description: reqData.description,
       priority: reqData.priority,
       equipmentId: reqData.equipmentId,
       locationId: eq?.locationId,
       requesterName: reqData.requestedBy,
+      declaredAt: reqData.declaredAt,
+      proposedDueDate: reqData.proposedDueDate,
     }, session.user.id)
-      .then(created => setRequests(prev => [created, ...prev]))
+      .then(created => { setRequests(prev => [created, ...prev]); })
       .catch(err => {
         console.error('Erreur création demande:', err);
         alert("La demande n'a pas pu être enregistrée. Vérifie ta connexion ou tes droits.");
@@ -719,7 +722,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   // demande), puis la demande est marquée approuvée et liée à cet OT. Le
   // statut est basculé tout de suite à l'écran pour empêcher un double clic
   // (un OT de plus à chaque clic) ; retour arrière si la création échoue.
-  const handleApproveRequest = (reqId: string) => {
+  const handleApproveRequest = (reqId: string, chosenDueDate?: string) => {
     const req = requests.find(r => r.id === reqId);
     if (!req || req.status !== 'En attente') return;
     if (!req.equipmentId) {
@@ -729,6 +732,8 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     const eq = equipmentList.find(e => e.id === req.equipmentId);
     setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Approuvée' } : r));
 
+    // Échéance de l'OT = date retenue par le responsable (sinon la proposition de la demande, sinon celle de la priorité).
+    const dueDate = isValidIsoDate(chosenDueDate) ? chosenDueDate : (req.proposedDueDate ?? proposedDueDate(req.priority));
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     createWorkOrder({
       code: `OT-${stamp.slice(2)}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -739,13 +744,15 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       type: 'Corrective',
       equipmentId: req.equipmentId,
       locationId: req.locationId ?? eq?.locationId,
-      dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+      dueDate,
     }, session.user.id)
       .then(async created => {
         setWorkOrders(prev => [created, ...prev]);
         try {
-          await decideMaintenanceRequest(reqId, { status: 'Approuvée', approvedBy: session.user.id, workOrderId: created.id });
-          setRequests(prev => prev.map(r => r.id === reqId ? { ...r, workOrderId: created.id } : r));
+          // `due_date` d'une DI Coswin est réécrite par la synchronisation : la date retenue n'y est écrite que pour une demande de l'app.
+          const keepDue = req.origin !== 'coswin';
+          await decideMaintenanceRequest(reqId, { status: 'Approuvée', approvedBy: session.user.id, workOrderId: created.id, dueDate: keepDue ? dueDate : undefined });
+          setRequests(prev => prev.map(r => r.id === reqId ? { ...r, workOrderId: created.id, dueDate: keepDue ? dueDate : r.dueDate } : r));
         } catch (err) {
           console.error('Erreur marquage demande approuvée:', err);
           alert(`L'OT ${created.code} a été créé, mais la demande n'a pas pu être marquée « Approuvée » en base. Recharge la page et préviens-moi avant de recliquer.`);
