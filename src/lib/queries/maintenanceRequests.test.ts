@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const { calls, state } = vi.hoisted(() => ({
   calls: [] as { table: string; op: string; payload?: any }[],
-  state: { rows: [] as any[], error: null as any },
+  state: { rows: [] as any[], error: null as any, queue: [] as any[] },
 }));
 
 vi.mock('../supabaseClient', () => {
@@ -13,7 +13,10 @@ vi.mock('../supabaseClient', () => {
       order: () => chain,
       range: (from: number, to: number) => Promise.resolve({ data: state.rows.slice(from, to + 1), error: state.error }),
       select: () => chain,
-      single: () => Promise.resolve({ data: state.rows[0] ?? null, error: state.error }),
+      single: () => {
+        const error = state.queue.length ? state.queue.shift() : state.error;
+        return Promise.resolve({ data: error ? null : (state.rows[0] ?? null), error });
+      },
       then: (res: any, rej: any) => Promise.resolve({ data: state.rows, error: state.error }).then(res, rej),
     };
     return chain;
@@ -44,7 +47,7 @@ const ROW = {
 };
 
 describe('maintenanceRequests', () => {
-  beforeEach(() => { calls.length = 0; state.rows = []; state.error = null; });
+  beforeEach(() => { calls.length = 0; state.rows = []; state.error = null; state.queue = []; });
 
   it('lecture paginée : plus de 1000 demandes toutes récupérées (heure Coswin affichée telle quelle)', async () => {
     state.rows = Array.from({ length: 2354 }, (_, i) => ({ ...ROW, id: 'r' + i, code: 'DI' + i, origin: 'coswin', created_at: '2026-01-05T16:39:00+00:00' }));
@@ -66,6 +69,43 @@ describe('maintenanceRequests', () => {
       location_id: null, requested_by: 'u1', requester_name: 'Karim A.',
     });
     expect(calls[0].payload.code).toMatch(/^DEM-\d{8}-\d{4}$/);
+  });
+  it('création : date de déclaration et date de fin proposée envoyées', async () => {
+    state.rows = [{ ...ROW, proposed_due_date: '2026-11-01' }];
+    const created = await createMaintenanceRequest({
+      title: 'Fuite', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'Karim A.',
+      declaredAt: '2026-10-25T10:00:00.000Z', proposedDueDate: '2026-11-01',
+    }, 'u1');
+    expect(calls[0].payload).toMatchObject({ declared_at: '2026-10-25T10:00:00.000Z', proposed_due_date: '2026-11-01' });
+    expect(created.proposedDueDate).toBe('2026-11-01');
+    // aucun champ réservé à Coswin ou au manager n'est envoyé (le déclencheur de la base les refuserait)
+    for (const k of ['status', 'origin', 'due_date', 'approved_by', 'work_order_id', 'priority_code']) {
+      expect(Object.keys(calls[0].payload)).not.toContain(k);
+    }
+  });
+  it('création : code déjà pris (23505 sur code) → nouvel essai avec un autre code, puis succès', async () => {
+    state.rows = [ROW];
+    state.queue = [{ code: '23505', message: 'duplicate key value violates unique constraint "maintenance_requests_code_key"' }, null];
+    await createMaintenanceRequest({ title: 'Fuite', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'K' }, 'u1');
+    expect(calls.filter(c => c.op === 'insert')).toHaveLength(2);
+  });
+  it('création : 3 codes en collision → erreur ; autre erreur → pas de nouvel essai', async () => {
+    const dup = { code: '23505', message: 'duplicate key ... maintenance_requests_code_key' };
+    state.queue = [dup, dup, dup];
+    await expect(createMaintenanceRequest({ title: 'F', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'K' }, 'u1')).rejects.toBeTruthy();
+    expect(calls.filter(c => c.op === 'insert')).toHaveLength(3);
+    calls.length = 0;
+    state.queue = [{ code: '42501', message: 'Insertion refusée' }];
+    await expect(createMaintenanceRequest({ title: 'F', description: '', priority: 'Moyenne', equipmentId: 'e1', requesterName: 'K' }, 'u1')).rejects.toBeTruthy();
+    expect(calls.filter(c => c.op === 'insert')).toHaveLength(1);
+  });
+  it('décision : la date retenue est écrite dans due_date seulement si elle est fournie', async () => {
+    state.rows = [{ id: 'r1' }];
+    await decideMaintenanceRequest('r1', { status: 'Approuvée', approvedBy: 'm1', workOrderId: 'w1', dueDate: '2026-11-03' });
+    expect(calls[0].payload).toMatchObject({ due_date: '2026-11-03' });
+    calls.length = 0;
+    await decideMaintenanceRequest('r1', { status: 'Approuvée', approvedBy: 'm1', workOrderId: 'w1' });
+    expect(Object.keys(calls[0].payload)).not.toContain('due_date');
   });
   it('décision : statut enum + lien OT ; 0 ligne (RLS) → erreur', async () => {
     state.rows = [{ id: 'r1' }];
