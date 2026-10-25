@@ -197,6 +197,8 @@ export interface MaintenanceRequest {
   functionLabel?: string;
   functionCode?: string;
   supervisorName?: string;
+  /** Courriel du demandeur (facultatif), colonne `requester_email`. */
+  requesterEmail?: string;
   costCenter?: string;
   plannedStart?: string;
   otEndDate?: string;
