@@ -1,14 +1,15 @@
 import type { WorkOrderPriority } from '../types';
 
 /**
- * Délais PROVISOIRES (jours calendaires) entre la déclaration et la date de fin prévue proposée.
- * Règle non encore validée par le métier : c'est le SEUL endroit à modifier pour la changer.
+ * Délais (jours calendaires) entre la déclaration et la date de fin prévue proposée, d'après les libellés
+ * de priorité de Coswin : U0 urgent et U1 « dans la journée » = aujourd'hui, U2 « dans la semaine » = +7,
+ * U3 « dans le mois » = +30. C'est le SEUL endroit à modifier pour changer cette règle.
  */
 export const DUE_DELAY_DAYS: Record<WorkOrderPriority, number> = {
-  Urgente: 1,
-  Élevée: 3,
+  Urgente: 0,
+  Élevée: 0,
   Moyenne: 7,
-  Faible: 14,
+  Faible: 30,
 };
 
 /** Fuseau métier : la date « du jour » est celle du Maroc, pas celle de l'appareil. */
