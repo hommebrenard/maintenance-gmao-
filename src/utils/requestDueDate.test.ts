@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { DUE_DELAY_DAYS, todayIso, isValidIsoDate, addDaysIso, proposedDueDate, formatIsoFr } from './requestDueDate';
 
 describe('requestDueDate', () => {
-  it('délais provisoires : +1 / +3 / +7 / +14 jours calendaires', () => {
-    expect(DUE_DELAY_DAYS).toEqual({ Urgente: 1, Élevée: 3, Moyenne: 7, Faible: 14 });
+  it('délais d\'après Coswin : urgent et journée = aujourd\'hui, semaine +7, mois +30', () => {
+    expect(DUE_DELAY_DAYS).toEqual({ Urgente: 0, Élevée: 0, Moyenne: 7, Faible: 30 });
   });
   it('le jour est celui du Maroc, pas celui de l\'appareil (23h30 UTC en été = 00h30 le lendemain à Casablanca)', () => {
     // Juillet : décalage de +1 h avec les règles actuelles comme avec les anciennes bases de fuseaux horaires,
@@ -14,10 +14,10 @@ describe('requestDueDate', () => {
   });
   it('proposition selon la priorité', () => {
     const now = new Date('2026-10-25T12:00:00Z');
-    expect(proposedDueDate('Urgente', now)).toBe('2026-10-26');
-    expect(proposedDueDate('Élevée', now)).toBe('2026-10-28');
+    expect(proposedDueDate('Urgente', now)).toBe('2026-10-25');
+    expect(proposedDueDate('Élevée', now)).toBe('2026-10-25');
     expect(proposedDueDate('Moyenne', now)).toBe('2026-11-01');
-    expect(proposedDueDate('Faible', now)).toBe('2026-11-08');
+    expect(proposedDueDate('Faible', now)).toBe('2026-11-24');
   });
   it('passage de mois et d\'année', () => {
     expect(addDaysIso('2026-12-30', 3)).toBe('2027-01-02');
