@@ -48,7 +48,7 @@ interface RequestRow {
   created_at: string;
   origin?: 'app' | 'coswin' | null;
   coswin_state?: string | null; intervention_type?: string | null; qse_type?: string | null; daf_number?: string | null;
-  declared_at?: string | null; due_date?: string | null; priority_code?: string | null; ot_number?: string | null;
+  declared_at?: string | null; due_date?: string | null; proposed_due_date?: string | null; priority_code?: string | null; ot_number?: string | null;
   ot_state?: string | null; ot_state_label?: string | null; function_label?: string | null; function_code?: string | null;
   supervisor_name?: string | null; cost_center?: string | null; planned_start?: string | null; ot_end_date?: string | null;
   coswin_created_at?: string | null; visa?: string | null; equipment_code?: string | null; planned_equipment_code?: string | null; intervention_code?: string | null;
@@ -71,7 +71,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     origin: row.origin ?? 'app',
     coswinState: row.coswin_state ?? undefined, interventionType: row.intervention_type ?? undefined,
     qseType: row.qse_type ?? undefined, dafNumber: row.daf_number ?? undefined, declaredAt: row.declared_at ?? undefined,
-    dueDate: row.due_date ?? undefined, priorityCode: row.priority_code ?? undefined, otNumber: row.ot_number ?? undefined,
+    dueDate: row.due_date ?? undefined, proposedDueDate: row.proposed_due_date ?? undefined, priorityCode: row.priority_code ?? undefined, otNumber: row.ot_number ?? undefined,
     otState: row.ot_state ?? undefined, otStateLabel: row.ot_state_label ?? undefined,
     functionLabel: row.function_label ?? undefined, functionCode: row.function_code ?? undefined,
     supervisorName: row.supervisor_name ?? undefined, costCenter: row.cost_center ?? undefined,
@@ -117,25 +117,43 @@ export interface NewRequestInput {
   equipmentId: string;
   locationId?: string;
   requesterName: string;
+  /** Date de déclaration (ISO complet). Par défaut : maintenant. */
+  declaredAt?: string;
+  /** Date de fin prévue proposée, AAAA-MM-JJ (colonne `proposed_due_date`). */
+  proposedDueDate?: string;
+}
+
+/** Nombre d'essais si deux demandes tirent le même code DEM-… le même jour (index UNIQUE sur `code`). */
+const CODE_ATTEMPTS = 3;
+
+function isDuplicateCodeError(err: any): boolean {
+  return err?.code === '23505' && /code/i.test(`${err?.message ?? ''} ${err?.details ?? ''}`);
 }
 
 export async function createMaintenanceRequest(input: NewRequestInput, userId: string): Promise<MaintenanceRequest> {
-  const { data, error } = await supabase
-    .from('maintenance_requests')
-    .insert({
-      code: generateRequestCode(),
-      title: input.title,
-      description: input.description || null,
-      priority: PRIORITY_APP_TO_ROW[input.priority],
-      equipment_id: input.equipmentId,
-      location_id: input.locationId ?? null,
-      requested_by: userId,
-      requester_name: input.requesterName,
-    })
-    .select('*')
-    .single();
-  if (error) throw error;
-  return rowToRequest(data as RequestRow);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
+    const { data, error } = await supabase
+      .from('maintenance_requests')
+      .insert({
+        code: generateRequestCode(),
+        title: input.title,
+        description: input.description || null,
+        priority: PRIORITY_APP_TO_ROW[input.priority],
+        equipment_id: input.equipmentId,
+        location_id: input.locationId ?? null,
+        requested_by: userId,
+        requester_name: input.requesterName,
+        declared_at: input.declaredAt ?? new Date().toISOString(),
+        proposed_due_date: input.proposedDueDate ?? null,
+      })
+      .select('*')
+      .single();
+    if (!error) return rowToRequest(data as RequestRow);
+    if (!isDuplicateCodeError(error)) throw error;
+    lastError = error;
+  }
+  throw lastError;
 }
 
 export interface RequestDecision {
@@ -144,6 +162,8 @@ export interface RequestDecision {
   workOrderId?: string;
   /** Motif (rejet) : colonne `rejection_reason`. */
   rejectionReason?: string;
+  /** Date de fin RETENUE (AAAA-MM-JJ), colonne `due_date` : à n'envoyer que pour une demande de l'app (origine « app »). */
+  dueDate?: string;
 }
 
 /** Approuve ou rejette une demande (is_manager). 0 ligne modifiée = refus RLS. */
@@ -155,6 +175,7 @@ export async function decideMaintenanceRequest(id: string, d: RequestDecision): 
   };
   if (d.workOrderId) patch.work_order_id = d.workOrderId;
   if (d.rejectionReason) patch.rejection_reason = d.rejectionReason;
+  if (d.dueDate) patch.due_date = d.dueDate;
   const { data, error } = await supabase
     .from('maintenance_requests')
     .update(patch)
