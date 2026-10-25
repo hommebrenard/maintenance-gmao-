@@ -43,6 +43,7 @@ interface RequestRow {
   equipment_id: string | null;
   location_id: string | null;
   requester_name: string | null;
+  requester_email?: string | null;
   work_order_id: string | null;
   approval_date?: string | null;
   created_at: string;
@@ -65,7 +66,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     priority: PRIORITY_ROW_TO_APP[row.priority ?? 'moyenne'],
     equipmentId: row.equipment_id ?? undefined,
     locationId: row.location_id ?? undefined,
-    requestedBy: row.requester_name ?? '',
+    requestedBy: row.requester_name ?? '', requesterEmail: row.requester_email ?? undefined,
     workOrderId: row.work_order_id,
     decidedAt: row.approval_date ?? undefined,
     origin: row.origin ?? 'app',
@@ -121,6 +122,11 @@ export interface NewRequestInput {
   declaredAt?: string;
   /** Date de fin prévue proposée, AAAA-MM-JJ (colonne `proposed_due_date`). */
   proposedDueDate?: string;
+  /** Source de constatation = type d'intervention Coswin (code, colonne `intervention_type`). */
+  interventionType?: string;
+  dafNumber?: string;
+  supervisorName?: string;
+  requesterEmail?: string;
 }
 
 /** Nombre d'essais si deux demandes tirent le même code DEM-… le même jour (index UNIQUE sur `code`). */
@@ -146,6 +152,10 @@ export async function createMaintenanceRequest(input: NewRequestInput, userId: s
         requester_name: input.requesterName,
         declared_at: input.declaredAt ?? new Date().toISOString(),
         proposed_due_date: input.proposedDueDate ?? null,
+        intervention_type: input.interventionType || null,
+        daf_number: input.dafNumber?.trim() || null,
+        supervisor_name: input.supervisorName || null,
+        requester_email: input.requesterEmail?.trim() || null,
       })
       .select('*')
       .single();
