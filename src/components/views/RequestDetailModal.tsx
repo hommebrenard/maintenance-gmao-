@@ -119,6 +119,7 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <Field label="N° de DI" value={request.code} mono />
             <Field label="Demandeur" value={request.requestedBy} />
             <Field label="Priorité demandée" value={request.priority} />
+            {request.requesterEmail && <Field label="Courriel du demandeur" value={request.requesterEmail} />}
             {request.proposedDueDate && <Field label="Date de fin proposée (à la saisie)" value={formatIsoFr(request.proposedDueDate)} />}
             {request.origin !== 'coswin' && request.dueDate && <Field label="Date de fin retenue (responsable)" value={formatIsoFr(request.dueDate)} highlight />}
           </div>
