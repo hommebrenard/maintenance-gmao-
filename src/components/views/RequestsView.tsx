@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { EquipmentPicker } from './EquipmentPicker';
-import { proposedDueDate, formatIsoFr } from '../../utils/requestDueDate';
+import { proposedDueDate, isValidIsoDate, formatIsoFr, todayIso } from '../../utils/requestDueDate';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
@@ -79,6 +79,11 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [submitting, setSubmitting] = useState(false);
   // Date proposée : recalculée à chaque changement de priorité (lecture seule pour le rondier).
   const dueProposal = React.useMemo(() => proposedDueDate(priority), [priority, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Le rondier peut ajuster la date : elle reste une PROPOSITION (le responsable fixe la date retenue à l'approbation).
+  const [dueDraft, setDueDraft] = useState('');
+  const [dueTouched, setDueTouched] = useState(false);
+  useEffect(() => { if (!dueTouched) setDueDraft(dueProposal); }, [dueProposal, dueTouched]);
+  const dueToSend = isValidIsoDate(dueDraft) ? dueDraft : dueProposal;
 
   const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
     const eq = (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
@@ -125,13 +130,14 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       equipmentId,
       requestedBy: requestedBy.trim(),
       declaredAt: new Date().toISOString(),
-      proposedDueDate: dueProposal,
+      proposedDueDate: dueToSend,
     })).finally(() => setSubmitting(false));
 
     setTitle('');
     setDescription('');
     setPriority('Moyenne');
     setEquipmentId('');
+    setDueTouched(false);
     setIsModalOpen(false);
   };
 
@@ -434,10 +440,26 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                   <option value="Élevée">Élevée</option>
                   <option value="Urgente">Urgente</option>
                 </select>
+              </div>
+
+              <div>
+                <label htmlFor="due-proposed" className="block text-xs font-semibold text-gray-700 uppercase mb-1">Date de fin prévue (proposition)</label>
+                <input
+                  id="due-proposed"
+                  type="date"
+                  min={todayIso()}
+                  value={dueDraft}
+                  onChange={(e) => { setDueDraft(e.target.value); setDueTouched(true); }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
                 <p className="mt-1.5 text-xs text-gray-500">
-                  Date de fin prévue proposée : <span className="font-semibold text-gray-700">{formatIsoFr(dueProposal)}</span>
+                  Suggérée d'après la priorité : <span className="font-semibold text-gray-700">{formatIsoFr(dueProposal)}</span>
+                  {dueTouched && dueDraft !== dueProposal && (
+                    <button type="button" onClick={() => { setDueTouched(false); setDueDraft(dueProposal); }} className="ml-2 text-blue-700 underline">rétablir</button>
+                  )}
                   {' '}— le responsable fixe la date définitive à l'approbation.
                 </p>
+                <p className="mt-1 text-xs text-gray-500">Date de déclaration : <span className="font-semibold text-gray-700">{formatIsoFr(todayIso())}</span> (automatique)</p>
               </div>
 
               <details className="group">
