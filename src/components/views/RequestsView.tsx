@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { EquipmentPicker } from './EquipmentPicker';
+import { INTERVENTION_TYPES } from '../../data/interventionTypes';
+import { PRIORITY_CHOICES } from '../../data/requestPriorities';
+import { isValidOptionalEmail } from '../../utils/requestForm';
+import { fetchSupervisors, addSupervisor, setSupervisorActive, type Supervisor } from '../../lib/queries/requestSupervisors';
 import { proposedDueDate, isValidIsoDate, formatIsoFr, todayIso } from '../../utils/requestDueDate';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
@@ -77,6 +81,15 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [equipmentId, setEquipmentId] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [interventionType, setInterventionType] = useState('');
+  const [supervisorName, setSupervisorName] = useState('');
+  const [requesterEmail, setRequesterEmail] = useState('');
+  const [dafNumber, setDafNumber] = useState('');
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [showSupervisors, setShowSupervisors] = useState(false);
+  const [newSupervisor, setNewSupervisor] = useState('');
+  useEffect(() => { fetchSupervisors().then(setSupervisors).catch(() => setSupervisors([])); }, []);
+  const emailOk = isValidOptionalEmail(requesterEmail);
   // Date proposée : recalculée à chaque changement de priorité (lecture seule pour le rondier).
   const dueProposal = React.useMemo(() => proposedDueDate(priority), [priority, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // Le rondier peut ajuster la date : elle reste une PROPOSITION (le responsable fixe la date retenue à l'approbation).
@@ -121,7 +134,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting || !title.trim() || !equipmentId || !requestedBy.trim()) return;
+    if (submitting || !title.trim() || !equipmentId || !requestedBy.trim() || !interventionType || !emailOk) return;
     setSubmitting(true);
     Promise.resolve(onAddRequest({
       title: title.trim(),
@@ -131,6 +144,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       requestedBy: requestedBy.trim(),
       declaredAt: new Date().toISOString(),
       proposedDueDate: dueToSend,
+      interventionType,
+      dafNumber: dafNumber.trim() || undefined,
+      supervisorName: supervisorName || undefined,
+      requesterEmail: requesterEmail.trim() || undefined,
     })).finally(() => setSubmitting(false));
 
     setTitle('');
@@ -138,6 +155,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     setPriority('Moyenne');
     setEquipmentId('');
     setDueTouched(false);
+    setInterventionType('');
+    setSupervisorName('');
+    setRequesterEmail('');
+    setDafNumber('');
     setIsModalOpen(false);
   };
 
@@ -154,6 +175,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             </p>
           </div>
 
+          {isManager && (
+            <button onClick={() => setShowSupervisors(true)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Superviseurs</button>
+          )}
           {isManager && onImportRequests && (
             <button onClick={() => setIsImportOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -429,16 +453,26 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Source de constatation *</label>
+                <select
+                  required
+                  value={interventionType}
+                  onChange={(e) => setInterventionType(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choisir…</option>
+                  {INTERVENTION_TYPES.map(t => <option key={t.code} value={t.code}>{t.code} — {t.label}</option>)}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Priorité demandée</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as WorkOrderPriority)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="Faible">Faible</option>
-                  <option value="Moyenne">Moyenne</option>
-                  <option value="Élevée">Élevée</option>
-                  <option value="Urgente">Urgente</option>
+                  {PRIORITY_CHOICES.map(p => <option key={p.value} value={p.value}>{p.label} ({p.coswinCode})</option>)}
                 </select>
               </div>
 
@@ -463,14 +497,35 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               </div>
 
               <details className="group">
-                <summary className="cursor-pointer text-xs font-semibold text-blue-700 uppercase select-none">Détails de l'anomalie (facultatif)</summary>
-                <textarea
-                  rows={3}
-                  placeholder="Symptôme observé, accès, précautions…"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
+                <summary className="cursor-pointer text-xs font-semibold text-blue-700 uppercase select-none">Détails complémentaires (facultatif)</summary>
+                <div className="mt-2 space-y-3">
+                  <textarea
+                    rows={3}
+                    placeholder="Symptôme observé, accès, précautions…"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 uppercase mb-1">Superviseur</label>
+                    <select value={supervisorName} onChange={(e) => setSupervisorName(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                      <option value="">Aucun</option>
+                      {supervisors.filter(sv => sv.active).map(sv => <option key={sv.id} value={sv.name}>{sv.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 uppercase mb-1">Courriel du demandeur</label>
+                    <input type="email" value={requesterEmail} onChange={(e) => setRequesterEmail(e.target.value)} placeholder="nom@exemple.ma"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${emailOk ? 'border-gray-300' : 'border-red-400'}`} />
+                    {!emailOk && <p className="mt-1 text-xs text-red-600">Adresse courriel invalide.</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 uppercase mb-1">N° DAF (dossier financier / devis)</label>
+                    <input type="text" maxLength={50} value={dafNumber} onChange={(e) => setDafNumber(e.target.value)} placeholder="Ex : DAF-2026-104"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
               </details>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
@@ -483,13 +538,48 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !equipmentId}
+                  disabled={submitting || !equipmentId || !interventionType || !emailOk}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? 'Envoi…' : 'Soumettre la demande'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showSupervisors && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowSupervisors(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-gray-900">Superviseurs proposés dans le formulaire</h3>
+              <button onClick={() => setShowSupervisors(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <form className="flex gap-2 mb-3" onSubmit={e => {
+              e.preventDefault();
+              const name = newSupervisor.trim();
+              if (!name) return;
+              addSupervisor(name).then(sv => { setSupervisors(prev => [...prev, sv].sort((a, b) => a.name.localeCompare(b.name, 'fr'))); setNewSupervisor(''); })
+                .catch(() => alert("Ajout impossible (nom déjà présent ou droits insuffisants)."));
+            }}>
+              <input value={newSupervisor} onChange={e => setNewSupervisor(e.target.value)} placeholder="Nom du superviseur"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+              <button type="submit" className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">Ajouter</button>
+            </form>
+            <ul className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {supervisors.length === 0 && <li className="py-3 text-sm text-gray-500">Aucun superviseur pour le moment.</li>}
+              {supervisors.map(sv => (
+                <li key={sv.id} className="flex items-center justify-between py-2 text-sm">
+                  <span className={sv.active ? 'text-gray-900' : 'text-gray-400 line-through'}>{sv.name}</span>
+                  <button className="text-xs text-blue-700 underline" onClick={() =>
+                    setSupervisorActive(sv.id, !sv.active).then(() => setSupervisors(prev => prev.map(x => x.id === sv.id ? { ...x, active: !x.active } : x)))
+                      .catch(() => alert('Modification impossible (droits insuffisants).'))}>
+                    {sv.active ? 'Désactiver' : 'Réactiver'}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
