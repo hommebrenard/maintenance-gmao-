@@ -6,6 +6,7 @@ import { responsibleOf } from '../../utils/workOrderResponsible';
 import { formatDateFr } from '../../utils/reportTable';
 import { formatDateTimeFr } from '../../utils/reportExport';
 import { exportRequestToPdf, printRequestPdf } from '../../utils/requestPdf';
+import { proposedDueDate, isValidIsoDate, formatIsoFr } from '../../utils/requestDueDate';
 
 interface Props {
   request: MaintenanceRequest;
@@ -14,7 +15,8 @@ interface Props {
   workOrder?: WorkOrder;
   isManager: boolean;
   onClose: () => void;
-  onApprove: (id: string) => void;
+  /** `dueDate` : date de fin RETENUE par le responsable (AAAA-MM-JJ), devient l'échéance de l'OT créé. */
+  onApprove: (id: string, dueDate?: string) => void;
   onReject: (id: string, reason?: string) => void;
   /** Enregistre le motif d'une demande rejetée / annulée (responsable). */
   onSaveReason?: (id: string, reason: string) => void;
@@ -37,6 +39,10 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [reasonDraft, setReasonDraft] = useState(request.rejectionReason ?? '');
+  // Date de fin retenue : préremplie avec la proposition de la demande (ou calculée d'après la priorité), modifiable.
+  const initialDue = () => request.proposedDueDate ?? proposedDueDate(request.priority);
+  const [chosenDue, setChosenDue] = useState(initialDue);
+  useEffect(() => { setChosenDue(initialDue()); }, [request.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setReasonDraft(request.rejectionReason ?? ''); }, [request.id, request.rejectionReason]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -113,6 +119,8 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <Field label="N° de DI" value={request.code} mono />
             <Field label="Demandeur" value={request.requestedBy} />
             <Field label="Priorité demandée" value={request.priority} />
+            {request.proposedDueDate && <Field label="Date de fin proposée (à la saisie)" value={formatIsoFr(request.proposedDueDate)} />}
+            {request.origin !== 'coswin' && request.dueDate && <Field label="Date de fin retenue (responsable)" value={formatIsoFr(request.dueDate)} highlight />}
           </div>
 
           <Field label="Description de l'incident" highlight value={
@@ -190,6 +198,14 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
 
         {canDecide && (
           <div className="px-6 py-4 border-t border-gray-200 space-y-3">
+            {!rejecting && (
+              <div className="flex flex-wrap items-center gap-3">
+                <label htmlFor="due-retained" className="text-[11px] font-semibold text-gray-500 uppercase">Date de fin retenue (échéance de l'OT) *</label>
+                <input id="due-retained" type="date" value={chosenDue} onChange={e => setChosenDue(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
+                <span className="text-xs text-gray-500">Proposée : {formatIsoFr(request.proposedDueDate ?? proposedDueDate(request.priority))}</span>
+              </div>
+            )}
             {rejecting && (
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase mb-1 block">Motif du rejet *</label>
@@ -215,8 +231,8 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
                 </>
               )}
               {!rejecting && (
-                <button onClick={() => { onApprove(request.id); onClose(); }}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">
+                <button disabled={!isValidIsoDate(chosenDue)} onClick={() => { onApprove(request.id, chosenDue); onClose(); }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed">
                   <CheckCircle2 className="w-4 h-4" /><span>Approuver & Créer OT</span>
                 </button>
               )}
