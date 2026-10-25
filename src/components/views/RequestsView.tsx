@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { EquipmentPicker } from './EquipmentPicker';
+import { proposedDueDate, formatIsoFr } from '../../utils/requestDueDate';
 import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
@@ -17,8 +19,8 @@ import {
 interface RequestsViewProps {
   requests: MaintenanceRequest[];
   equipmentList: Equipment[];
-  onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => void;
-  onApproveRequest: (id: string) => void;
+  onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => void | Promise<void>;
+  onApproveRequest: (id: string, dueDate?: string) => void;
   onRejectRequest: (id: string, reason?: string) => void;
   onSaveRejectionReason?: (id: string, reason: string) => void;
   onOpenHealthRecord?: (equipmentId: string) => void;
@@ -74,6 +76,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [priority, setPriority] = useState<WorkOrderPriority>('Moyenne');
   const [equipmentId, setEquipmentId] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // Date proposée : recalculée à chaque changement de priorité (lecture seule pour le rondier).
+  const dueProposal = React.useMemo(() => proposedDueDate(priority), [priority, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
     const eq = (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
@@ -111,18 +116,21 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !equipmentId || !requestedBy.trim()) return;
-
-    onAddRequest({
-      title,
+    if (submitting || !title.trim() || !equipmentId || !requestedBy.trim()) return;
+    setSubmitting(true);
+    Promise.resolve(onAddRequest({
+      title: title.trim(),
       description,
       priority,
       equipmentId,
-      requestedBy: requestedBy.trim()
-    });
+      requestedBy: requestedBy.trim(),
+      declaredAt: new Date().toISOString(),
+      proposedDueDate: dueProposal,
+    })).finally(() => setSubmitting(false));
 
     setTitle('');
     setDescription('');
+    setPriority('Moyenne');
     setEquipmentId('');
     setIsModalOpen(false);
   };
@@ -307,7 +315,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                         <td className="px-3 py-2.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                           {req.status === 'En attente' && (
                             <div className="inline-flex items-center gap-1.5">
-                              <button onClick={() => onApproveRequest(req.id)} title="Approuver & Créer OT"
+                              <button onClick={() => setSelectedId(req.id)} title="Ouvre la fiche : choisir la date de fin retenue puis approuver"
                                 className="flex items-center gap-1 px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold">
                                 <CheckCircle2 className="w-3.5 h-3.5" /><span>Approuver</span>
                               </button>
@@ -378,13 +386,13 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Titre de la demande *</label>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Description de l'incident *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Bruit d'usure roulement"
+                  placeholder="Ex : fuite d'eau sous bac à condensats"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -392,45 +400,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Description détaillée</label>
-                <textarea
-                  rows={3}
-                  placeholder="Décrivez l'anomalie observée..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Priorité demandée</label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as WorkOrderPriority)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Faible">Faible</option>
-                    <option value="Moyenne">Moyenne</option>
-                    <option value="Élevée">Élevée</option>
-                    <option value="Urgente">Urgente</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Équipement *</label>
-                  <select
-                    required
-                    value={equipmentId}
-                    onChange={(e) => setEquipmentId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Sélectionner...</option>
-                    {equipmentList.map(eq => (
-                      <option key={eq.id} value={eq.id}>{eq.name} ({eq.code})</option>
-                    ))}
-                  </select>
-                </div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Équipement *</label>
+                <EquipmentPicker equipmentList={equipmentList} locations={locations} value={equipmentId} onChange={setEquipmentId} />
               </div>
 
               <div>
@@ -451,6 +422,35 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 </datalist>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Priorité demandée</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as WorkOrderPriority)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Faible">Faible</option>
+                  <option value="Moyenne">Moyenne</option>
+                  <option value="Élevée">Élevée</option>
+                  <option value="Urgente">Urgente</option>
+                </select>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Date de fin prévue proposée : <span className="font-semibold text-gray-700">{formatIsoFr(dueProposal)}</span>
+                  {' '}— le responsable fixe la date définitive à l'approbation.
+                </p>
+              </div>
+
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-semibold text-blue-700 uppercase select-none">Détails de l'anomalie (facultatif)</summary>
+                <textarea
+                  rows={3}
+                  placeholder="Symptôme observé, accès, précautions…"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </details>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
@@ -461,9 +461,10 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                  disabled={submitting || !equipmentId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Soumettre la demande
+                  {submitting ? 'Envoi…' : 'Soumettre la demande'}
                 </button>
               </div>
             </form>
