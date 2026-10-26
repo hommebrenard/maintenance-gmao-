@@ -718,7 +718,9 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       .then(created => { setRequests(prev => [created, ...prev]); })
       .catch(err => {
         console.error('Erreur création demande:', err);
-        alert("La demande n'a pas pu être enregistrée. Vérifie ta connexion ou tes droits.");
+        const e = (err ?? {}) as { code?: unknown; message?: unknown };
+        const detail = [typeof e.code === 'string' ? e.code : '', typeof e.message === 'string' ? e.message : ''].filter(Boolean).join(' – ');
+        alert(`La demande n'a pas pu être enregistrée. ${explainSaveError(err)}${detail ? `\n\nDétail technique : ${detail}` : ''}`);
       });
   };
 
