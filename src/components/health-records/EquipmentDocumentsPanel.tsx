@@ -107,6 +107,7 @@ export const EquipmentDocumentsPanel: React.FC<Props> = ({ state, equipmentId, c
               {state.items.map(d => (
                 <tr key={d.id}>
                   <td className="px-3 py-1.5 text-gray-900">
+                    {d.storageBucket === 'request-files' && <span className="mr-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 whitespace-nowrap">Pièce jointe d'une demande</span>}
                     {d.storagePath ? (
                       <button type="button" onClick={() => open(d)} className="text-blue-600 hover:underline text-left">{d.name}</button>
                     ) : d.externalUrl && isHttpUrl(d.externalUrl) ? (
@@ -120,7 +121,7 @@ export const EquipmentDocumentsPanel: React.FC<Props> = ({ state, equipmentId, c
                   <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{formatFileSize(d.sizeBytes) ?? (d.externalUrl ? 'Lien externe' : <Dash />)}</td>
                   {canEdit && (
                     <td className="px-3 py-1.5 text-right whitespace-nowrap print:hidden">
-                      <button type="button" onClick={() => setToDelete(d)} className="font-semibold text-red-600 hover:underline">Supprimer</button>
+                      <button type="button" onClick={() => setToDelete(d)} className="font-semibold text-red-600 hover:underline">{d.storageBucket === 'request-files' ? 'Retirer' : 'Supprimer'}</button>
                     </td>
                   )}
                 </tr>
@@ -133,10 +134,12 @@ export const EquipmentDocumentsPanel: React.FC<Props> = ({ state, equipmentId, c
       {toDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3">
-            <h3 className="text-base font-bold text-gray-900">Supprimer ce document ?</h3>
+            <h3 className="text-base font-bold text-gray-900">{toDelete.storageBucket === 'request-files' ? 'Retirer ce document du carnet ?' : 'Supprimer ce document ?'}</h3>
             <p className="text-sm text-gray-700">
-              « {toDelete.name} ». Cette suppression est définitive
-              {toDelete.storagePath ? " : le fichier est aussi effacé du stockage." : " : seul le lien enregistré est supprimé, le document reste dans la GED."}
+              « {toDelete.name} ».{' '}
+              {toDelete.storageBucket === 'request-files'
+                ? "Il n'apparaîtra plus dans le carnet ; le fichier reste attaché à la demande d'origine."
+                : <>Cette suppression est définitive{toDelete.storagePath ? " : le fichier est aussi effacé du stockage." : " : seul le lien enregistré est supprimé, le document reste dans la GED."}</>}
             </p>
             {toDelete.controlId && (
               <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">Ce document est le compte rendu d'un contrôle réalisé : le contrôle est conservé, sans compte rendu.</p>
