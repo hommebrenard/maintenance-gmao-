@@ -4,10 +4,6 @@ import type { Equipment, LocationItem } from '../../types';
 import { searchEquipment } from '../../utils/equipmentSearch';
 import { familyKeyOf } from '../../utils/annualMatrix';
 
-const LAST_SITE_KEY = 'gmao_request_last_site';
-const readLastSite = (): string => { try { return localStorage.getItem(LAST_SITE_KEY) ?? ''; } catch { return ''; } };
-const saveLastSite = (id: string) => { try { localStorage.setItem(LAST_SITE_KEY, id); } catch { /* stockage indisponible : sans conséquence */ } };
-
 interface Props {
   equipmentList: Equipment[];
   locations: LocationItem[];
@@ -15,9 +11,9 @@ interface Props {
   onChange: (equipmentId: string) => void;
 }
 
-/** Choix d'un équipement en deux temps : site (mémorisé), puis recherche par code, nom ou famille. */
+/** Choix d'un équipement en deux temps : site (choisi à chaque demande), puis recherche par code, nom ou famille. */
 export const EquipmentPicker: React.FC<Props> = ({ equipmentList, locations, value, onChange }) => {
-  const [siteId, setSiteId] = useState<string>(readLastSite);
+  const [siteId, setSiteId] = useState<string>('');
   const [query, setQuery] = useState('');
 
   const sites = useMemo(() => {
@@ -47,7 +43,7 @@ export const EquipmentPicker: React.FC<Props> = ({ equipmentList, locations, val
     <div className="space-y-2">
       <select
         value={siteId}
-        onChange={e => { setSiteId(e.target.value); saveLastSite(e.target.value); }}
+        onChange={e => setSiteId(e.target.value)}
         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
         aria-label="Site"
       >
