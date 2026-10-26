@@ -43,3 +43,15 @@ export async function createRequestAttachment(input: {
   if (error) throw error;
   return rowTo(data as Row);
 }
+
+/** Pièces jointes de plusieurs demandes d'un coup (le RLS ne renvoie que celles que le compte a le droit de voir). */
+export async function fetchRequestAttachmentsFor(requestIds: string[]): Promise<RequestAttachment[]> {
+  const out: RequestAttachment[] = [];
+  for (let i = 0; i < requestIds.length; i += 50) {
+    const { data, error } = await supabase
+      .from('request_attachments').select('*').in('request_id', requestIds.slice(i, i + 50)).order('created_at', { ascending: true });
+    if (error) throw error;
+    out.push(...((data as Row[]) || []).map(rowTo));
+  }
+  return out;
+}
