@@ -30,6 +30,7 @@ interface RequestsViewProps {
   onSaveRejectionReason?: (id: string, reason: string) => void;
   onOpenHealthRecord?: (equipmentId: string) => void;
   isManager?: boolean;
+  currentUserId?: string;
   techniciens?: Technicien[];
   workOrders?: WorkOrder[];
   locations?: LocationItem[];
@@ -44,6 +45,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   onApproveRequest,
   onRejectRequest,
   isManager = false,
+  currentUserId,
   techniciens = [],
   workOrders = [],
   locations = [],
@@ -418,6 +420,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
           locationName={selectedRequest.siteCode ? locationByKey.get(canonicalSiteKey(selectedRequest.siteCode))?.name : undefined}
           workOrder={selectedRequest.workOrderId ? woByRequest.get(selectedRequest.workOrderId) : undefined}
           isManager={isManager}
+          currentUserId={currentUserId}
           onClose={() => setSelectedId(null)}
           onApprove={onApproveRequest}
           onReject={onRejectRequest}
