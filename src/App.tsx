@@ -1226,6 +1226,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
             onSaveRejectionReason={handleSaveRejectionReason}
             onOpenHealthRecord={handleOpenHealthRecord}
             isManager={isManager}
+            currentUserId={session.user.id}
             techniciens={techniciens}
             workOrders={workOrders}
             locations={locations}
