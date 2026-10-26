@@ -43,6 +43,7 @@ interface RequestRow {
   equipment_id: string | null;
   location_id: string | null;
   requester_name: string | null;
+  requested_by?: string | null;
   requester_email?: string | null;
   work_order_id: string | null;
   approval_date?: string | null;
@@ -66,7 +67,7 @@ function rowToRequest(row: RequestRow): MaintenanceRequest {
     priority: PRIORITY_ROW_TO_APP[row.priority ?? 'moyenne'],
     equipmentId: row.equipment_id ?? undefined,
     locationId: row.location_id ?? undefined,
-    requestedBy: row.requester_name ?? '', requesterEmail: row.requester_email ?? undefined,
+    requestedBy: row.requester_name ?? '', requestedByUserId: row.requested_by ?? undefined, requesterEmail: row.requester_email ?? undefined,
     workOrderId: row.work_order_id,
     decidedAt: row.approval_date ?? undefined,
     origin: row.origin ?? 'app',
