@@ -1,0 +1,52 @@
+import { describe, it, expect } from 'vitest';
+import { validateRequestFile, pickRequestFiles, storedMimeFor, formatFileSize, REQUEST_FILES_MAX } from './requestAttachments';
+
+const f = (name: string, type: string, size = 1000) => ({ name, type, size });
+const MB = 1024 * 1024;
+
+describe('validateRequestFile', () => {
+  it('accepte photo et PDF, refuse le reste', () => {
+    expect(validateRequestFile(f('a.jpg', 'image/jpeg'))).toBeNull();
+    expect(validateRequestFile(f('a.pdf', 'application/pdf'))).toBeNull();
+    expect(validateRequestFile(f('a.exe', 'application/x-msdownload'))).toMatch(/Format non pris en charge/);
+  });
+  it('déduit le type de l\'extension quand le navigateur n\'en donne pas', () => {
+    expect(validateRequestFile(f('IMG_1.JPG', ''))).toBeNull();
+    expect(validateRequestFile(f('notes.txt', ''))).toMatch(/Format non pris en charge/);
+  });
+  it('limite le PDF à 5 Mo et la photo brute à 30 Mo', () => {
+    expect(validateRequestFile(f('a.pdf', 'application/pdf', 5 * MB))).toBeNull();
+    expect(validateRequestFile(f('a.pdf', 'application/pdf', 5 * MB + 1))).toMatch(/5 Mo/);
+    expect(validateRequestFile(f('a.jpg', 'image/jpeg', 30 * MB))).toBeNull();
+    expect(validateRequestFile(f('a.jpg', 'image/jpeg', 30 * MB + 1))).toMatch(/30 Mo/);
+  });
+});
+
+describe('pickRequestFiles', () => {
+  it('accepte jusqu\'à 5 fichiers au total et signale le surplus', () => {
+    const current = [f('1.jpg', 'image/jpeg', 1), f('2.jpg', 'image/jpeg', 2), f('3.jpg', 'image/jpeg', 3)];
+    const incoming = [f('4.jpg', 'image/jpeg', 4), f('5.jpg', 'image/jpeg', 5), f('6.jpg', 'image/jpeg', 6)];
+    const r = pickRequestFiles(current, incoming);
+    expect(r.accepted.map(x => x.name)).toEqual(['4.jpg', '5.jpg']);
+    expect(r.rejected).toEqual([`6.jpg : ${REQUEST_FILES_MAX} fichiers au maximum par demande.`]);
+  });
+  it('refuse un doublon (même nom et même taille) et un format interdit', () => {
+    const current = [f('a.jpg', 'image/jpeg', 10)];
+    const r = pickRequestFiles(current, [f('a.jpg', 'image/jpeg', 10), f('a.jpg', 'image/jpeg', 11), f('b.zip', 'application/zip')]);
+    expect(r.accepted.map(x => `${x.name}:${x.size}`)).toEqual(['a.jpg:11']);
+    expect(r.rejected).toHaveLength(2);
+    expect(r.rejected[0]).toBe('a.jpg : déjà ajouté.');
+  });
+});
+
+describe('storedMimeFor / formatFileSize', () => {
+  it('réencode toute image en JPEG et garde le PDF', () => {
+    expect(storedMimeFor('image/png')).toBe('image/jpeg');
+    expect(storedMimeFor('application/pdf')).toBe('application/pdf');
+  });
+  it('affiche des tailles lisibles', () => {
+    expect(formatFileSize(300)).toBe('1 Ko');
+    expect(formatFileSize(150 * 1024)).toBe('150 Ko');
+    expect(formatFileSize(1.5 * MB)).toBe('1,5 Mo');
+  });
+});
