@@ -15,6 +15,8 @@ interface Props {
   locationName?: string;
   workOrder?: WorkOrder;
   isManager: boolean;
+  /** Compte connecté : sert à autoriser le demandeur à lier SES pièces jointes au carnet (la base revérifie). */
+  currentUserId?: string;
   onClose: () => void;
   /** `dueDate` : date de fin RETENUE par le responsable (AAAA-MM-JJ), devient l'échéance de l'OT créé. */
   onApprove: (id: string, dueDate?: string) => void;
@@ -35,7 +37,7 @@ const Field: React.FC<{ label: string; value?: React.ReactNode; highlight?: bool
 );
 
 /** Fiche de demande d'intervention (lecture) : champs de la demande + bloc « Informations OT ». */
-export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locationName, workOrder, isManager, onClose, onApprove, onReject, onSaveReason, onOpenHealthRecord }) => {
+export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locationName, workOrder, isManager, currentUserId, onClose, onApprove, onReject, onSaveReason, onOpenHealthRecord }) => {
   // Rejet avec motif obligatoire ; saisie / correction du motif d'une demande déjà rejetée ou annulée (responsable).
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -148,7 +150,17 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             <Field label="Date de décision" value={formatDateTimeFr(request.decidedAt)} />
           </div>
 
-          {request.origin !== 'coswin' && <RequestAttachmentsBlock requestId={request.id} />}
+          {request.origin !== 'coswin' && (
+            <RequestAttachmentsBlock
+              requestId={request.id}
+              equipmentId={request.equipmentId}
+              equipmentLabel={equipment ? `${equipment.code} — ${equipment.name}` : request.equipmentName}
+              requestedBy={request.requestedBy}
+              origin={request.origin}
+              currentUserId={currentUserId}
+              isManager={isManager}
+            />
+          )}
 
           <fieldset className="border border-gray-200 rounded-lg p-4">
             <legend className="px-2 text-xs font-semibold text-gray-500 uppercase">Informations OT</legend>
