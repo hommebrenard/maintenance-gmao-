@@ -172,6 +172,8 @@ export interface MaintenanceRequest {
   location?: string;
   /** Nom du rondier (colonne `requester_name`), le compte technicien étant partagé. */
   requestedBy: string;
+  /** Identifiant du COMPTE qui a saisi la demande (colonne `requested_by`) : sert aux droits, pas à l'affichage. */
+  requestedByUserId?: string;
   createdAt: string;
   code?: string;
   workOrderId?: string | null;
