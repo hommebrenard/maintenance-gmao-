@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateRequestFile, pickRequestFiles, storedMimeFor, formatFileSize, REQUEST_FILES_MAX } from './requestAttachments';
+import { validateRequestFile, pickRequestFiles, storedMimeFor, formatFileSize, displayNameFor, REQUEST_FILES_MAX } from './requestAttachments';
 
 const f = (name: string, type: string, size = 1000) => ({ name, type, size });
 const MB = 1024 * 1024;
@@ -48,5 +48,14 @@ describe('storedMimeFor / formatFileSize', () => {
     expect(formatFileSize(300)).toBe('1 Ko');
     expect(formatFileSize(150 * 1024)).toBe('150 Ko');
     expect(formatFileSize(1.5 * MB)).toBe('1,5 Mo');
+  });
+});
+
+describe('displayNameFor', () => {
+  it('aligne l\'extension des photos sur le JPEG enregistré et laisse les PDF', () => {
+    expect(displayNameFor('P_NSB0.png', 'image/jpeg')).toBe('P_NSB0.jpg');
+    expect(displayNameFor('IMG_1.JPEG', 'image/jpeg')).toBe('IMG_1.jpg');
+    expect(displayNameFor('Rapport.pdf', 'application/pdf')).toBe('Rapport.pdf');
+    expect(displayNameFor('x'.repeat(200) + '.pdf', 'application/pdf')).toHaveLength(120);
   });
 });
