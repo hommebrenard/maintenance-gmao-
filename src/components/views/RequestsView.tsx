@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EquipmentPicker } from './EquipmentPicker';
 import { INTERVENTION_TYPES } from '../../data/interventionTypes';
 import { PRIORITY_CHOICES } from '../../data/requestPriorities';
 import { isValidOptionalEmail } from '../../utils/requestForm';
+import { pickRequestFiles, formatFileSize, REQUEST_FILES_MAX } from '../../utils/requestAttachments';
 import { fetchSupervisors, addSupervisor, setSupervisorActive, type Supervisor } from '../../lib/queries/requestSupervisors';
 import { proposedDueDate, isValidIsoDate, formatIsoFr, todayIso } from '../../utils/requestDueDate';
-import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText } from 'lucide-react';
+import { Plus, Search, Inbox, CheckCircle2, XCircle, Clock, X, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Download, Printer, FileText, Camera, Paperclip } from 'lucide-react';
 import { MaintenanceRequest, WorkOrderPriority, Equipment, Technicien, WorkOrder, LocationItem } from '../../types';
 import { RequestDetailModal } from './RequestDetailModal';
 import { RequestImportModal } from './RequestImportModal';
@@ -23,7 +24,7 @@ import {
 interface RequestsViewProps {
   requests: MaintenanceRequest[];
   equipmentList: Equipment[];
-  onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>) => void | Promise<void>;
+  onAddRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'> & { attachments?: File[] }) => void | Promise<void>;
   onApproveRequest: (id: string, dueDate?: string) => void;
   onRejectRequest: (id: string, reason?: string) => void;
   onSaveRejectionReason?: (id: string, reason: string) => void;
@@ -85,6 +86,17 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const [supervisorName, setSupervisorName] = useState('');
   const [requesterEmail, setRequesterEmail] = useState('');
   const [dafNumber, setDafNumber] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachNotice, setAttachNotice] = useState('');
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ''; // permet de rechoisir le même fichier
+    const { accepted, rejected } = pickRequestFiles(attachments, picked);
+    if (accepted.length) setAttachments(prev => [...prev, ...accepted]);
+    setAttachNotice(rejected.join('\n'));
+  };
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [showSupervisors, setShowSupervisors] = useState(false);
   const [newSupervisor, setNewSupervisor] = useState('');
@@ -144,6 +156,8 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     setSupervisorName('');
     setRequesterEmail('');
     setDafNumber('');
+    setAttachments([]);
+    setAttachNotice('');
   };
   const openModal = () => { resetForm(); setIsModalOpen(true); };
   const closeModal = () => { resetForm(); setIsModalOpen(false); };
@@ -164,9 +178,9 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       dafNumber: dafNumber.trim() || undefined,
       supervisorName: supervisorName || undefined,
       requesterEmail: requesterEmail.trim() || undefined,
-    })).finally(() => setSubmitting(false));
+      attachments,
+    })).finally(() => { setSubmitting(false); closeModal(); });
 
-    closeModal();
   };
 
   return (
@@ -534,6 +548,35 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
                   </div>
                 </div>
               </details>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Photos / documents (facultatif)</label>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={submitting || attachments.length >= REQUEST_FILES_MAX} onClick={() => cameraInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                    <Camera className="w-4 h-4" />Prendre une photo
+                  </button>
+                  <button type="button" disabled={submitting || attachments.length >= REQUEST_FILES_MAX} onClick={() => filesInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                    <Paperclip className="w-4 h-4" />Joindre un document
+                  </button>
+                </div>
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickFiles} />
+                <input ref={filesInputRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={onPickFiles} />
+                <p className="mt-1 text-[11px] text-gray-400">Photos ou PDF, {REQUEST_FILES_MAX} fichiers au maximum. À ajouter maintenant : impossible après l'envoi.</p>
+                {attachments.length > 0 && (
+                  <ul className="mt-2 divide-y divide-gray-100 border border-gray-200 rounded-lg">
+                    {attachments.map((f, i) => (
+                      <li key={`${f.name}-${f.size}-${i}`} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
+                        <span className="truncate text-gray-800">{f.name} <span className="text-xs text-gray-400">{formatFileSize(f.size)}</span></span>
+                        <button type="button" disabled={submitting} onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                          className="shrink-0 text-gray-400 hover:text-red-600 disabled:opacity-50" aria-label={`Retirer ${f.name}`}><X className="w-4 h-4" /></button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {attachNotice && <p className="mt-1 text-xs text-red-600 whitespace-pre-line">{attachNotice}</p>}
+              </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
