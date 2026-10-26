@@ -7,6 +7,7 @@ import { formatDateFr } from '../../utils/reportTable';
 import { formatDateTimeFr } from '../../utils/reportExport';
 import { exportRequestToPdf, printRequestPdf } from '../../utils/requestPdf';
 import { proposedDueDate, isValidIsoDate, formatIsoFr } from '../../utils/requestDueDate';
+import { RequestAttachmentsBlock } from './RequestAttachmentsBlock';
 
 interface Props {
   request: MaintenanceRequest;
@@ -146,6 +147,8 @@ export const RequestDetailModal: React.FC<Props> = ({ request, equipment, locati
             {request.dueDate && <Field label="Date de fin prévue" value={formatDateFr(request.dueDate)} />}
             <Field label="Date de décision" value={formatDateTimeFr(request.decidedAt)} />
           </div>
+
+          {request.origin !== 'coswin' && <RequestAttachmentsBlock requestId={request.id} />}
 
           <fieldset className="border border-gray-200 rounded-lg p-4">
             <legend className="px-2 text-xs font-semibold text-gray-500 uppercase">Informations OT</legend>
