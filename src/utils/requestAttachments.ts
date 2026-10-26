@@ -57,3 +57,20 @@ export function displayNameFor(originalName: string, storedMime: string): string
   if (storedMime === 'image/jpeg') name = name.replace(/\.(png|webp|jpe?g|heic|heif)$/i, '') + '.jpg';
   return name.slice(-120) || 'fichier';
 }
+
+/**
+ * Qui voit le bouton « Lier au carnet » : un manager, ou le demandeur pour SA demande ; la demande doit venir de
+ * l'application (pas de Coswin) et avoir un équipement réel. La base refait la même vérification (sql/26).
+ */
+export function canLinkAttachment(p: {
+  isManager: boolean; currentUserId?: string; requestedBy?: string; origin?: string; equipmentId?: string;
+}): boolean {
+  if (!p.equipmentId || p.origin === 'coswin') return false;
+  if (p.isManager) return true;
+  return !!p.currentUserId && p.currentUserId === p.requestedBy;
+}
+
+/** Peut retirer le lien : un manager, ou celui qui l'a créé. */
+export function canUnlinkDocument(p: { isManager: boolean; currentUserId?: string; createdBy?: string }): boolean {
+  return p.isManager || (!!p.currentUserId && p.currentUserId === p.createdBy);
+}
