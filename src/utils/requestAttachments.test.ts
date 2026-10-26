@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateRequestFile, pickRequestFiles, storedMimeFor, formatFileSize, displayNameFor, REQUEST_FILES_MAX } from './requestAttachments';
+import { validateRequestFile, pickRequestFiles, storedMimeFor, formatFileSize, displayNameFor, canLinkAttachment, canUnlinkDocument, REQUEST_FILES_MAX } from './requestAttachments';
 
 const f = (name: string, type: string, size = 1000) => ({ name, type, size });
 const MB = 1024 * 1024;
@@ -57,5 +57,25 @@ describe('displayNameFor', () => {
     expect(displayNameFor('IMG_1.JPEG', 'image/jpeg')).toBe('IMG_1.jpg');
     expect(displayNameFor('Rapport.pdf', 'application/pdf')).toBe('Rapport.pdf');
     expect(displayNameFor('x'.repeat(200) + '.pdf', 'application/pdf')).toHaveLength(120);
+  });
+});
+
+describe('canLinkAttachment / canUnlinkDocument', () => {
+  const base = { isManager: false, currentUserId: 'u1', requestedBy: 'u1', origin: 'app', equipmentId: 'eq1' };
+  it('le demandeur lie ses propres pièces, pas celles des autres', () => {
+    expect(canLinkAttachment(base)).toBe(true);
+    expect(canLinkAttachment({ ...base, requestedBy: 'u2' })).toBe(false);
+    expect(canLinkAttachment({ ...base, currentUserId: undefined })).toBe(false);
+  });
+  it('le manager lie partout, mais jamais sans équipement réel ni sur une DI Coswin', () => {
+    expect(canLinkAttachment({ ...base, isManager: true, requestedBy: 'u2' })).toBe(true);
+    expect(canLinkAttachment({ ...base, isManager: true, equipmentId: undefined })).toBe(false);
+    expect(canLinkAttachment({ ...base, isManager: true, origin: 'coswin' })).toBe(false);
+  });
+  it('délier : manager ou auteur du lien', () => {
+    expect(canUnlinkDocument({ isManager: true })).toBe(true);
+    expect(canUnlinkDocument({ isManager: false, currentUserId: 'u1', createdBy: 'u1' })).toBe(true);
+    expect(canUnlinkDocument({ isManager: false, currentUserId: 'u1', createdBy: 'u2' })).toBe(false);
+    expect(canUnlinkDocument({ isManager: false, currentUserId: undefined, createdBy: undefined })).toBe(false);
   });
 });
