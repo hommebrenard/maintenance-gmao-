@@ -1,6 +1,6 @@
 import type { EquipmentDocument, EquipmentDocumentCategory } from '../types';
 import { createEquipmentDocument, deleteEquipmentDocument } from './queries/equipmentDocuments';
-import { getDocumentSignedUrl, removeDocumentFile, uploadDocumentFile } from './storage';
+import { getDocumentSignedUrl, getRequestFileSignedUrl, removeDocumentFile, uploadDocumentFile } from './storage';
 import { compressImage } from '../utils/imageCompress';
 import { DOC_MAX_BYTES, extensionFor, isImageType, nameWithoutExtension, resolveMime, validateDocumentFile } from '../utils/fileUpload';
 import { isHttpUrl } from '../utils/scheduleControls';
@@ -79,7 +79,9 @@ export async function openEquipmentDocument(doc: EquipmentDocument): Promise<voi
     // Onglet ouvert tout de suite (geste de l'utilisateur), adresse renseignée ensuite : évite le blocage des popups.
     const tab = window.open('', '_blank');
     try {
-      const url = await getDocumentSignedUrl(doc.storagePath);
+      const url = doc.storageBucket === 'request-files'
+        ? await getRequestFileSignedUrl(doc.storagePath)
+        : await getDocumentSignedUrl(doc.storagePath);
       if (tab) {
         tab.opener = null;
         tab.location.href = url;
@@ -101,7 +103,8 @@ export async function openEquipmentDocument(doc: EquipmentDocument): Promise<voi
  */
 export async function deleteEquipmentDocumentWithFile(doc: EquipmentDocument): Promise<{ warning?: string }> {
   await deleteEquipmentDocument(doc.id);
-  if (doc.storagePath) {
+  // Pièce liée : le fichier appartient à la demande (bucket `request-files`), on retire seulement le lien.
+  if (doc.storagePath && doc.storageBucket !== 'request-files') {
     try {
       await removeDocumentFile(doc.storagePath);
     } catch (err) {
