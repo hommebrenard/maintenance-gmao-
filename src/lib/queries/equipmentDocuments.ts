@@ -23,6 +23,8 @@ interface EquipmentDocumentRow {
   created_by: string | null;
   created_at: string;
   updated_at: string | null;
+  storage_bucket?: string | null;
+  source_attachment_id?: string | null;
 }
 
 function rowToDocument(row: EquipmentDocumentRow): EquipmentDocument {
@@ -39,6 +41,8 @@ function rowToDocument(row: EquipmentDocumentRow): EquipmentDocument {
     createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
+    storageBucket: row.storage_bucket === 'request-files' ? 'request-files' : 'equipment-files',
+    sourceAttachmentId: row.source_attachment_id ?? undefined,
   };
 }
 
@@ -117,4 +121,43 @@ export async function deleteEquipmentDocument(id: string): Promise<void> {
   const { data, error } = await supabase.from('equipment_documents').delete().eq('id', id).select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('Suppression refusée ou document introuvable.');
+}
+
+/** Documents déjà liés à ces pièces jointes de demande (lecture ouverte aux comptes connectés). */
+export async function fetchLinkedDocumentsFor(attachmentIds: string[]): Promise<EquipmentDocument[]> {
+  if (attachmentIds.length === 0) return [];
+  const { data, error } = await supabase.from('equipment_documents').select('*').in('source_attachment_id', attachmentIds);
+  if (error) throw error;
+  return ((data as EquipmentDocumentRow[]) || []).map(rowToDocument);
+}
+
+/**
+ * Lie une pièce jointe de demande aux Documents du carnet (sql/26) : une RÉFÉRENCE, le fichier n'est pas copié.
+ * Autorisé aux managers et au demandeur (pour ses propres pièces, sur l'équipement de sa demande) ; la base le vérifie.
+ * Le fichier devient lisible par tous les comptes connectés : l'appelant doit avoir fait confirmer l'utilisateur.
+ */
+export async function linkRequestAttachmentToDocuments(
+  input: {
+    equipmentId: string; attachmentId: string; storagePath: string; name: string;
+    category?: EquipmentDocumentCategory; mimeType: string; sizeBytes: number;
+  },
+  createdBy: string
+): Promise<EquipmentDocument> {
+  const { data, error } = await supabase
+    .from('equipment_documents')
+    .insert({
+      equipment_id: input.equipmentId,
+      name: input.name,
+      storage_bucket: 'request-files',
+      source_attachment_id: input.attachmentId,
+      storage_path: input.storagePath,
+      category: input.category ?? null,
+      mime_type: input.mimeType,
+      size_bytes: input.sizeBytes,
+      created_by: createdBy,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return rowToDocument(data as EquipmentDocumentRow);
 }
