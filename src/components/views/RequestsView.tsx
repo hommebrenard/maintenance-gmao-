@@ -132,6 +132,22 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
     </th>
   );
 
+  // Remise à zéro complète du formulaire (appelée à CHAQUE ouverture : rien ne survit d'une saisie à l'autre).
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setPriority('Moyenne');
+    setEquipmentId('');
+    setRequestedBy('');
+    setDueTouched(false);
+    setInterventionType('');
+    setSupervisorName('');
+    setRequesterEmail('');
+    setDafNumber('');
+  };
+  const openModal = () => { resetForm(); setIsModalOpen(true); };
+  const closeModal = () => { resetForm(); setIsModalOpen(false); };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting || !title.trim() || !equipmentId || !requestedBy.trim() || !interventionType || !emailOk) return;
@@ -150,16 +166,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       requesterEmail: requesterEmail.trim() || undefined,
     })).finally(() => setSubmitting(false));
 
-    setTitle('');
-    setDescription('');
-    setPriority('Moyenne');
-    setEquipmentId('');
-    setDueTouched(false);
-    setInterventionType('');
-    setSupervisorName('');
-    setRequesterEmail('');
-    setDafNumber('');
-    setIsModalOpen(false);
+    closeModal();
   };
 
   return (
@@ -191,7 +198,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
             </button>
           )}
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openModal}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-xs transition-colors self-start md:self-auto"
           >
             <Plus className="w-4 h-4" />
@@ -290,7 +297,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               Les demandes de maintenance entrantes apparaissent ici pour examen et approbation.
             </p>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openModal}
               className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg shadow-xs transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -411,7 +418,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-bold text-gray-900">Nouvelle demande de maintenance</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -531,7 +538,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                 >
                   Annuler
