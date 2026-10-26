@@ -1,9 +1,9 @@
 import { createRequestAttachment } from './queries/requestAttachments';
-import { removeRequestFile, uploadRequestFile } from './storage';
+import { getRequestFileSignedUrl, removeRequestFile, uploadRequestFile } from './storage';
 import { compressImage } from '../utils/imageCompress';
 import { extensionFor, isImageType, resolveMime } from '../utils/fileUpload';
 import {
-  REQUEST_FILE_MAX_BYTES, REQUEST_IMAGE_MAX_EDGE, REQUEST_IMAGE_QUALITY, storedMimeFor, validateRequestFile,
+  REQUEST_FILE_MAX_BYTES, REQUEST_IMAGE_MAX_EDGE, displayNameFor, REQUEST_IMAGE_QUALITY, storedMimeFor, validateRequestFile,
 } from '../utils/requestAttachments';
 
 export interface AttachmentFailure { name: string; message: string }
@@ -35,7 +35,7 @@ export async function addRequestAttachments(requestId: string, files: File[]): P
       const path = await uploadRequestFile(requestId, blob, extensionFor(mime), mime);
       try {
         await createRequestAttachment({
-          requestId, storagePath: path, displayName: file.name.slice(0, 120) || 'fichier', mimeType: mime, sizeBytes: blob.size,
+          requestId, storagePath: path, displayName: displayNameFor(file.name, mime), mimeType: mime, sizeBytes: blob.size,
         });
         saved += 1;
       } catch (err) {
@@ -47,4 +47,13 @@ export async function addRequestAttachments(requestId: string, files: File[]): P
     }
   }
   return { saved, failures };
+}
+
+/** Ouvre une pièce jointe dans un nouvel onglet (lien signé de courte durée). Rejette si le fichier est inaccessible. */
+export function openRequestAttachment(storagePath: string): Promise<void> {
+  // Fenêtre ouverte tout de suite, sinon le navigateur bloque l'ouverture après l'attente du lien signé.
+  const win = window.open('about:blank', '_blank');
+  return getRequestFileSignedUrl(storagePath)
+    .then(url => { if (win) win.location.href = url; })
+    .catch(err => { win?.close(); throw err; });
 }
