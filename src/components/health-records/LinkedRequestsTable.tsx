@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { Inbox } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Inbox, Paperclip } from 'lucide-react';
+import { fetchRequestAttachmentsFor, type RequestAttachment } from '../../lib/queries/requestAttachments';
+import { openRequestAttachment } from '../../lib/requestAttachments';
+import { formatFileSize } from '../../utils/requestAttachments';
 import { DISPLAY_STATE_CLASS, requestAlert } from '../../utils/requestDisplay';
 import { archivedSummary, type LinkedRequestRow } from '../../utils/equipmentRequests';
 
@@ -20,6 +23,25 @@ export const LinkedRequestsTable: React.FC<{
   const total = rows.length + archived.length;
   const list = archivedMode === 'toggle' && showArchived ? [...rows, ...archived] : rows;
   const shown = showAll ? list : list.slice(0, limit);
+  // Pièces jointes des DI saisies dans l'application (écran seulement, jamais dans le PDF) : une requête groupée ;
+  // le RLS ne renvoie que celles du demandeur et des managers, les autres comptes n'en voient aucune.
+  const appIds = compact ? [] : shown.filter(r => r.req.origin !== 'coswin').map(r => r.req.id);
+  const idsKey = appIds.join(',');
+  const [attachByRequest, setAttachByRequest] = useState<Record<string, RequestAttachment[]>>({});
+  const [attachError, setAttachError] = useState('');
+  useEffect(() => {
+    if (!idsKey) return;
+    let cancelled = false;
+    fetchRequestAttachmentsFor(idsKey.split(','))
+      .then(list => {
+        if (cancelled) return;
+        const grouped: Record<string, RequestAttachment[]> = {};
+        for (const a of list) (grouped[a.requestId] ??= []).push(a);
+        setAttachByRequest(prev => ({ ...prev, ...grouped }));
+      })
+      .catch(() => undefined); // affichage complémentaire : l'échec ne gêne pas la lecture du tableau
+    return () => { cancelled = true; };
+  }, [idsKey]);
   const note = archived.length === 0
     ? (compact ? `Toutes les demandes d'intervention liées à cet équipement — ${total} DI` : null)
     : archivedMode === 'summary'
@@ -75,7 +97,15 @@ export const LinkedRequestsTable: React.FC<{
                 <tr key={req.id} data-pdf-block className="border-t border-gray-100 print:break-inside-avoid">
                   <td className={`px-3 ${compact ? 'py-1' : 'py-2'} font-mono align-top whitespace-nowrap`}>{req.code ?? '—'}</td>
                   <td className={`px-3 ${compact ? 'py-1 whitespace-nowrap' : 'py-2'} align-top text-gray-600`}>{(req.createdAt ?? '').replace(/(\d{2}:\d{2}):\d{2}$/, '$1')}</td>
-                  <td className={`px-3 ${compact ? 'py-1' : 'py-2'} align-top text-gray-800 whitespace-normal break-words`}>{req.title}</td>
+                  <td className={`px-3 ${compact ? 'py-1' : 'py-2'} align-top text-gray-800 whitespace-normal break-words`}>{req.title}
+                    {(attachByRequest[req.id] ?? []).map(a => (
+                      <button key={a.id} type="button" data-pdf-exclude="true"
+                        onClick={() => openRequestAttachment(a.storagePath).catch(() => setAttachError("Ouverture impossible : fichier introuvable ou accès expiré. Rechargez la page."))}
+                        className="mt-1 flex items-center gap-1 max-w-full text-[11px] text-blue-700 hover:text-blue-900">
+                        <Paperclip className="w-3 h-3 shrink-0" /><span className="truncate">{a.displayName}</span><span className="text-gray-400 shrink-0">{formatFileSize(a.sizeBytes)}</span>
+                      </button>
+                    ))}
+                  </td>
                   <td className={`px-3 ${compact ? 'py-1' : 'py-2'} align-top`}>{req.interventionType ?? '—'}</td>
                   <td className={`px-3 ${compact ? 'py-1' : 'py-2'} align-top`}>
                     <span className={`inline-block whitespace-nowrap font-medium px-2 py-0.5 rounded-md ${DISPLAY_STATE_CLASS[state]}`}>{state}</span>
@@ -88,6 +118,7 @@ export const LinkedRequestsTable: React.FC<{
           </table>
         </div>
       )}
+      {attachError && <p className="px-3 py-1 text-[11px] text-red-600 border-t border-gray-100">{attachError}</p>}
       {archivedMode === 'summary' && archived.length > 0 && (
         <div className="px-3 py-2 border-t border-gray-100 text-[10px] text-gray-600 leading-snug">
           {archivedSummary(archived).map(({ year, codes }) => (
