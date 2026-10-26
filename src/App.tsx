@@ -32,6 +32,7 @@ import type { ClosureItem } from './utils/coswinClosure';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
 import { mergeWorkOrderWithLocalExtras, computeLocalBackfillPatch, computeIdentityBackfillPatch, countUnsyncedLocalExtras } from './utils/workOrderExtras';
 import { explainSaveError } from './utils/saveErrors';
+import { addRequestAttachments } from './lib/requestAttachments';
 import { fetchSupplierOptions, createSupplierByName, fetchSuppliers, createSupplier, updateSupplier, setSupplierActive, type SupplierOption, type SupplierRecord, type SupplierInput } from './lib/queries/suppliers';
 import { type IntegrationStatus } from './utils/siteIntegration';
 import { fetchLocations, createLocation, updateLocation, deleteLocation, fetchLocationCodeMap } from './lib/queries/locations';
@@ -695,7 +696,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     return res;
   };
 
-  const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'>): Promise<void> => {
+  const handleAddRequest = (reqData: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'status'> & { attachments?: File[] }): Promise<void> => {
     if (!reqData.equipmentId) {
       alert('Sélectionne un équipement : il est obligatoire pour pouvoir créer l\'OT à l\'approbation.');
       return Promise.resolve();
@@ -715,7 +716,16 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
       supervisorName: reqData.supervisorName,
       requesterEmail: reqData.requesterEmail,
     }, session.user.id)
-      .then(created => { setRequests(prev => [created, ...prev]); })
+      .then(async created => {
+        setRequests(prev => [created, ...prev]);
+        const files = reqData.attachments ?? [];
+        if (files.length === 0) return;
+        // Pièces jointes envoyées APRÈS la création : un échec ne remet jamais la demande en cause.
+        const res = await addRequestAttachments(created.id, files);
+        if (res.failures.length > 0) {
+          alert(`La demande ${created.code} est bien enregistrée, mais ${res.failures.length} pièce(s) jointe(s) n'ont pas pu être envoyée(s) :\n${res.failures.map(f => `• ${f.name} : ${f.message}`).join('\n')}\n\nElles ne peuvent plus être ajoutées depuis l'application : transmettez-les au responsable par un autre moyen.`);
+        }
+      })
       .catch(err => {
         console.error('Erreur création demande:', err);
         const e = (err ?? {}) as { code?: unknown; message?: unknown };
