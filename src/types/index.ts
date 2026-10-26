@@ -306,6 +306,10 @@ export interface EquipmentDocument {
   createdBy?: string;
   createdAt: string;
   updatedAt?: string;
+  /** Bucket du fichier : `equipment-files` (par défaut) ou `request-files` pour une pièce jointe de demande liée (sql/26). */
+  storageBucket?: 'equipment-files' | 'request-files';
+  /** Pièce jointe de demande à l'origine du document lié : le fichier appartient à la demande, pas au carnet. */
+  sourceAttachmentId?: string;
 }
 
 export type ControlResult = 'conforme' | 'reserves' | 'non_conforme';
