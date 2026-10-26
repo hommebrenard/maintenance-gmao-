@@ -50,3 +50,10 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
   return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`;
 }
+
+/** Nom affiché : les photos sont réencodées en JPEG, l'extension suit (IMG.png -> IMG.jpg). Coupé à 120 caractères. */
+export function displayNameFor(originalName: string, storedMime: string): string {
+  let name = originalName.trim();
+  if (storedMime === 'image/jpeg') name = name.replace(/\.(png|webp|jpe?g|heic|heif)$/i, '') + '.jpg';
+  return name.slice(-120) || 'fichier';
+}
