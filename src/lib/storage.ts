@@ -46,3 +46,27 @@ export async function uploadEquipmentPhoto(equipmentId: string, blob: Blob): Pro
   const { data } = supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
   return `${data.publicUrl}?v=${Date.now()}`;
 }
+
+// Pièces jointes des demandes (sql/25) : bucket PRIVÉ `request-files`, chemin {requestId}/{uuid}.{ext}.
+// Écriture : le demandeur, dans les 15 minutes qui suivent la création de sa demande ; lecture : demandeur et managers.
+export const REQUEST_BUCKET = 'request-files';
+
+export async function uploadRequestFile(requestId: string, blob: Blob, ext: string, contentType: string): Promise<string> {
+  const path = `${requestId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(REQUEST_BUCKET).upload(path, blob, { contentType, upsert: false });
+  if (error) throw error;
+  return path;
+}
+
+/** Retire un fichier qu'on vient d'envoyer quand l'enregistrement de sa ligne a échoué. */
+export async function removeRequestFile(path: string): Promise<void> {
+  const { error } = await supabase.storage.from(REQUEST_BUCKET).remove([path]);
+  if (error) throw error;
+}
+
+export async function getRequestFileSignedUrl(path: string, expiresInSeconds = 300): Promise<string> {
+  const { data, error } = await supabase.storage.from(REQUEST_BUCKET).createSignedUrl(path, expiresInSeconds);
+  if (error) throw error;
+  if (!data?.signedUrl) throw new Error("Lien d'accès au fichier indisponible.");
+  return data.signedUrl;
+}
