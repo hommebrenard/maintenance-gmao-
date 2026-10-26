@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { fetchRequestAttachments, type RequestAttachment } from '../../lib/queries/requestAttachments';
-import { getRequestFileSignedUrl } from '../../lib/storage';
+import { openRequestAttachment } from '../../lib/requestAttachments';
 import { formatFileSize } from '../../utils/requestAttachments';
 
 /** Pièces jointes d'une demande (lecture) : visibles par le demandeur et les managers (RLS). N'affiche rien s'il n'y en a pas. */
@@ -20,11 +20,8 @@ export const RequestAttachmentsBlock: React.FC<{ requestId: string }> = ({ reque
   }, [requestId]);
 
   const open = (item: RequestAttachment) => {
-    // Fenêtre ouverte tout de suite (sinon le navigateur bloque l'ouverture après l'attente du lien signé).
-    const win = window.open('about:blank', '_blank');
-    getRequestFileSignedUrl(item.storagePath)
-      .then(url => { if (win) win.location.href = url; })
-      .catch(() => { win?.close(); setError("Ouverture impossible : le fichier est introuvable ou l'accès a expiré. Rechargez la page."); });
+    openRequestAttachment(item.storagePath)
+      .catch(() => setError("Ouverture impossible : le fichier est introuvable ou l'accès a expiré. Rechargez la page."));
   };
 
   if (items.length === 0 && !error) return null;
