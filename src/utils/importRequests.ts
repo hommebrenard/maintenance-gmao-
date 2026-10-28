@@ -113,11 +113,13 @@ export interface ImportContext {
   equipmentLocationById: Map<string, string | undefined>;
   locationIdByCode: Map<string, string>;
   workOrderIdByCode: Map<string, string>;
+  /** Équipements de l'application (avec leur description) : sert au contrôle de cohérence équipement / description de la DI. */
+  equipmentList?: { id: string; code: string; name: string; locationId?: string }[];
 }
 
 export function buildImportContext(src: {
   requests: Pick<MaintenanceRequest, 'code'>[];
-  equipment: Pick<Equipment, 'id' | 'code' | 'locationId'>[];
+  equipment: (Pick<Equipment, 'id' | 'code' | 'locationId'> & { name?: string })[];
   locations: Pick<LocationItem, 'id' | 'code'>[];
   workOrders: Pick<WorkOrder, 'id' | 'code'>[];
 }): ImportContext {
@@ -128,6 +130,7 @@ export function buildImportContext(src: {
     equipmentLocationById: new Map(src.equipment.map(e => [e.id, e.locationId] as [string, string | undefined])),
     locationIdByCode: new Map(src.locations.filter(l => l.code).map(l => [l.code as string, l.id] as [string, string])),
     workOrderIdByCode: new Map(src.workOrders.map(w => [w.code, w.id] as [string, string])),
+    equipmentList: src.equipment.map(e => ({ id: e.id, code: e.code, name: e.name ?? '', locationId: e.locationId })),
   };
 }
 
