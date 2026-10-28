@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { analyzeRequestRows, type ImportContext, type ImportReport, type RequestInsertRow } from '../../utils/importRequests';
+import { findSuspectEquipment, type EquipmentSuspect } from '../../utils/requestEquipmentCheck';
 
 interface Props {
   context: ImportContext;
@@ -23,16 +24,21 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
   const [analysis, setAnalysis] = useState<{ report: ImportReport; rows: RequestInsertRow[] } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ inserted: number; expected: number } | null>(null);
+  const [result, setResult] = useState<{ inserted: number; expected: number; corrected: number } | null>(null);
+  const [suspects, setSuspects] = useState<EquipmentSuspect[]>([]);
+  /** Décision par N° de DI : 'keep' = garder l'équipement de Coswin, sinon id de l'équipement proposé. Absent = pas encore décidé. */
+  const [decisions, setDecisions] = useState<Record<string, string>>({});
 
   const handleFile = async (file: File) => {
-    setError(''); setAnalysis(null); setResult(null); setFileName(file.name);
+    setError(''); setAnalysis(null); setResult(null); setSuspects([]); setDecisions({}); setFileName(file.name);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '', raw: true });
       if (raw.length === 0) { setError('Le fichier ne contient aucune ligne.'); return; }
-      setAnalysis(analyzeRequestRows(raw, context));
+      const a = analyzeRequestRows(raw, context);
+      setAnalysis(a);
+      setSuspects(findSuspectEquipment(a.rows, context.equipmentList ?? []));
     } catch (e) {
       console.error(e);
       setError("Fichier illisible. Utilise l'export Excel ou CSV des demandes d'intervention de Coswin.");
@@ -43,8 +49,19 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
     if (!analysis) return;
     setBusy(true); setError('');
     try {
-      const inserted = await onImport(analysis.rows);
-      setResult({ inserted, expected: analysis.rows.length });
+      // Applique les décisions : seul le choix explicite d'une proposition change l'équipement (lien + codes), jamais automatiquement.
+      const chosen = new Map<string, { id: string; code: string }>();
+      for (const s of suspects) {
+        const d = decisions[s.requestCode];
+        const sug = s.suggestions.find(x => x.id === d);
+        if (sug) chosen.set(s.requestCode, { id: sug.id, code: sug.code });
+      }
+      const rows = analysis.rows.map(r => {
+        const c = chosen.get(r.code);
+        return c ? { ...r, equipment_id: c.id, equipment_code: c.code, planned_equipment_code: c.code } : r;
+      });
+      const inserted = await onImport(rows);
+      setResult({ inserted, expected: rows.length, corrected: chosen.size });
     } catch (e) {
       console.error(e);
       setError("L'import a échoué (droits ou connexion). Aucune demande existante n'a été modifiée ; tu peux relancer sans risque de doublon.");
@@ -53,6 +70,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
 
   const r = analysis?.report;
   const blocked = !!r && r.missingHeaders.length > 0;
+  const undecided = suspects.filter(s => !decisions[s.requestCode]).length;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -104,6 +122,36 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
                 « À rapprocher » : le code est conservé sur la demande et reste visible ; le rattachement se fera quand l'équipement ou le site existera dans l'application.
               </p>
 
+              {suspects.length > 0 && (
+                <div className="text-sm bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-2">
+                  <div className="font-semibold text-amber-900 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Contrôle équipement : {suspects.length} DI à vérifier avant l'import</div>
+                  <p className="text-xs text-amber-900">
+                    La description de ces DI ne correspond pas à l'équipement indiqué par Coswin (erreur fréquente de rattachement). Rien n'est modifié sans ton choix :
+                    choisis pour chaque DI de garder Coswin ou d'utiliser l'équipement proposé (le carnet de santé suit l'équipement choisi).
+                  </p>
+                  <div className="flex gap-2 text-xs">
+                    <button type="button" onClick={() => setDecisions(Object.fromEntries(suspects.map(s => [s.requestCode, s.suggestions[0].id])))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Appliquer la 1re proposition à toutes</button>
+                    <button type="button" onClick={() => setDecisions(Object.fromEntries(suspects.map(s => [s.requestCode, 'keep'])))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Garder Coswin pour toutes</button>
+                  </div>
+                  <ul className="space-y-2">
+                    {suspects.map(s => (
+                      <li key={s.requestCode} className="bg-white border border-amber-200 rounded-lg p-2 text-xs">
+                        <div><b>{s.requestCode}</b> — {s.title}</div>
+                        <div className="text-gray-600 mt-0.5">Coswin : <span className="font-mono">{s.assigned.code}</span> ({s.assigned.name})</div>
+                        {s.powerNote && <div className="text-amber-800 mt-0.5">{s.powerNote}</div>}
+                        <select value={decisions[s.requestCode] ?? ''} onChange={e => setDecisions(d => ({ ...d, [s.requestCode]: e.target.value }))}
+                          className={`mt-1 w-full px-2 py-1 border rounded ${decisions[s.requestCode] ? 'border-gray-300' : 'border-amber-400 bg-amber-50'}`}>
+                          <option value="">Choisir…</option>
+                          <option value="keep">Garder Coswin : {s.assigned.code}</option>
+                          {s.suggestions.map(x => <option key={x.id} value={x.id}>Utiliser : {x.code} — {x.name}</option>)}
+                        </select>
+                      </li>
+                    ))}
+                  </ul>
+                  {undecided > 0 && <p className="text-xs font-semibold text-amber-900">{undecided} DI sans décision : l'import reste bloqué.</p>}
+                </div>
+              )}
+
               {r.skippedUnknownState.length > 0 && (
                 <div className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <div className="font-semibold text-amber-800 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />États Coswin non reconnus : ces demandes ne sont pas importées</div>
@@ -140,6 +188,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
               <p className="mt-1">
                 {result.inserted} demande(s) créée(s) sur {result.expected} attendue(s)
                 {result.inserted === result.expected ? ' : le contrôle des totaux est bon.' : ' : écart à vérifier, relance l\'import (aucun doublon possible).'}
+                {result.corrected > 0 && ` ${result.corrected} DI rattachée(s) à l'équipement que tu as choisi à la place de celui de Coswin.`}
               </p>
             </div>
           )}
@@ -148,7 +197,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">{result ? 'Fermer' : 'Annuler'}</button>
           {!result && (
-            <button onClick={run} disabled={!r || blocked || r.newCount === 0 || busy}
+            <button onClick={run} disabled={!r || blocked || r.newCount === 0 || busy || undecided > 0}
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
               <Upload className="w-4 h-4" /><span>{busy ? 'Import en cours…' : `Importer ${r?.newCount ?? 0} demande(s)`}</span>
             </button>
