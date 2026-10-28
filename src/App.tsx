@@ -45,7 +45,6 @@ import {
   INITIAL_EQUIPMENT,
   INITIAL_INVENTORY,
   INITIAL_AUTOMATIONS,
-  INITIAL_METERS,
   INITIAL_TEMPLATES,
   INITIAL_PROCEDURES,
   INITIAL_TAGS,
@@ -62,7 +61,6 @@ import {
   Equipment,
   InventoryItem,
   AutomationRule,
-  Meter,
   WorkOrderTemplate,
   Procedure,
   Tag,
@@ -209,9 +207,6 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
   );
   const [automations, setAutomations] = useState<AutomationRule[]>(() =>
     getInitialState('gmao_automations', INITIAL_AUTOMATIONS)
-  );
-  const [meters, setMeters] = useState<Meter[]>(() =>
-    getInitialState('gmao_meters', INITIAL_METERS)
   );
   const [templates, setTemplates] = useState<WorkOrderTemplate[]>(() =>
     getInitialState('gmao_templates', INITIAL_TEMPLATES)
@@ -852,23 +847,6 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
     setAutomations(prev => [...prev, { ...rule, id: `auto-${Date.now()}` }]);
   };
 
-  // Handlers - Meters
-  const handleAddMeter = (meter: Omit<Meter, 'id' | 'lastReadingDate'>) => {
-    setMeters(prev => [...prev, {
-      ...meter,
-      id: `meter-${Date.now()}`,
-      lastReadingDate: new Date().toLocaleDateString('fr-FR')
-    }]);
-  };
-
-  const handleUpdateMeterReading = (id: string, value: number) => {
-    setMeters(prev => prev.map(m => m.id === id ? {
-      ...m,
-      currentValue: value,
-      lastReadingDate: new Date().toLocaleDateString('fr-FR')
-    } : m));
-  };
-
   // Handlers - Equipment
   const handleAddEquipment = (eq: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt' | 'workOrdersCount'>) => {
     const tempId = `eq-${Date.now()}`;
@@ -1263,11 +1241,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
         );
       case 'meters':
         return (
-          <MetersView
-            meters={meters}
-            onAddMeter={handleAddMeter}
-            onUpdateReading={handleUpdateMeterReading}
-          />
+          <MetersView locations={locations} isManager={isManager} />
         );
       case 'equipment':
         return (
