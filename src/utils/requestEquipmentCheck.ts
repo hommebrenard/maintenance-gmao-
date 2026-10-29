@@ -87,22 +87,22 @@ export function findSuspectEquipment(rows: CheckableRow[], equipment: EquipmentL
     const candidates = byLocation.get(loc) ?? [];
     const w = weights(loc);
     const titleTokens = significantTokens(row.title);
-    const scoreOf = (c: { tokens: Set<string> }): { score: number; hits: number } => {
-      let score = 0, hits = 0;
+    const scoreOf = (c: { tokens: Set<string> }): { score: number; hits: number; strong: boolean } => {
+      let score = 0, hits = 0, strong = false;
       for (const t of titleTokens) {
         let wt = 0;
         if (c.tokens.has(t)) wt = w.get(t) ?? 0;
         else if (t.length >= 5) for (const u of c.tokens) if (u.length >= 5 && lev1(t, u)) { wt = w.get(u) ?? 0; break; }
-        if (wt > 0) { score += wt; if (!/^n\d+$/.test(t)) hits++; }
+        if (wt > 0) { score += wt; hits++; if (!/^n\d+$/.test(t)) strong = true; }
       }
-      return { score, hits };
+      return { score, hits, strong };
     };
     const scored = candidates.map(c => ({ eq: c.eq, ...scoreOf(c) })).sort((a, b) => b.score - a.score || a.eq.code.localeCompare(b.eq.code));
     const assignedScore = scored.find(s => s.eq.id === assigned.id)?.score ?? 0;
     const best = scored[0];
-    if (!best || best.eq.id === assigned.id || best.hits < 2 || best.score - assignedScore < SUSPECT_MARGIN) continue;
+    if (!best || best.eq.id === assigned.id || best.hits < 2 || !best.strong || best.score - assignedScore < SUSPECT_MARGIN) continue;
     const suggestions = scored
-      .filter(s => s.eq.id !== assigned.id && s.score >= best.score * 0.6 && s.hits >= 2)
+      .filter(s => s.eq.id !== assigned.id && s.score >= best.score * 0.6 && s.hits >= 2 && s.strong)
       .slice(0, 3)
       .map(s => ({ id: s.eq.id, code: s.eq.code, name: s.eq.name, score: Math.round(s.score * 10) / 10 }));
     const dp = power(row.title), ep = power(best.eq.name);
