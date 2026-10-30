@@ -112,9 +112,26 @@ export interface ImportContext {
   equipmentByKey: Map<string, { id: string; code: string }>;
   equipmentLocationById: Map<string, string | undefined>;
   locationIdByCode: Map<string, string>;
+  /** Rapprochement tolérant des sites (« - » et « _ » confondus, casse ignorée) : clé normalisée → site (hors clés ambiguës). */
+  locationIdByKey?: Map<string, string>;
+  /** Clés normalisées qui correspondent à plusieurs sites distincts : jamais devinées. */
+  ambiguousSiteKeys?: Set<string>;
   workOrderIdByCode: Map<string, string>;
   /** Équipements de l'application (avec leur description) : sert au contrôle de cohérence équipement / description de la DI. */
   equipmentList?: { id: string; code: string; name: string; locationId?: string }[];
+}
+
+function siteKeyMaps(locations: { id: string; code?: string | null }[]) {
+  const ids = new Map<string, Set<string>>();
+  for (const l of locations) {
+    if (!l.code) continue;
+    const k = equipmentCompareKey(l.code);
+    ids.set(k, (ids.get(k) ?? new Set()).add(l.id));
+  }
+  const locationIdByKey = new Map<string, string>();
+  const ambiguousSiteKeys = new Set<string>();
+  for (const [k, set] of ids) { if (set.size === 1) locationIdByKey.set(k, [...set][0]); else ambiguousSiteKeys.add(k); }
+  return { locationIdByKey, ambiguousSiteKeys };
 }
 
 export function buildImportContext(src: {
@@ -129,6 +146,7 @@ export function buildImportContext(src: {
     equipmentByKey: new Map(src.equipment.map(e => [equipmentCompareKey(e.code), { id: e.id, code: e.code }] as [string, { id: string; code: string }])),
     equipmentLocationById: new Map(src.equipment.map(e => [e.id, e.locationId] as [string, string | undefined])),
     locationIdByCode: new Map(src.locations.filter(l => l.code).map(l => [l.code as string, l.id] as [string, string])),
+    ...siteKeyMaps(src.locations),
     workOrderIdByCode: new Map(src.workOrders.map(w => [w.code, w.id] as [string, string])),
     equipmentList: src.equipment.map(e => ({ id: e.id, code: e.code, name: e.name ?? '', locationId: e.locationId })),
   };
@@ -239,10 +257,14 @@ export function analyzeRequestRows(
       if (equipmentId) report.equipmentMatched += 1; else { report.equipmentUnmatched += 1; unmatchedEq.add(plannedCode || equipmentCode); }
     }
     const siteCode = g('site');
-    const locationId = (siteCode ? ctx.locationIdByCode.get(siteCode) : undefined)
-      ?? (equipmentId ? ctx.equipmentLocationById.get(equipmentId) : undefined) ?? null;
+    // Le site de la DI vient de la Zone Coswin (rapprochement exact, puis tolérant aux « - » / « _ » sauf ambiguïté) ;
+    // l'équipement ne sert de repli que si la Zone n'est pas reconnue (le contrôle d'import le signale alors).
+    const siteHit = siteCode
+      ? (ctx.locationIdByCode.get(siteCode) ?? (ctx.ambiguousSiteKeys?.has(equipmentCompareKey(siteCode)) ? undefined : ctx.locationIdByKey?.get(equipmentCompareKey(siteCode))))
+      : undefined;
+    const locationId = siteHit ?? (equipmentId ? ctx.equipmentLocationById.get(equipmentId) : undefined) ?? null;
     if (siteCode) {
-      if (ctx.locationIdByCode.has(siteCode)) report.siteMatched += 1; else { report.siteUnmatched += 1; unmatchedSite.add(siteCode); }
+      if (siteHit) report.siteMatched += 1; else { report.siteUnmatched += 1; unmatchedSite.add(siteCode); }
     }
     const otNumber = g('otNumber');
     const workOrderId = otNumber ? ctx.workOrderIdByCode.get(`OT-${otNumber}`) ?? null : null;
