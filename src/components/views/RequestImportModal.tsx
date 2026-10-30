@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { analyzeRequestRows, type ImportContext, type ImportReport, type RequestInsertRow } from '../../utils/importRequests';
-import { findSuspectEquipment, type EquipmentSuspect } from '../../utils/requestEquipmentCheck';
+import { checkRequestRows, applyDecisions, pendingIssues, type CheckResult, type EquipmentDecision, type RequestIssue, SITE_ISSUES } from '../../utils/requestEquipmentCheck';
 
 interface Props {
   context: ImportContext;
@@ -24,13 +24,14 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
   const [analysis, setAnalysis] = useState<{ report: ImportReport; rows: RequestInsertRow[] } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ inserted: number; expected: number; corrected: number } | null>(null);
-  const [suspects, setSuspects] = useState<EquipmentSuspect[]>([]);
-  /** Décision par N° de DI : 'keep' = garder l'équipement de Coswin, sinon id de l'équipement proposé. Absent = pas encore décidé. */
-  const [decisions, setDecisions] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<{ inserted: number; expected: number; relinked: number; skipped: number } | null>(null);
+  const [check, setCheck] = useState<CheckResult | null>(null);
+  /** Décision explicite par N° de DI (absente = pas encore décidé : l'import reste bloqué). */
+  const [decisions, setDecisions] = useState<Record<string, EquipmentDecision>>({});
+  const [ackUnknown, setAckUnknown] = useState(false);
 
   const handleFile = async (file: File) => {
-    setError(''); setAnalysis(null); setResult(null); setSuspects([]); setDecisions({}); setFileName(file.name);
+    setError(''); setAnalysis(null); setResult(null); setCheck(null); setDecisions({}); setAckUnknown(false); setFileName(file.name);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -38,7 +39,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
       if (raw.length === 0) { setError('Le fichier ne contient aucune ligne.'); return; }
       const a = analyzeRequestRows(raw, context);
       setAnalysis(a);
-      setSuspects(findSuspectEquipment(a.rows, context.equipmentList ?? []));
+      setCheck(checkRequestRows(a.rows, context));
     } catch (e) {
       console.error(e);
       setError("Fichier illisible. Utilise l'export Excel ou CSV des demandes d'intervention de Coswin.");
@@ -49,19 +50,11 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
     if (!analysis) return;
     setBusy(true); setError('');
     try {
-      // Applique les décisions : seul le choix explicite d'une proposition change l'équipement (lien + codes), jamais automatiquement.
-      const chosen = new Map<string, { id: string; code: string }>();
-      for (const s of suspects) {
-        const d = decisions[s.requestCode];
-        const sug = s.suggestions.find(x => x.id === d);
-        if (sug) chosen.set(s.requestCode, { id: sug.id, code: sug.code });
-      }
-      const rows = analysis.rows.map(r => {
-        const c = chosen.get(r.code);
-        return c ? { ...r, equipment_id: c.id, equipment_code: c.code, planned_equipment_code: c.code } : r;
-      });
+      // Applique les décisions explicites : seul le lien `equipment_id` peut changer, jamais les codes d'origine de Coswin.
+      const applied = applyDecisions(analysis.rows, check?.issues ?? [], decisions, equipmentList);
+      const rows = applied.rows;
       const inserted = await onImport(rows);
-      setResult({ inserted, expected: rows.length, corrected: chosen.size });
+      setResult({ inserted, expected: rows.length, relinked: applied.relinked, skipped: applied.skipped });
     } catch (e) {
       console.error(e);
       setError("L'import a échoué (droits ou connexion). Aucune demande existante n'a été modifiée ; tu peux relancer sans risque de doublon.");
@@ -70,7 +63,9 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
 
   const r = analysis?.report;
   const blocked = !!r && r.missingHeaders.length > 0;
-  const undecided = suspects.filter(s => !decisions[s.requestCode]).length;
+  const equipmentList = context.equipmentList ?? [];
+  const issues = check?.issues ?? [];
+  const undecided = pendingIssues(issues, decisions, equipmentList).length + (check && check.unknownEquipmentRows > 0 && !ackUnknown ? 1 : 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -122,33 +117,36 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
                 « À rapprocher » : le code est conservé sur la demande et reste visible ; le rattachement se fera quand l'équipement ou le site existera dans l'application.
               </p>
 
-              {suspects.length > 0 && (
-                <div className="text-sm bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-2">
-                  <div className="font-semibold text-amber-900 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Contrôle équipement : {suspects.length} DI à vérifier avant l'import</div>
+              {check && (issues.length > 0 || check.unknownEquipmentRows > 0) && (
+                <div className="text-sm bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-3">
+                  <div className="font-semibold text-amber-900 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />Contrôle site et équipement avant l'import</div>
                   <p className="text-xs text-amber-900">
-                    La description de ces DI ne correspond pas à l'équipement indiqué par Coswin (erreur fréquente de rattachement). Rien n'est modifié sans ton choix :
-                    choisis pour chaque DI de garder Coswin ou d'utiliser l'équipement proposé (le carnet de santé suit l'équipement choisi).
+                    Acceptées sans contrôle : <b>{check.accepted}</b> · site non reconnu : <b>{issues.filter(i => SITE_ISSUES.includes(i.kind)).length}</b> ·
+                    équipement d'un autre site : <b>{issues.filter(i => i.kind === 'hors_site').length}</b> · description incohérente : <b>{issues.filter(i => i.kind === 'incoherent').length}</b> ·
+                    sans équipement rattaché : <b>{check.unknownEquipmentRows}</b>. Rien n'est modifié sans ton choix ; les codes Coswin restent tels quels, seul le lien du carnet de santé change.
                   </p>
-                  <div className="flex gap-2 text-xs">
-                    <button type="button" onClick={() => setDecisions(Object.fromEntries(suspects.map(s => [s.requestCode, s.suggestions[0].id])))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Appliquer la 1re proposition à toutes</button>
-                    <button type="button" onClick={() => setDecisions(Object.fromEntries(suspects.map(s => [s.requestCode, 'keep'])))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Garder Coswin pour toutes</button>
-                  </div>
+                  {issues.length > 0 && (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <button type="button" onClick={() => setDecisions(Object.fromEntries(issues.map(i => [i.requestCode, { kind: 'keep' } as EquipmentDecision])))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Garder Coswin / importer quand même pour toutes</button>
+                      <button type="button" onClick={() => setDecisions(d => ({ ...d, ...Object.fromEntries(issues.filter(i => i.suggestions[0]).map(i => [i.requestCode, { kind: 'use', equipmentId: i.suggestions[0].id } as EquipmentDecision])) }))} className="px-2 py-1 bg-white border border-amber-300 rounded hover:bg-amber-100">Appliquer la 1re proposition là où elle existe</button>
+                    </div>
+                  )}
                   <ul className="space-y-2">
-                    {suspects.map(s => (
-                      <li key={s.requestCode} className="bg-white border border-amber-200 rounded-lg p-2 text-xs">
-                        <div><b>{s.requestCode}</b> — {s.title}</div>
-                        <div className="text-gray-600 mt-0.5">Coswin : <span className="font-mono">{s.assigned.code}</span> ({s.assigned.name})</div>
-                        {s.powerNote && <div className="text-amber-800 mt-0.5">{s.powerNote}</div>}
-                        <select value={decisions[s.requestCode] ?? ''} onChange={e => setDecisions(d => ({ ...d, [s.requestCode]: e.target.value }))}
-                          className={`mt-1 w-full px-2 py-1 border rounded ${decisions[s.requestCode] ? 'border-gray-300' : 'border-amber-400 bg-amber-50'}`}>
-                          <option value="">Choisir…</option>
-                          <option value="keep">Garder Coswin : {s.assigned.code}</option>
-                          {s.suggestions.map(x => <option key={x.id} value={x.id}>Utiliser : {x.code} — {x.name}</option>)}
-                        </select>
-                      </li>
-                    ))}
+                    {issues.map(i => <IssueRow key={i.requestCode} issue={i} decision={decisions[i.requestCode]} equipment={equipmentList} onChange={d => setDecisions(x => ({ ...x, [i.requestCode]: d }))} />)}
                   </ul>
-                  {undecided > 0 && <p className="text-xs font-semibold text-amber-900">{undecided} DI sans décision : l'import reste bloqué.</p>}
+                  {check.unknownEquipmentRows > 0 && (
+                    <label className="flex items-start gap-2 text-xs text-amber-900 bg-white border border-amber-200 rounded-lg p-2">
+                      <input type="checkbox" checked={ackUnknown} onChange={e => setAckUnknown(e.target.checked)} className="mt-0.5" />
+                      <span>J'ai pris connaissance de <b>{check.unknownEquipmentRows}</b> DI dont l'équipement Coswin n'existe pas dans l'application : elles seront importées sans équipement rattaché ({check.unknownEquipmentCodes.slice(0, 6).join(', ')}{check.unknownEquipmentCodes.length > 6 ? '…' : ''}).</span>
+                    </label>
+                  )}
+                  {undecided > 0 && <p className="text-xs font-semibold text-amber-900">{undecided} décision(s) ou confirmation(s) manquante(s) : l'import reste bloqué.</p>}
+                </div>
+              )}
+              {check && check.powerWarnings.length > 0 && (
+                <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900">
+                  <div className="font-semibold mb-1">Puissance différente entre la DI et l'équipement ({check.powerWarnings.length}) : à corriger dans Coswin, sans blocage</div>
+                  <ul className="list-disc pl-4 space-y-0.5">{check.powerWarnings.slice(0, 10).map(w => <li key={w.requestCode}><b>{w.requestCode}</b> ({w.equipmentCode}) : {w.note}</li>)}</ul>
                 </div>
               )}
 
@@ -188,7 +186,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
               <p className="mt-1">
                 {result.inserted} demande(s) créée(s) sur {result.expected} attendue(s)
                 {result.inserted === result.expected ? ' : le contrôle des totaux est bon.' : ' : écart à vérifier, relance l\'import (aucun doublon possible).'}
-                {result.corrected > 0 && ` ${result.corrected} DI rattachée(s) à l'équipement que tu as choisi à la place de celui de Coswin.`}
+                {result.relinked > 0 && ` ${result.relinked} DI rattachée(s) à l'équipement que tu as choisi (codes Coswin conservés).`}{result.skipped > 0 && ` ${result.skipped} DI non importée(s) sur ta décision.`}
               </p>
             </div>
           )}
@@ -207,3 +205,31 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
     </div>
   );
 };
+
+const KIND_LABEL: Record<RequestIssue['kind'], string> = {
+  site_absent: 'Zone absente dans Coswin', site_inconnu: 'Site non reconnu dans l\'application', site_ambigu: 'Zone ambiguë (plusieurs sites possibles)',
+  hors_site: 'Équipement d\'un autre site', incoherent: 'Description incohérente avec l\'équipement',
+};
+
+function IssueRow({ issue, decision, equipment, onChange }: { issue: RequestIssue; decision: EquipmentDecision | undefined; equipment: { id: string; code: string; name: string; locationId?: string }[]; onChange: (d: EquipmentDecision) => void }) {
+  const isSite = SITE_ISSUES.includes(issue.kind);
+  const value = !decision ? '' : decision.kind === 'use' ? `eq:${decision.equipmentId}` : decision.kind;
+  const siteEquipment = isSite || !issue.siteId ? [] : equipment.filter(e => e.locationId === issue.siteId).sort((a, b) => a.code.localeCompare(b.code));
+  const set = (v: string) => onChange(v === 'keep' ? { kind: 'keep' } : v === 'skip' ? { kind: 'skip' } : { kind: 'use', equipmentId: v.slice(3) });
+  return (
+    <li className="bg-white border border-amber-200 rounded-lg p-2 text-xs">
+      <div><b>{issue.requestCode}</b> — {issue.title}</div>
+      <div className="text-amber-800 font-semibold mt-0.5">{KIND_LABEL[issue.kind]}{issue.zoneCode ? ` (Zone Coswin : ${issue.zoneCode})` : ''}</div>
+      {issue.assigned && <div className="text-gray-600 mt-0.5">Équipement Coswin : <span className="font-mono">{issue.assigned.code}</span> ({issue.assigned.name})</div>}
+      {issue.powerNote && <div className="text-amber-800 mt-0.5">{issue.powerNote}</div>}
+      <select value={value} onChange={e => e.target.value && set(e.target.value)}
+        className={`mt-1 w-full px-2 py-1 border rounded ${value ? 'border-gray-300' : 'border-amber-400 bg-amber-50'}`}>
+        <option value="">Choisir…</option>
+        <option value="keep">{isSite ? 'Importer quand même (site non rattaché)' : `Garder Coswin${issue.assigned ? ` : ${issue.assigned.code}` : ''}`}</option>
+        {issue.suggestions.length > 0 && <optgroup label="Propositions du site">{issue.suggestions.map(s => <option key={s.id} value={`eq:${s.id}`}>Utiliser : {s.code} — {s.name}</option>)}</optgroup>}
+        {siteEquipment.length > 0 && <optgroup label="Tous les équipements du site">{siteEquipment.map(e => <option key={e.id} value={`eq:${e.id}`}>{e.code} — {e.name}</option>)}</optgroup>}
+        <option value="skip">Ne pas importer cette DI</option>
+      </select>
+    </li>
+  );
+}
