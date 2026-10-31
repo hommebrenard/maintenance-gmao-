@@ -225,6 +225,8 @@ export interface SyncResult {
   lot: string; applique: boolean; lignes_recues: number; absentes_en_base: number; di_modifiees: number; champs_modifies: number;
   statuts_modifies: number; en_attente_resolues: number; regressions_vers_en_attente: number; statuts_proteges_decision_locale: number;
   detail_300_premiers: SyncChangeDetail[];
+  // Verrous d'équipement (di_equipment_overrides) : champs optionnels, renvoyés par les scripts SQL 32 et 33.
+  verrous_dans_le_lot?: number; verrous_ou_coswin_diverge?: number; verrous_alignes_coswin?: number; verrous_alignes_codes?: string[];
 }
 
 /**
