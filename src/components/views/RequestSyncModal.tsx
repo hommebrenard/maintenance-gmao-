@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { X, RefreshCw, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { X, RefreshCw, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, Lock } from 'lucide-react';
 import { analyzeRequestRows, toSyncPayload, type ImportContext, type ImportReport } from '../../utils/importRequests';
 import type { SyncResult } from '../../lib/queries/maintenanceRequests';
 import type { MaintenanceRequest } from '../../types';
@@ -140,6 +140,18 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
                 <Stat label="Retours vers « en attente »" value={preview.regressions_vers_en_attente} tone={preview.regressions_vers_en_attente ? 'warn' : 'neutral'} />
                 <Stat label="Absentes de la base" value={preview.absentes_en_base} tone={preview.absentes_en_base ? 'warn' : 'neutral'} />
               </div>
+              {(preview.verrous_dans_le_lot ?? 0) > 0 && (
+                <div className="text-sm bg-sky-50 border border-sky-200 rounded-lg p-3 text-sky-900 flex gap-2">
+                  <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    <b>{preview.verrous_dans_le_lot} DI verrouillée(s)</b> dans ce fichier : leur équipement dans l'application est conservé.
+                    Coswin diffère encore du verrou pour <b>{preview.verrous_ou_coswin_diverge ?? 0}</b>
+                    {(preview.verrous_alignes_coswin ?? 0) > 0 && (
+                      <> ; Coswin est maintenant d'accord pour <b>{preview.verrous_alignes_coswin}</b> (verrou libérable : {(preview.verrous_alignes_codes ?? []).slice(0, 10).join(', ')}{(preview.verrous_alignes_codes ?? []).length > 10 ? '…' : ''})</>
+                    )}.
+                  </span>
+                </div>
+              )}
               {preview.regressions_vers_en_attente > 0 && (
                 <div className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 flex gap-2">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Des DI repasseraient « en attente » d'après Coswin : vérifie le détail ci-dessous avant d'appliquer.
