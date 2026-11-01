@@ -103,7 +103,8 @@ export function reviewSyncRows(
     const oldEq = req.equipmentId ? byId.get(req.equipmentId) : undefined;
     const oldEquipment = oldEq ? { id: oldEq.id, code: oldEq.code } : undefined;
 
-    if (req.origin !== 'coswin') { items.push({ ...base, state: 'hors_perimetre' }); continue; }
+    // Hors périmètre : la synchronisation ne touche pas à l'équipement, donc aucune anomalie de code à signaler.
+    if (req.origin !== 'coswin') { items.push({ ...base, codeProblem: undefined, state: 'hors_perimetre' }); continue; }
 
     if (lock) {
       const state: ReviewState = target && target.id === lock.equipmentId ? 'verrou_aligne'
@@ -111,7 +112,7 @@ export function reviewSyncRows(
       items.push({ ...base, state, oldEquipment: { id: lock.equipmentId, code: lock.equipmentCode }, newEquipment: target ? { id: target.id, code: target.code } : undefined });
       continue;
     }
-    if (!req.equipmentId) { items.push({ ...base, state: 'hors_perimetre' }); continue; }
+    if (!req.equipmentId) { items.push({ ...base, codeProblem: undefined, state: 'hors_perimetre' }); continue; }
 
     if (!target || target.id === req.equipmentId) {
       items.push({ ...base, state: codeProblem ? 'anomalie_equipement' : 'conforme', oldEquipment });
