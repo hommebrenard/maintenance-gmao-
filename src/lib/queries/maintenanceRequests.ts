@@ -238,3 +238,74 @@ export async function syncMaintenanceRequests(payload: Record<string, string | n
   if (error) throw error;
   return data as SyncResult;
 }
+
+// ── Verrous et décisions d'équipement (étape 4d ; scripts SQL 34 et 34d) ──
+
+export interface EquipmentOverrideRow { diCode: string; equipmentId: string; equipmentCode: string }
+export interface EquipmentDecisionRow {
+  diCode: string; decision: 'garder' | 'accepter' | 'liberer'; reviewId: string;
+  beforeId: string | null; afterId: string | null; afterCode: string | null; decidedAt: string;
+}
+/** Réponse JSON des fonctions SQL di_keep_equipment / di_accept_equipment / di_release_override. */
+export interface EquipmentDecisionResult { resultat: string; equipement?: string }
+
+async function readAllPages<T>(table: string, columns: string, order: string): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from(table).select(columns).order(order, { ascending: false }).range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data as unknown as T[]) || [];
+    all.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return all;
+}
+
+/** Verrous d'équipement en vigueur (table di_equipment_overrides, lecture pour tout compte connecté). */
+export async function fetchEquipmentOverrides(): Promise<EquipmentOverrideRow[]> {
+  const rows = await readAllPages<{ di_code: string; equipment_id: string; equipment_code: string }>('di_equipment_overrides', 'di_code, equipment_id, equipment_code', 'di_code');
+  return rows.map(r => ({ diCode: r.di_code, equipmentId: r.equipment_id, equipmentCode: r.equipment_code }));
+}
+
+/** Décisions enregistrées (trace), plus récentes d'abord. */
+export async function fetchEquipmentDecisions(): Promise<EquipmentDecisionRow[]> {
+  const rows = await readAllPages<{ di_code: string; decision: EquipmentDecisionRow['decision']; review_id: string; equipment_before_id: string | null; equipment_after_id: string | null; equipment_after_code: string | null; decided_at: string }>(
+    'di_equipment_decisions', 'di_code, decision, review_id, equipment_before_id, equipment_after_id, equipment_after_code, decided_at', 'decided_at');
+  return rows.map(r => ({ diCode: r.di_code, decision: r.decision, reviewId: r.review_id, beforeId: r.equipment_before_id, afterId: r.equipment_after_id, afterCode: r.equipment_after_code, decidedAt: r.decided_at }));
+}
+
+async function callDecision(fn: string, args: Record<string, unknown>): Promise<EquipmentDecisionResult> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) throw error;
+  return data as EquipmentDecisionResult;
+}
+/** « Garder l'équipement actuel » : crée le verrou (responsable). */
+export const keepEquipment = (diCode: string, expectedEquipmentId: string, reviewId: string) =>
+  callDecision('di_keep_equipment', { p_di_code: diCode, p_expected_equipment_id: expectedEquipmentId, p_review_id: reviewId });
+/** « Accepter le nouvel équipement » : enregistre la décision ; c'est la synchronisation qui change l'équipement. */
+export const acceptEquipment = (diCode: string, currentEquipmentId: string, newEquipmentId: string, reviewId: string) =>
+  callDecision('di_accept_equipment', { p_di_code: diCode, p_expected_current_id: currentEquipmentId, p_new_equipment_id: newEquipmentId, p_review_id: reviewId });
+/** Libère le verrou d'une DI (jamais en masse). */
+export const releaseOverride = (diCode: string, expectedEquipmentId: string, reviewId: string) =>
+  callDecision('di_release_override', { p_di_code: diCode, p_expected_equipment_id: expectedEquipmentId, p_review_id: reviewId });
+
+export interface SyncProofRow { champ: string; nouvelleValeur: string | null }
+/**
+ * Preuve qu'un lot a traité des DI : lignes d'historique du lot (source sync_coswin) et équipement actuel de chaque DI.
+ * Une ligne d'historique prouve que le lot a traité la DI, pas l'équipement final : l'équipement actuel est relu aussi.
+ */
+export async function fetchSyncProof(codes: string[], batchId: string): Promise<Map<string, { history: SyncProofRow[]; equipmentId: string | null }>> {
+  const out = new Map<string, { history: SyncProofRow[]; equipmentId: string | null }>();
+  for (let i = 0; i < codes.length; i += 100) {
+    const chunk = codes.slice(i, i + 100);
+    const h = await supabase.from('maintenance_request_history').select('code, champ, nouvelle_valeur').in('code', chunk).eq('lot_id', batchId).eq('source', 'sync_coswin');
+    if (h.error) throw h.error;
+    const r = await supabase.from('maintenance_requests').select('code, equipment_id').in('code', chunk);
+    if (r.error) throw r.error;
+    for (const c of chunk) out.set(c, { history: [], equipmentId: null });
+    for (const x of (h.data ?? []) as { code: string; champ: string; nouvelle_valeur: string | null }[]) out.get(x.code)?.history.push({ champ: x.champ, nouvelleValeur: x.nouvelle_valeur });
+    for (const x of (r.data ?? []) as { code: string; equipment_id: string | null }[]) { const e = out.get(x.code); if (e) e.equipmentId = x.equipment_id; }
+  }
+  return out;
+}
