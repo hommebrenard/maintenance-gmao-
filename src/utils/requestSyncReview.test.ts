@@ -81,6 +81,11 @@ describe('reviewSyncRows', () => {
     const r = run([row('D1', 'TST-A-OND-02'), row('D2', 'TST-A-OND-02'), row('D3', 'TST-A-OND-02')], [req('D1', 'TST-A-OND-01', { origin: 'app' }), req('D2', undefined)]);
     expect(r.items.map(i => i.state)).toEqual(['hors_perimetre', 'hors_perimetre']);
   });
+  it('hors périmètre : un code introuvable n\'est pas compté comme anomalie', () => {
+    const r = run([row('D1', 'TST-A-ZZZ'), row('D2', 'TST-A-ZZZ')], [req('D1', 'TST-A-OND-01', { origin: 'app' }), req('D2', undefined)]);
+    expect(r.items.map(i => i.state)).toEqual(['hors_perimetre', 'hors_perimetre']);
+    expect(r.anomalies).toBe(0);
+  });
   it('priorité : un conflit de site reste bloquant même avec un code en anomalie', () => {
     const r = run([row('D1', 'TST-A-ZZZ', 'TST-B-OND-01')], [req('D1', 'TST-A-OND-01')]);
     expect(r.items[0]).toMatchObject({ state: 'nouveau_conflit', reason: 'hors_site', codeProblem: 'introuvable', held: true });
