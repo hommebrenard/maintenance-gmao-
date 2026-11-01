@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { X, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { analyzeRequestRows, type ImportContext, type ImportReport, type RequestInsertRow } from '../../utils/importRequests';
 import { checkRequestRows, applyDecisions, pendingIssues, type CheckResult, type EquipmentDecision, type RequestIssue, SITE_ISSUES } from '../../utils/requestEquipmentCheck';
+import { EXCEL_ACCEPT, isExcelFileName, NOT_EXCEL_MESSAGE } from '../../utils/excelFileGuard';
 
 interface Props {
   context: ImportContext;
@@ -32,6 +33,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
 
   const handleFile = async (file: File) => {
     setError(''); setAnalysis(null); setResult(null); setCheck(null); setDecisions({}); setAckUnknown(false); setFileName(file.name);
+    if (!isExcelFileName(file.name)) { setError(NOT_EXCEL_MESSAGE); return; }
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -42,7 +44,7 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
       setCheck(checkRequestRows(a.rows, context));
     } catch (e) {
       console.error(e);
-      setError("Fichier illisible. Utilise l'export Excel ou CSV des demandes d'intervention de Coswin.");
+      setError("Fichier illisible. Utilise l'export Excel des demandes d'intervention de Coswin.");
     }
   };
 
@@ -83,8 +85,8 @@ export const RequestImportModal: React.FC<Props> = ({ context, onClose, onImport
 
           <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400">
             <FileSpreadsheet className="w-5 h-5 text-gray-400" />
-            <span className="text-sm text-gray-700">{fileName || 'Choisir le fichier Coswin (.xlsx, .xls ou .csv)'}</span>
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
+            <span className="text-sm text-gray-700">{fileName || 'Choisir le fichier Coswin (.xlsx ou .xls)'}</span>
+            <input type="file" accept={EXCEL_ACCEPT} className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
           </label>
 

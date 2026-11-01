@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { X, RefreshCw, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, Lock, Unlock } from 'lucide-react';
+import { X, RefreshCw, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, Lock, Unlock, Download } from 'lucide-react';
 import { analyzeRequestRows, toSyncPayload, type ImportContext, type ImportReport } from '../../utils/importRequests';
 import { reviewSyncRows, excludeHeld, type ReviewResult, type ReviewItem, type ReviewFileRow, type ReviewRequest, type LockLite } from '../../utils/requestSyncReview';
+import { EXCEL_ACCEPT, isExcelFileName, NOT_EXCEL_MESSAGE } from '../../utils/excelFileGuard';
+import { buildGapRows, gapRowsToCsv } from '../../utils/requestSyncGapExport';
 import { decisionsFromTrace, evaluateAcceptProof, type ProofStatus } from '../../utils/requestSyncDecisions';
 import {
   fetchEquipmentOverrides, fetchEquipmentDecisions, keepEquipment, acceptEquipment, releaseOverride, fetchSyncProof,
@@ -83,6 +85,7 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
 
   const handleFile = async (file: File) => {
     setError(''); setReport(null); setPreview(null); setDone(null); setPayload([]); setReview(null); setFileRows([]); setActionMsg(null); setProofs({}); setFileName(file.name);
+    if (!isExcelFileName(file.name)) { setError(NOT_EXCEL_MESSAGE); return; }
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
@@ -127,6 +130,17 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
       console.error(e);
       setActionMsg({ ok: false, text: `${code} : action refusée ou impossible (droits, connexion). Rien n'a été modifié.` });
     } finally { setBusy(false); }
+  };
+
+  /** Export CSV des écarts (DI verrouillées dont Coswin diffère) pour l'administrateur Coswin : lecture seule, aucune écriture. */
+  const exportGaps = () => {
+    if (!review) return;
+    const rows = buildGapRows(review.items, fileRows);
+    const blob = new Blob([gapRowsToCsv(rows)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ecarts-di-coswin-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const apply = async () => {
@@ -180,8 +194,8 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
 
           <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400">
             <FileSpreadsheet className="w-5 h-5 text-gray-400" />
-            <span className="text-sm text-gray-700">{fileName || 'Choisir le fichier Coswin récent (.xlsx, .xls ou .csv)'}</span>
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy}
+            <span className="text-sm text-gray-700">{fileName || 'Choisir le fichier Coswin récent (.xlsx ou .xls)'}</span>
+            <input type="file" accept={EXCEL_ACCEPT} className="hidden" disabled={busy}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
           </label>
 
@@ -228,6 +242,18 @@ export const RequestSyncModal: React.FC<Props> = ({ context, requests, onClose, 
                   <span><b>{review.notSynced} DI retirée(s) du lot</b> tant qu'aucune décision n'est prise : leurs mises à jour d'état et d'OT sont <b>aussi différées</b>. Les anomalies de code restent dans le lot (leur équipement n'est pas modifié).</span>
                 </div>
               )}
+              {(() => {
+                const gaps = review.counts.verrou_stable + review.counts.verrou_change_coswin;
+                return (
+                  <div className="flex items-center gap-3 text-sm">
+                    <button onClick={exportGaps} disabled={gaps === 0 || busy}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                      <Download className="w-4 h-4" />Exporter les écarts pour Coswin (CSV)
+                    </button>
+                    <span className="text-gray-500">{gaps} DI verrouillée(s) dont Coswin diffère de l'équipement réel</span>
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-2 text-sm">
                 <label htmlFor="sync-filter" className="text-gray-600">Afficher :</label>
                 <select id="sync-filter" value={filter} onChange={e => setFilter(e.target.value as typeof filter)} className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
