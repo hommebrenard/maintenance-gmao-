@@ -1222,7 +1222,7 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
           />
         );
       case 'dashboard':
-        return <DashboardView workOrders={workOrders} requests={requests} locations={locations} />;
+        return <DashboardView workOrders={workOrders} requests={requests} locations={locations} equipment={equipmentList} />;
       case 'reports':
         return (
           <ReportsView
