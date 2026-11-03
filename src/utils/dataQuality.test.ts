@@ -22,6 +22,32 @@ describe('nom de site', () => {
   });
 });
 
+describe('DI sans lien enregistré', () => {
+  const codes = new Set(['TST-A-01', 'TST-A-02']);
+  const reqs = [
+    di('1', { code: 'DI00000001' }),
+    di('2', { code: 'DI00000002', equipmentId: undefined, equipmentCode: ' tst-a-01 ' }),
+    di('3', { code: 'DI00000003', equipmentId: undefined, plannedEquipmentCode: 'TST-A-02', equipmentCode: 'TST-ZZ-99' }),
+    di('4', { code: 'DI00000004', equipmentId: undefined, equipmentCode: 'TST-ZZ-99' }),
+    di('5', { code: 'DI00000005', equipmentId: undefined, plannedEquipmentCode: 'TST-ZZ-98', equipmentCode: 'TST-A-01' }),
+    di('6', { code: 'DI00000006', equipmentId: undefined }),
+  ];
+  it('sépare les DI retrouvées par code de celles dont le code est introuvable ou vide (planifié d\'abord)', () => {
+    const r = computeQuality(reqs, [], undefined, codes);
+    expect(get(r, 'di-noeq').items.map(i => i.id)).toEqual(['2', '3', '4', '5', '6']);
+    expect(get(r, 'di-noeq-code').items.map(i => i.id)).toEqual(['2', '3']);
+    expect(get(r, 'di-noeq-missing').items.map(i => i.id)).toEqual(['4', '5', '6']);
+    expect(get(r, 'di-noeq-code').items.length + get(r, 'di-noeq-missing').items.length).toBe(get(r, 'di-noeq').items.length);
+    expect(get(r, 'di-noeq-code').population).toBe(6);
+  });
+  it('sans liste d\'équipements, le contrôle reste celui du lien vide et aucune ligne de séparation n\'est ajoutée', () => {
+    const r = computeQuality(reqs, []);
+    expect(get(r, 'di-noeq').items.length).toBe(5);
+    expect(r.some(c => c.key === 'di-noeq-code' || c.key === 'di-noeq-missing')).toBe(false);
+    expect(computeQuality(reqs, [], undefined, new Set()).some(c => c.key === 'di-noeq-code')).toBe(false);
+  });
+});
+
 describe('computeQuality', () => {
   it('repère les anomalies des DI', () => {
     const r = computeQuality([
