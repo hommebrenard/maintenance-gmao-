@@ -1,5 +1,5 @@
 import React from 'react';
-import type { LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
+import type { Equipment, LocationItem, MaintenanceRequest, WorkOrder } from '../../types';
 import { computeDashboard, computeDi, computeOt, computeSiteRows, OT_STATUSES } from '../../utils/dashboardStats';
 import { CONTRACT_LOT_LABELS, CONTRACT_LOT_ORDER, type ContractLot } from '../../utils/equipmentFamilies';
 import { computeLotRows, filterRequestsByLot, filterWorkOrdersByLot } from '../../utils/lotStats';
@@ -11,10 +11,11 @@ import { ImportLogPanel } from './ImportLogPanel';
 import { computeAllSnapshotRows, computeIndicators, siteScopeKey } from '../../utils/dashboardSnapshot';
 import { computeFunnel } from '../../utils/diFunnel';
 import { computeQuality, type QualityCheck } from '../../utils/dataQuality';
+import { equipmentCodeSet } from '../../utils/equipmentRequests';
 import { DI_AGE_DEFS, DI_PRIORITIES, computeDiHeatmap, diHeatToCsv, filterRequestsBySite, type DiAgeKey, type DiHeatItem, type DiPriorityKey } from '../../utils/diHeatmap';
 import { COSWIN_STATE_LABEL, computeCompletionSplit, computeOverdueAging, filterWorkOrdersBySite, overdueToCsv, type AgingKey, type OverdueItem } from '../../utils/otAging';
 
-interface Props { workOrders: WorkOrder[]; requests: MaintenanceRequest[]; locations: LocationItem[] }
+interface Props { workOrders: WorkOrder[]; requests: MaintenanceRequest[]; locations: LocationItem[]; equipment?: Pick<Equipment, 'code'>[] }
 
 const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1).replace('.', ',')} %`);
 const num = (n: number) => n.toLocaleString('fr-FR');
@@ -54,7 +55,7 @@ function downloadCsv(items: OverdueItem[], name: string, csv: string = overdueTo
   URL.revokeObjectURL(url);
 }
 
-export function DashboardView({ workOrders, requests, locations }: Props) {
+export function DashboardView({ workOrders, requests, locations, equipment = [] }: Props) {
   const [site, setSite] = React.useState('');
   const sites = React.useMemo(() => locations.filter(l => l.type === 'Site').sort((a, b) => a.name.localeCompare(b.name, 'fr')), [locations]);
   const input = React.useMemo(() => ({ workOrders, requests, locations }), [workOrders, requests, locations]);
@@ -88,7 +89,8 @@ export function DashboardView({ workOrders, requests, locations }: Props) {
   const siteLoc = site ? locations.find(l => l.id === site) : undefined;
   const snapScopeKey = siteLoc ? siteScopeKey(siteLoc) : 'ALL';
   const resolveSite = React.useMemo(() => createSiteNameResolver(locations), [locations]);
-  const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts, resolveSite), [scopedReqs, scopedOts, resolveSite]);
+  const equipmentCodes = React.useMemo(() => equipmentCodeSet(equipment), [equipment]);
+  const quality = React.useMemo(() => computeQuality(scopedReqs, scopedOts, resolveSite, equipmentCodes), [scopedReqs, scopedOts, resolveSite, equipmentCodes]);
   const [qualSel, setQualSel] = React.useState<string | null>(null);
   const [qualLimit, setQualLimit] = React.useState(PAGE);
   const qualCheck: QualityCheck | undefined = quality.find(c => c.key === qualSel);
