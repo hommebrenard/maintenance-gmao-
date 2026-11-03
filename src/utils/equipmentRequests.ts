@@ -3,18 +3,31 @@ import { displayState, indexWorkOrders, type RequestDisplayState } from './reque
 
 export interface LinkedRequestRow { req: MaintenanceRequest; state: RequestDisplayState }
 
+const normCode = (v?: string | null) => (v ?? '').trim().toUpperCase();
+
+/** Clé de rapprochement par code d'une demande SANS lien : équipement planifié d'abord, source en repli (règle du carnet de santé). */
+export function requestCodeKey(r: Pick<MaintenanceRequest, 'plannedEquipmentCode' | 'equipmentCode'>): string {
+  return normCode(r.plannedEquipmentCode) || normCode(r.equipmentCode);
+}
+
+/** Ensemble des codes d'équipements de l'application, normalisés comme la clé de rapprochement. */
+export function equipmentCodeSet(equipment: ReadonlyArray<{ code?: string | null }>): Set<string> {
+  const set = new Set<string>();
+  for (const e of equipment) { const c = normCode(e.code); if (c) set.add(c); }
+  return set;
+}
+
 /**
  * Demandes d'intervention d'un équipement : lien par id réel quand la demande est liée ; le rapprochement par code
  * (équipement planifié d'abord, source en repli) ne sert qu'aux demandes SANS lien. Une demande liée à un équipement
  * n'apparaît jamais dans le carnet d'un autre (ex. DI00003300 : source APLC-04, planifiée et liée SPT-26 → carnet de SPT-26 seulement).
  */
 export function requestsForEquipment(requests: MaintenanceRequest[], eq: Pick<Equipment, 'id' | 'code'>): MaintenanceRequest[] {
-  const code = (eq.code ?? '').trim().toUpperCase();
-  const norm = (v?: string) => (v ?? '').trim().toUpperCase();
+  const code = normCode(eq.code);
   return requests
     .filter(r => r.equipmentId
       ? r.equipmentId === eq.id
-      : !!code && (norm(r.plannedEquipmentCode) || norm(r.equipmentCode)) === code)
+      : !!code && requestCodeKey(r) === code)
     .sort((a, b) => (b.createdAtIso ?? '').localeCompare(a.createdAtIso ?? ''));
 }
 
