@@ -26,6 +26,7 @@ export function computeQuality(requests: MaintenanceRequest[], workOrders: WorkO
     ? [
       { key: 'di-noeq-code', scope: 'DI' as const, label: '… dont retrouvées par leur code', definition: "Pas de lien enregistré, mais le code Coswin (équipement planifié d'abord, source en repli) correspond à un équipement de l'application : le carnet de santé les liste.", population: requests.length, items: unlinked.filter(r => { const k = requestCodeKey(r); return !!k && equipmentCodes.has(k); }).map(diItem) },
       { key: 'di-noeq-missing', scope: 'DI' as const, label: '… dont équipement introuvable', definition: "Pas de lien enregistré et le code Coswin ne correspond à aucun équipement de l'application (ou il est vide) : le carnet ne peut pas les lister. Équipement à créer ou code à corriger dans Coswin.", population: requests.length, items: unlinked.filter(r => { const k = requestCodeKey(r); return !k || !equipmentCodes.has(k); }).map(diItem) },
+      { key: 'di-noeq-ifbt', scope: 'DI' as const, label: '… … dont rattachées à un local (IFBT)', definition: "Parmi les DI à équipement introuvable : celles dont la fonction Coswin est IFBT (infrastructure et bâtiment). Coswin les rattache à un local, que l'application n'importe pas comme équipement ; une DI peut néanmoins citer un équipement dans sa description : à lire DI par DI.", population: requests.length, items: unlinked.filter(r => { const k = requestCodeKey(r); return (!k || !equipmentCodes.has(k)) && (r.functionCode ?? '').trim().toUpperCase() === 'IFBT'; }).map(diItem) },
     ]
     : [];
 
