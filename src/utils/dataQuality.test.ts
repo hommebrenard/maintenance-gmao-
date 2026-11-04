@@ -32,6 +32,16 @@ describe('DI sans lien enregistré', () => {
     di('5', { code: 'DI00000005', equipmentId: undefined, plannedEquipmentCode: 'TST-ZZ-98', equipmentCode: 'TST-A-01' }),
     di('6', { code: 'DI00000006', equipmentId: undefined }),
   ];
+  it('isole parmi les introuvables celles dont la fonction Coswin est IFBT', () => {
+    const r = computeQuality([
+      ...reqs,
+      di('7', { code: 'DI00000007', equipmentId: undefined, equipmentCode: 'TST-LOC-1', functionCode: ' ifbt ' }),
+      di('8', { code: 'DI00000008', equipmentId: undefined, equipmentCode: 'TST-LOC-2', functionCode: 'ELC_CFO' }),
+      di('9', { code: 'DI00000009', equipmentId: undefined, equipmentCode: 'TST-A-01', functionCode: 'IFBT' }),
+    ], [], undefined, codes);
+    expect(get(r, 'di-noeq-ifbt').items.map(i => i.id)).toEqual(['7']);
+    expect(get(r, 'di-noeq-missing').items.map(i => i.id)).toEqual(['4', '5', '6', '7', '8']);
+  });
   it('sépare les DI retrouvées par code de celles dont le code est introuvable ou vide (planifié d\'abord)', () => {
     const r = computeQuality(reqs, [], undefined, codes);
     expect(get(r, 'di-noeq').items.map(i => i.id)).toEqual(['2', '3', '4', '5', '6']);
