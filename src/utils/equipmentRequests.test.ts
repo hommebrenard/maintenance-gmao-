@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MaintenanceRequest, WorkOrder } from '../types';
-import { requestsForEquipment, linkedRequestRows, passportRequestRows, splitRequestRows, archivedSummary } from './equipmentRequests';
+import { requestsForEquipment, linkedRequestRows, passportRequestRows, splitRequestRows, archivedSummary, equipmentIndexByCode } from './equipmentRequests';
 
 const r = (p: Partial<MaintenanceRequest>) => ({ id: p.code ?? 'x', title: 't', description: '', status: 'Approuvée', priority: 'Moyenne', requestedBy: '', createdAt: '', ...p } as MaintenanceRequest);
 const eq = { id: 'E1', code: 'BAM-FEZ_AG-PMP-01' };
@@ -65,5 +65,12 @@ describe('equipmentRequests', () => {
   });
   it('code vide : aucun lien parasite', () => {
     expect(requestsForEquipment([r({ code: 'A', equipmentCode: '' })], { id: 'E9', code: '' })).toEqual([]);
+  });
+});
+
+describe('equipmentIndexByCode', () => {
+  it('normalise les codes et écarte ceux portés par plusieurs équipements', () => {
+    const idx = equipmentIndexByCode([{ code: 'TST-A-01 ' }, { code: 'tst-b-01' }, { code: 'TST-B-01' }, { code: '' }, { code: null }]);
+    expect([...idx.keys()]).toEqual(['TST-A-01']);
   });
 });
