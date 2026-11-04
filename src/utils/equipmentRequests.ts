@@ -3,11 +3,24 @@ import { displayState, indexWorkOrders, type RequestDisplayState } from './reque
 
 export interface LinkedRequestRow { req: MaintenanceRequest; state: RequestDisplayState }
 
-const normCode = (v?: string | null) => (v ?? '').trim().toUpperCase();
+export const normCode = (v?: string | null) => (v ?? '').trim().toUpperCase();
 
 /** Clé de rapprochement par code d'une demande SANS lien : équipement planifié d'abord, source en repli (règle du carnet de santé). */
 export function requestCodeKey(r: Pick<MaintenanceRequest, 'plannedEquipmentCode' | 'equipmentCode'>): string {
   return normCode(r.plannedEquipmentCode) || normCode(r.equipmentCode);
+}
+
+/** Index des équipements par code normalisé. Un code porté par plusieurs équipements est écarté : aucune affectation en cas de doute. */
+export function equipmentIndexByCode<T extends { code?: string | null }>(equipment: ReadonlyArray<T>): Map<string, T> {
+  const seen = new Map<string, T>();
+  const ambiguous = new Set<string>();
+  for (const e of equipment) {
+    const c = normCode(e.code);
+    if (!c) continue;
+    if (seen.has(c)) ambiguous.add(c); else seen.set(c, e);
+  }
+  for (const c of ambiguous) seen.delete(c);
+  return seen;
 }
 
 /** Ensemble des codes d'équipements de l'application, normalisés comme la clé de rapprochement. */
