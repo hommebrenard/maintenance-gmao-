@@ -16,6 +16,7 @@ import { buildImportContext, type RequestInsertRow } from '../../utils/importReq
 import { exportRequestListToPdf, printRequestList } from '../../utils/requestListPdf';
 import { exportRequestsToXlsx } from '../../utils/requestExport';
 import { displayState, DISPLAY_STATE_CLASS, indexWorkOrders, requestAlert } from '../../utils/requestDisplay';
+import { equipmentIndexByCode, requestCodeKey } from '../../utils/equipmentRequests';
 import {
   EMPTY_FILTERS, NO_SITE, STATE_ORDER, applyFilters, canonicalSiteKey, buildSearchText, stateCountsFor, hasActiveFilters, paginate, sortRows, typeLabel,
   type RequestFilters, type RequestRowView, type SortKey, type SortSpec,
@@ -70,11 +71,11 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   );
   const woByRequest = React.useMemo(() => indexWorkOrders(workOrders, requests), [workOrders, requests]);
   // Rapprochement à l'affichage : une demande importée avant l'équipement/le site est retrouvée par son code.
-  const equipmentByCode = React.useMemo(() => new Map(equipmentList.map(e => [e.code, e] as [string, Equipment])), [equipmentList]);
+  const equipmentByCodeKey = React.useMemo(() => equipmentIndexByCode(equipmentList), [equipmentList]);
   const locationByKey = React.useMemo(() => new Map(locations.filter(l => l.code).map(l => [canonicalSiteKey(l.code), l] as [string, LocationItem])), [locations]);
   const equipmentById = React.useMemo(() => new Map(equipmentList.map(e => [e.id, e] as [string, Equipment])), [equipmentList]);
   const findEquipment = (req: MaintenanceRequest): Equipment | undefined =>
-    (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
+    (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? equipmentByCodeKey.get(requestCodeKey(req));
   const selectedRequest = selectedId ? requests.find(r => r.id === selectedId) : undefined;
 
   // Form
@@ -113,7 +114,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
   const dueToSend = isValidIsoDate(dueDraft) ? dueDraft : dueProposal;
 
   const equipmentLabel = (req: MaintenanceRequest): string | undefined => {
-    const eq = (req.equipmentId ? equipmentById.get(req.equipmentId) : undefined) ?? (req.equipmentCode ? equipmentByCode.get(req.equipmentCode) : undefined);
+    const eq = findEquipment(req);
     return eq ? `${eq.name} (${eq.code})` : req.equipmentName ?? req.equipmentCode;
   };
 
@@ -128,7 +129,7 @@ export const RequestsView: React.FC<RequestsViewProps> = ({
       day: iso.slice(0, 10), ts: Date.parse(iso) || 0,
       hay: buildSearchText(req, label, wo?.code),
     };
-  }), [requests, woByRequest, equipmentById, equipmentByCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [requests, woByRequest, equipmentById, equipmentByCodeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stateCounts = React.useMemo(() => stateCountsFor(rows, filters), [rows, filters]);
   const typeOptions = React.useMemo(() => Array.from(new Set(rows.map(r => r.req.interventionType).filter((v): v is string => !!v))).sort(), [rows]);
