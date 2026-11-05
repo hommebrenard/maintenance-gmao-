@@ -16,22 +16,52 @@ export interface ImportFileInfo {
 
 export interface ImportFileIssue {
   fileName: string;
-  kind: 'site_mismatch' | 'name_not_standard';
+  kind: 'site_mismatch' | 'name_not_standard' | 'zone_unknown';
   message: string;
+  /** Problème bloquant : le fichier n'est pas chargé, sans possibilité de continuer. */
+  blocking: boolean;
 }
 
 // Accents ignorés (« MUSEE FES » du nom de fichier = « Musée FES » de l'emplacement).
 const key = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[\s_-]+/g, '_');
 
+// Ajouté le 05/11/2026 (cas réel : PMP de mars de Taza, 198 OT enregistrés sous l'entité « BAM », sans emplacement).
+// Une Zone qui ne correspond à AUCUN emplacement de l'application donne des OT sans site : on bloque avant l'aperçu.
+// Sans liste d'emplacements (pas encore chargée), aucun blocage : on ne peut pas juger.
+export function findUnknownZones(entities: string[], locations: SiteLocationItem[] | undefined): { entity: string; count: number }[] {
+  if (!locations || locations.length === 0) return [];
+  const counts = new Map<string, number>();
+  for (const raw of entities) {
+    const entity = (raw || '').trim();
+    if (!entity) continue;
+    counts.set(entity, (counts.get(entity) ?? 0) + 1);
+  }
+  return [...counts]
+    .filter(([entity]) => !findMasterLocationName(entity, locations))
+    .map(([entity, count]) => ({ entity, count }));
+}
+
+export function zoneUnknownMessage(unknown: { entity: string; count: number }[], subject: string): string {
+  const list = unknown.map(u => `« ${u.entity} » (${u.count} ligne${u.count > 1 ? 's' : ''})`).join(', ');
+  return `${subject} contient des lignes dont la Zone ne correspond à aucun emplacement de l'application : ${list}. ` +
+    `Ces OT seraient enregistrés sans site. Corrigez la colonne Zone du fichier, ou créez d'abord l'emplacement si le site est nouveau. ` +
+    `Rien n'est chargé.`;
+}
+
 export function checkImportFiles(files: ImportFileInfo[], locations: SiteLocationItem[]): ImportFileIssue[] {
   const issues: ImportFileIssue[] = [];
   for (const f of files) {
+    const unknown = findUnknownZones(f.entities, locations);
+    if (unknown.length > 0) {
+      issues.push({ fileName: f.fileName, kind: 'zone_unknown', blocking: true, message: zoneUnknownMessage(unknown, `Le fichier « ${f.fileName} »`) });
+    }
     const label = extractSiteMonthYearFromFileName(f.fileName);
     if (!label) {
       if (f.hasNcRows) {
         issues.push({
           fileName: f.fileName,
           kind: 'name_not_standard',
+          blocking: false,
           message: `Le nom du fichier « ${f.fileName} » ne suit pas le modèle « <préfixe> <site> <mois> <année> » (avec des espaces). ` +
             `Ses OT « NC » recevront des codes aléatoires : un réimport les dupliquerait.`,
         });
@@ -49,6 +79,7 @@ export function checkImportFiles(files: ImportFileInfo[], locations: SiteLocatio
       issues.push({
         fileName: f.fileName,
         kind: 'site_mismatch',
+        blocking: false,
         message: `Le nom du fichier « ${f.fileName} » indique le site « ${fileSite} », mais ses lignes concernent : ${found}. ` +
           `Corrigez le nom du fichier, sinon les OT « NC » seront mal identifiés.`,
       });
