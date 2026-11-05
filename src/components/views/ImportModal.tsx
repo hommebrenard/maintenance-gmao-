@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
 import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
-import { checkImportFiles } from '../../utils/importFileCheck';
+import { checkImportFiles, findUnknownZones, zoneUnknownMessage } from '../../utils/importFileCheck';
 import type { ImportMeta } from '../../utils/importLog';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { fetchExistingWorkOrdersCore, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
@@ -243,7 +243,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       return { fileName: f.name, entities: wos.map(w => w.entity || ''), hasNcRows: wos.some(w => w.code.startsWith('NC-')) };
     });
     const issues = checkImportFiles(infos, locations);
-    if (issues.length > 0 && !window.confirm(`${issues.map(i => i.message).join('\n\n')}\n\nContinuer quand même ? (Annuler = rien n'est chargé)`)) {
+    const blocking = issues.filter(i => i.blocking);
+    if (blocking.length > 0) {
+      window.alert(blocking.map(i => i.message).join('\n\n'));
+      inputEl.value = '';
+      return;
+    }
+    const soft = issues.filter(i => !i.blocking);
+    if (soft.length > 0 && !window.confirm(`${soft.map(i => i.message).join('\n\n')}\n\nContinuer quand même ? (Annuler = rien n'est chargé)`)) {
       inputEl.value = '';
       return;
     }
@@ -338,6 +345,16 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // principal que depuis l'import partiel ci-dessus.
   const runPlanningImport = async (workOrdersToImport: WorkOrder[], importedWithConflicts = false) => {
       let finalWorkOrders: WorkOrder[] = [];
+
+      // Filet de sécurité (05/11/2026), valable pour tous les chemins d'import (fichier, texte collé, import partiel) :
+      // une Zone sans emplacement donnerait des OT sans site. Inutile quand l'utilisateur impose le site (répartition multi-sites).
+      if (!(useMultiSiteOverride && selectedImportSites.length > 0)) {
+        const unknownZones = findUnknownZones(workOrdersToImport.map(w => w.entity || ''), locations);
+        if (unknownZones.length > 0) {
+          window.alert(zoneUnknownMessage(unknownZones, 'Les données à importer'));
+          return;
+        }
+      }
       
       if (useMultiSiteOverride && selectedImportSites.length > 0) {
         selectedImportSites.forEach((site, siteIdx) => {
