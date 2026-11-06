@@ -566,6 +566,19 @@ export function extractSiteMonthYearFromFileName(fileName: string): string | nul
   return `${site}-${monthAbbrev}${year}`;
 }
 
+/** Bilan du fichier de planning lu (06/11/2026). `ncLiteral` = cellule « NC » / « N/C » / « 0 » ; `ncBlank` = cellule vide : les deux reçoivent un code NC. */
+export interface PlanningFileStats {
+  numbered: number;
+  ncLiteral: number;
+  ncBlank: number;
+  /** En-tête de la colonne dont la date devient l'échéance de l'OT (première colonne contenant « date », de gauche à droite). */
+  dueDateHeader: string;
+  /** En-tête « … échéancier » du fichier s'il existe (vide sinon). */
+  echeancierHeader: string;
+  /** Premier code NC fabriqué (reproduit la casse du nom du fichier), vide s'il n'y a pas de NC. */
+  ncSampleCode: string;
+}
+
 export function parsePlanningCSV(
   csvContent: string,
   gammePlans: GammePlan[] = [],
@@ -644,6 +657,11 @@ export function parsePlanningCSV(
 
   let ncSequence = 0;
   let skippedNoDate = 0;
+  // Bilan du contenu du fichier (06/11/2026) : affiché en badges à l'aperçu, avant toute écriture.
+  let statNumbered = 0;
+  let statNcLiteral = 0;
+  let statNcBlank = 0;
+  let statNcSample = '';
   const workOrders: WorkOrder[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -664,7 +682,9 @@ export function parsePlanningCSV(
     let code: string;
     if (otNum && otNum.toUpperCase() !== 'NC' && otNum !== 'N/C' && otNum !== '0') {
       code = otNum.startsWith('OT-') ? otNum : `OT-${otNum}`;
+      statNumbered += 1;
     } else {
+      if (otNum) statNcLiteral += 1; else statNcBlank += 1;
       ncSequence += 1;
       const seqStr = String(ncSequence).padStart(3, '0');
       const originFileName = lineFileNames?.[i - 1];
@@ -740,5 +760,16 @@ export function parsePlanningCSV(
   }
 
     (workOrders as WorkOrder[] & { skippedNoDate?: number }).skippedNoDate = skippedNoDate;
+  const ncFirst = workOrders.find(w => w.code.startsWith('NC-'));
+  statNcSample = ncFirst ? ncFirst.code : '';
+  const echeancierHeader = rawHeaders.find(h => cleanHeaderStr(h).includes('echeancier'));
+  (workOrders as WorkOrder[] & { fileStats?: PlanningFileStats }).fileStats = {
+    numbered: statNumbered,
+    ncLiteral: statNcLiteral,
+    ncBlank: statNcBlank,
+    dueDateHeader: idxDueDate >= 0 ? rawHeaders[idxDueDate].trim() : '',
+    echeancierHeader: echeancierHeader ? echeancierHeader.trim() : '',
+    ncSampleCode: statNcSample,
+  };
   return workOrders;
 }
