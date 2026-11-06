@@ -6,8 +6,18 @@ import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/c
 import { checkImportFiles, findUnknownZones, zoneUnknownMessage } from '../../utils/importFileCheck';
 import type { ImportMeta } from '../../utils/importLog';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
-import { fetchExistingWorkOrdersCore, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
+import { fetchExistingWorkOrdersCore, updateWorkOrder, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
+import { compareDueDates, dueDateOkSummary, formatIsoDateFr, type DueDateReport } from '../../utils/importDueDateCheck';
 import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
+
+// Import en pause (06/11/2026) : des OT du fichier existent déjà en base avec une autre échéance ; l'utilisateur décide avant la suite.
+interface DueDateReview {
+  report: DueDateReport;
+  finalWorkOrders: WorkOrder[];
+  existingCore: Map<string, ExistingWorkOrderCore>;
+  rowsInFiles: number;
+  importedWithConflicts: boolean;
+}
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -45,6 +55,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+  // Contrôle des échéances (06/11/2026) : aucune case cochée au départ, rien n'est modifié sans clic.
+  const [dueDateReview, setDueDateReview] = useState<DueDateReview | null>(null);
+  const [alignIds, setAlignIds] = useState<Set<string>>(new Set());
+  const [isAligning, setIsAligning] = useState(false);
   
   // Import strategy: append to existing orders or replace current list
   const [importBehavior, setImportBehavior] = useState<'append' | 'replace'>('append');
@@ -390,14 +404,40 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       // côté App.tsx). Un OT déjà complet reste ignoré comme avant.
       setIsCheckingDuplicates(true);
       let existingCore: Map<string, ExistingWorkOrderCore> = new Map();
+      let checkFailed = false;
       try {
         existingCore = await fetchExistingWorkOrdersCore(finalWorkOrders.map(wo => wo.code));
       } catch (err) {
+        checkFailed = true;
         console.error('Erreur lors de la vérification anti-doublon :', err);
       } finally {
         setIsCheckingDuplicates(false);
       }
 
+      // Contrôle des échéances (06/11/2026) : un OT déjà en base avec une autre échéance que le fichier est signalé AVANT
+      // tout le reste (cas des 67 OT d'avril au lieu du 31/03 : ils étaient jugés « déjà complets » et ignorés sans un mot).
+      if (checkFailed) {
+        await finishPlanningImport(finalWorkOrders, existingCore, rowsInFiles, importedWithConflicts, "⚠ Contrôle des échéances NON fait : la lecture des OT déjà en base a échoué.");
+        return;
+      }
+      const dueReport = compareDueDates(finalWorkOrders.map(w => ({ code: w.code, dueDate: w.dueDate })), existingCore);
+      if (dueReport.totalDifferent > 0) {
+        setAlignIds(new Set());
+        setDueDateReview({ report: dueReport, finalWorkOrders, existingCore, rowsInFiles, importedWithConflicts });
+        return;
+      }
+      await finishPlanningImport(finalWorkOrders, existingCore, rowsInFiles, importedWithConflicts, dueDateOkSummary(dueReport));
+  };
+
+  // Suite de l'import (inchangée) : compléments d'OT existants, doublons, écriture. `extraNote` = bilan du contrôle des échéances.
+  const finishPlanningImport = async (
+    finalWorkOrders: WorkOrder[],
+    existingCore: Map<string, ExistingWorkOrderCore>,
+    rowsInFiles: number,
+    importedWithConflicts: boolean,
+    extraNote: string,
+    decidedAfterDueDateReview = false
+  ) => {
       const newRows: WorkOrder[] = [];
       const patchCandidates: WorkOrderPatchCandidate[] = [];
       let ignoredCount = 0;
@@ -430,7 +470,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           : `Sur les ${total} OT de ce fichier : ${newRows.length} nouveau(x), ${patchCandidates.length} déjà en base seront complétés (seuls les champs vides — équipement/emplacement/planificateur/code d'intervention/n° de plan/entité — seront remplis, aucune donnée existante ne sera écrasée), ${ignoredCount} déjà complet(s) et ignoré(s).\n\nContinuer ?`;
 
         if (allIgnored) {
-          window.alert(message);
+          // Après un alignement d'échéances, il n'y a rien d'autre à importer : on l'écrit au lieu d'une alerte « Annuler ? ».
+          if (decidedAfterDueDateReview) {
+            setSuccessMsg(`✅ ${extraNote} Aucun OT nouveau à importer.`);
+            setParsedPreviewWorkOrders([]);
+            setPastedText('');
+          } else {
+            window.alert(`${message}\n\n${extraNote}`);
+          }
           return;
         }
 
@@ -450,9 +497,46 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       const patchedNote = patchCandidates.length > 0 ? ` (${patchCandidates.length} OT existant(s) complété(s))` : '';
       const skippedNote = ignoredCount > 0 ? ` (${ignoredCount} déjà complet(s) ignoré(s))` : '';
       const conflictNote = importedWithConflicts ? ` (les OT en conflit de site restent sans checklist tant qu'un plan n'est pas trouvé)` : '';
-      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${patchedNote}${skippedNote}${conflictNote} ! Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
+      setSuccessMsg(`✅ ${actionLabel} : ${finalWorkOrders.length} ordre(s) de travail importé(s) avec succès${patchedNote}${skippedNote}${conflictNote} ! ${extraNote} Vous pouvez passer à l'onglet "Gamme de Maintenance" ci-dessus ou fermer la fenêtre.`);
       setParsedPreviewWorkOrders([]);
       setPastedText('');
+  };
+
+  const continueAfterDueDateReview = async (alignSelected: boolean) => {
+    if (!dueDateReview) return;
+    const { report, finalWorkOrders, existingCore, rowsInFiles, importedWithConflicts } = dueDateReview;
+    let note: string;
+    if (alignSelected) {
+      const targets = report.differences.filter(d => !d.locked && alignIds.has(d.existingId));
+      setIsAligning(true);
+      let ok = 0;
+      let failed = 0;
+      for (let i = 0; i < targets.length; i += 10) {
+        await Promise.all(targets.slice(i, i + 10).map(async d => {
+          try {
+            await updateWorkOrder(d.existingId, { dueDate: d.fileDate });
+            ok += 1;
+          } catch (err) {
+            console.error(`Erreur alignement échéance ${d.code} :`, err);
+            failed += 1;
+          }
+        }));
+      }
+      setIsAligning(false);
+      note = `Échéances alignées sur le fichier : ${ok} OT${failed > 0 ? `, ${failed} en échec (droits ou connexion)` : ''}${report.totalDifferent - targets.length > 0 ? `, ${report.totalDifferent - targets.length} laissé(s) inchangé(s)` : ''}. Rechargez la page (F5) pour voir les nouvelles dates dans les listes.`;
+    } else {
+      note = `${report.totalDifferent} OT déjà en base ont une échéance différente du fichier : laissées inchangées.`;
+    }
+    setDueDateReview(null);
+    await finishPlanningImport(finalWorkOrders, existingCore, rowsInFiles, importedWithConflicts, note, true);
+  };
+
+  const toggleAlignId = (id: string) => {
+    setAlignIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -516,6 +600,103 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
+
+          {/* Contrôle des échéances (06/11/2026) : l'import est en pause tant que l'utilisateur n'a pas décidé. */}
+          {dueDateReview && (() => {
+            const { report } = dueDateReview;
+            const alignable = report.differences.filter(d => !d.locked);
+            const shown = report.differences.slice(0, 300);
+            return (
+              <div className="border-2 border-red-300 bg-red-50 rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-2 text-red-800">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold">{report.totalDifferent} OT existent déjà en base avec une échéance différente du fichier</p>
+                    <p className="text-[11px] text-red-700">Rien n'est modifié sans votre clic. Cochez les OT à remettre à la date du fichier (Coswin), ou continuez sans toucher aux échéances.</p>
+                  </div>
+                </div>
+
+                <table className="w-full text-[11px] bg-white rounded-lg border border-red-200">
+                  <thead>
+                    <tr className="text-gray-500 text-left">
+                      <th className="px-2 py-1">Mois (échéance du fichier)</th>
+                      <th className="px-2 py-1 text-right">OT du fichier</th>
+                      <th className="px-2 py-1 text-right">Nouveaux</th>
+                      <th className="px-2 py-1 text-right">Déjà en base, même échéance</th>
+                      <th className="px-2 py-1 text-right text-red-700">Déjà en base, échéance différente</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.months.map(m => (
+                      <tr key={m.month} className="border-t border-red-100">
+                        <td className="px-2 py-1 font-semibold">{m.month.length === 7 ? `${m.month.slice(5)}/${m.month.slice(0, 4)}` : m.month}</td>
+                        <td className="px-2 py-1 text-right">{m.inFile}</td>
+                        <td className="px-2 py-1 text-right">{m.isNew}</td>
+                        <td className="px-2 py-1 text-right">{m.same}</td>
+                        <td className={`px-2 py-1 text-right font-bold ${m.different > 0 ? 'text-red-700' : ''}`}>{m.different}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <ul className="text-[11px] text-red-900 space-y-0.5">
+                  {report.pairs.map(p => (
+                    <li key={`${p.fileDate}|${p.baseDate}`}>{p.count} OT : fichier {formatIsoDateFr(p.fileDate)}, base {formatIsoDateFr(p.baseDate)}</li>
+                  ))}
+                </ul>
+
+                <div className="flex items-center gap-3 text-[11px]">
+                  <button type="button" onClick={() => setAlignIds(new Set(alignable.map(d => d.existingId)))} disabled={isAligning || alignable.length === 0} className="px-2.5 py-1 font-semibold text-red-700 bg-white border border-red-300 rounded hover:bg-red-100 disabled:opacity-50">
+                    Tout cocher ({alignable.length})
+                  </button>
+                  <button type="button" onClick={() => setAlignIds(new Set())} disabled={isAligning || alignIds.size === 0} className="px-2.5 py-1 font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50">
+                    Tout décocher
+                  </button>
+                  <span className="text-gray-600">{alignIds.size} coché(s){report.totalDifferent - alignable.length > 0 ? ` · ${report.totalDifferent - alignable.length} clôturé(s) ou annulé(s), non modifiable(s) ici` : ''}</span>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto bg-white rounded-lg border border-red-200">
+                  <table className="w-full text-[11px]">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="text-gray-500 text-left">
+                        <th className="px-2 py-1 w-8"></th>
+                        <th className="px-2 py-1">OT</th>
+                        <th className="px-2 py-1">Échéance du fichier</th>
+                        <th className="px-2 py-1">Échéance en base</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shown.map(d => (
+                        <tr key={d.existingId} className={`border-t border-gray-100 ${d.locked ? 'text-gray-400' : ''}`}>
+                          <td className="px-2 py-1">
+                            <input type="checkbox" disabled={d.locked || isAligning} checked={alignIds.has(d.existingId)} onChange={() => toggleAlignId(d.existingId)} aria-label={`Aligner ${d.code}`} />
+                          </td>
+                          <td className="px-2 py-1 font-mono">{d.code}</td>
+                          <td className="px-2 py-1">{formatIsoDateFr(d.fileDate)}</td>
+                          <td className="px-2 py-1">{formatIsoDateFr(d.baseDate)}{d.locked ? ' (clôturé/annulé)' : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {report.differences.length > shown.length && (
+                    <p className="px-2 py-1 text-[10px] text-gray-500">… et {report.differences.length - shown.length} autres, non affichés (« Tout cocher » les inclut).</p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button type="button" onClick={() => setDueDateReview(null)} disabled={isAligning} className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                    Annuler l'import
+                  </button>
+                  <button type="button" onClick={() => continueAfterDueDateReview(false)} disabled={isAligning} className="px-3 py-1.5 text-[11px] font-semibold text-gray-800 bg-white border border-gray-400 rounded-lg hover:bg-gray-100 disabled:opacity-50">
+                    Continuer sans modifier les échéances
+                  </button>
+                  <button type="button" onClick={() => continueAfterDueDateReview(true)} disabled={isAligning || alignIds.size === 0} className="px-3 py-1.5 text-[11px] font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                    {isAligning ? 'Alignement en cours…' : `Aligner sur Coswin les ${alignIds.size} coché(s), puis continuer`}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Statut actuel : ce qui est chargé en mémoire */}
           <div className="flex flex-wrap items-center gap-2 pb-1">
@@ -960,7 +1141,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               </span>
               <button
                 onClick={handleImportAnyway}
-                disabled={isCheckingDuplicates}
+                disabled={isCheckingDuplicates || dueDateReview !== null}
                 className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-white border border-red-300 rounded hover:bg-red-100 disabled:opacity-50"
               >
                 Importer quand même (sans checklist)
@@ -978,6 +1159,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               onClick={handleConfirmImport}
               disabled={
                 isCheckingDuplicates ||
+                dueDateReview !== null ||
                 (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
                 (activeTab === 'gamme' && parsedPreviewGammes.length === 0) ||
                 (activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0)
