@@ -30,6 +30,12 @@ describe('bilan du fichier de planning (fileStats)', () => {
     expect(stats(upper).ncSampleCode).toBe('NC-TEST SITE-MAR2026-001');
   });
 
+  it('compte les lignes où la colonne échéancier donne un autre jour que la colonne retenue', () => {
+    expect(stats(parsed).dateColumnsDiffer).toBe(5); // début 01/04, échéancier 31/03 sur les 5 lignes
+    const same = [H, `TEST_SITE_A;T1;P;PS-X-1M-01;31/03/2026 08:00;31/03/2026;900001;1;PREV T1;02/04/2026 18:00`].join('\n');
+    expect(stats(parsePlanningCSV(same)).dateColumnsDiffer).toBe(0);
+  });
+
   it('sans colonne « échéancier », l\'en-tête correspondant est vide', () => {
     const csv2 = [H.replace('Date échéancier', 'Autre'), row('900001', 'T1')].join('\n');
     expect(stats(parsePlanningCSV(csv2)).echeancierHeader).toBe('');
