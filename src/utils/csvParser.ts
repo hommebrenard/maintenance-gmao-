@@ -575,6 +575,8 @@ export interface PlanningFileStats {
   dueDateHeader: string;
   /** En-tête « … échéancier » du fichier s'il existe (vide sinon). */
   echeancierHeader: string;
+  /** Nombre de lignes où la colonne « échéancier » donne un autre jour que la colonne retenue (0 si elles concordent ou s'il n'y a qu'une colonne). */
+  dateColumnsDiffer: number;
   /** Premier code NC fabriqué (reproduit la casse du nom du fichier), vide s'il n'y a pas de NC. */
   ncSampleCode: string;
 }
@@ -662,6 +664,8 @@ export function parsePlanningCSV(
   let statNcLiteral = 0;
   let statNcBlank = 0;
   let statNcSample = '';
+  let statDateDiffers = 0;
+  const idxEcheancier = headers.findIndex(h => h.includes('echeancier'));
   const workOrders: WorkOrder[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -674,6 +678,10 @@ export function parsePlanningCSV(
     // (ce qui fabriquait de faux OT "urgents" à chaque import).
     if (!rawDate) { skippedNoDate += 1; continue; }
     const dueDate = parseFrenchDate(rawDate);
+    // Bilan (06/11/2026) : la colonne « échéancier » donne-t-elle un autre jour que la colonne retenue ?
+    if (idxEcheancier >= 0 && idxEcheancier !== idxDueDate && cols[idxEcheancier] && cols[idxEcheancier].trim()) {
+      if (parseFrenchDate(cols[idxEcheancier].trim()) !== dueDate) statDateDiffers += 1;
+    }
 
     const eqCode = (idxEquipment >= 0 && cols[idxEquipment]) ? cols[idxEquipment].trim() : '';
     const eqDesc = (idxEqDesc >= 0 && cols[idxEqDesc]) ? cols[idxEqDesc].trim() : '';
@@ -769,6 +777,7 @@ export function parsePlanningCSV(
     ncBlank: statNcBlank,
     dueDateHeader: idxDueDate >= 0 ? rawHeaders[idxDueDate].trim() : '',
     echeancierHeader: echeancierHeader ? echeancierHeader.trim() : '',
+    dateColumnsDiffer: statDateDiffers,
     ncSampleCode: statNcSample,
   };
   return workOrders;
