@@ -263,6 +263,9 @@ export interface ExistingWorkOrderCore {
   interventionCode?: string;
   planNumber?: string;
   entity?: string;
+  /** Ajoutés le 06/11/2026 (contrôle des échéances à l'import) : échéance « AAAA-MM-JJ » et statut brut de la base. */
+  dueDate?: string;
+  status?: string;
 }
 
 export async function fetchExistingWorkOrdersCore(
@@ -277,16 +280,18 @@ export async function fetchExistingWorkOrdersCore(
     const chunk = uniqueCodes.slice(i, i + CHUNK_SIZE);
     const { data, error } = await supabase
       .from('work_orders')
-      .select('id, code, equipment_id, location_id, planner, intervention_code, plan_number, entity')
+      .select('id, code, equipment_id, location_id, planner, intervention_code, plan_number, entity, due_date, status')
       .in('code', chunk);
 
     if (error) throw error;
-    (data as (WorkOrderIdentityRow & { id: string; code: string; equipment_id: string | null; location_id: string | null; planner: string | null })[] | null)?.forEach(row => {
+    (data as (WorkOrderIdentityRow & { id: string; code: string; equipment_id: string | null; location_id: string | null; planner: string | null; due_date: string | null; status: string | null })[] | null)?.forEach(row => {
       result.set(row.code, {
         id: row.id,
         equipmentId: row.equipment_id ?? undefined,
         locationId: row.location_id ?? undefined,
         planner: row.planner ?? undefined,
+        dueDate: row.due_date ? row.due_date.slice(0, 10) : undefined,
+        status: row.status ?? undefined,
         // NULL (ou vide) en base => absent : ces 3 champs peuvent être complétés.
         ...rowToIdentity(row)
       });
