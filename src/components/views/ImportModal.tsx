@@ -1033,9 +1033,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${fileStats.ncBlank > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-500'}`} title="Cellule vide dans la colonne N° d'OT : comptée comme un NC (code NC fabriqué), pas ignorée. Le numéro NC suit l'ordre des lignes.">{fileStats.ncBlank} N° d'OT vide(s)</span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">Échéance lue dans « {fileStats.dueDateHeader || 'aucune colonne'} »</span>
                   </div>
-                  {fileStats.echeancierHeader && fileStats.dueDateHeader && fileStats.echeancierHeader !== fileStats.dueDateHeader && (
+                  {fileStats.dateColumnsDiffer > 0 && fileStats.echeancierHeader && fileStats.dueDateHeader && fileStats.echeancierHeader !== fileStats.dueDateHeader && (
                     <p className="text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
-                      Attention : le fichier contient une colonne « {fileStats.echeancierHeader} », mais l'import lit l'échéance dans « {fileStats.dueDateHeader} ». Les deux dates peuvent différer.
+                      Attention : pour {fileStats.dateColumnsDiffer} OT, la colonne « {fileStats.echeancierHeader} » donne un autre jour que « {fileStats.dueDateHeader} », que l'import retient comme échéance.
                     </p>
                   )}
                   {fileStats.ncSampleCode && (
