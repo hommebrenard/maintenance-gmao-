@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
 import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
-import { parsePlanningCSV, parseGammeCSV, formatActionCode } from '../../utils/csvParser';
+import { parsePlanningCSV, parseGammeCSV, formatActionCode, type PlanningFileStats } from '../../utils/csvParser';
 import { checkImportFiles, findUnknownZones, zoneUnknownMessage } from '../../utils/importFileCheck';
 import type { ImportMeta } from '../../utils/importLog';
 import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
@@ -57,6 +57,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   // Contrôle des échéances (06/11/2026) : aucune case cochée au départ, rien n'est modifié sans clic.
   const [dueDateReview, setDueDateReview] = useState<DueDateReview | null>(null);
+  // Bilan du fichier lu (06/11/2026) : OT numérotés / NC / N° d'OT vides, colonne de date retenue.
+  const [fileStats, setFileStats] = useState<PlanningFileStats | null>(null);
   const [alignIds, setAlignIds] = useState<Set<string>>(new Set());
   const [isAligning, setIsAligning] = useState(false);
   
@@ -291,6 +293,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         if (type === 'planning') {
         const parsed = parsePlanningCSV(content, existingGammes, lineFileNames, locations);
         setParsedPreviewWorkOrders(parsed);
+        setFileStats((parsed as typeof parsed & { fileStats?: PlanningFileStats }).fileStats ?? null);
         const skipped = (parsed as typeof parsed & { skippedNoDate?: number }).skippedNoDate || 0;
         if (parsed.length === 0) {
           setErrorMsg("Aucun ordre de travail valide n'a pu être extrait. Vérifiez les en-têtes CSV.");
@@ -1022,6 +1025,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               {/* Ajouté le 16/09/2026 (Phase 1 — étape 3) : bandeau de synthèse
                   du rattachement Gamme, sur la totalité du fichier (pas
                   seulement les 10 lignes affichées ci-dessous). */}
+              {fileStats && (
+                <div className="mb-2 space-y-1">
+                  <div className="flex flex-wrap gap-2 text-[11px]">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">{fileStats.numbered} OT numérotés</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 font-medium" title="Cellule « NC » dans la colonne N° d'OT : l'OT reçoit un code NC fabriqué depuis le nom du fichier.">{fileStats.ncLiteral} NC</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${fileStats.ncBlank > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-500'}`} title="Cellule vide dans la colonne N° d'OT : comptée comme un NC (code NC fabriqué), pas ignorée. Le numéro NC suit l'ordre des lignes.">{fileStats.ncBlank} N° d'OT vide(s)</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">Échéance lue dans « {fileStats.dueDateHeader || 'aucune colonne'} »</span>
+                  </div>
+                  {fileStats.echeancierHeader && fileStats.dueDateHeader && fileStats.echeancierHeader !== fileStats.dueDateHeader && (
+                    <p className="text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                      Attention : le fichier contient une colonne « {fileStats.echeancierHeader} », mais l'import lit l'échéance dans « {fileStats.dueDateHeader} ». Les deux dates peuvent différer.
+                    </p>
+                  )}
+                  {fileStats.ncSampleCode && (
+                    <p className="text-[10px] text-gray-500">Code NC fabriqué (exemple) : « {fileStats.ncSampleCode} ». La casse vient du nom du fichier : un réimport doit porter le même nom que le premier import, sinon les NC sont comptés « nouveaux » et dupliqués.</p>
+                  )}
+                </div>
+              )}
               {gammeMatchSummary && (
                 <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
                   <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'exact' ? null : 'exact')} className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium ${previewGammeFilter === 'exact' ? 'ring-2 ring-green-400' : ''}`}>
