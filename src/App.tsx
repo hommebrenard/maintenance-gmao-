@@ -27,6 +27,7 @@ import { fetchEquipment, updateEquipment, createEquipment, createEquipmentBulk, 
 import { setEquipmentFamilies } from './utils/annualMatrix';
 import { selectRowsToCreate, type NewEquipmentRow } from './utils/coswinEquipmentImport';
 import { buildNewEquipmentsFromImport } from './utils/importEquipment';
+import { makeOrderLocationResolver } from './utils/orderLocation';
 import { closeWorkOrdersFromCoswin, revertCoswinClosure, regularizeCoswinClosure } from './lib/queries/coswinClosure';
 import type { ClosureItem } from './utils/coswinClosure';
 import { fetchWorkOrders, updateWorkOrder, createWorkOrder, createWorkOrdersBulk, backfillWorkOrderIdentity, deleteWorkOrder } from './lib/queries/work_orders';
@@ -520,13 +521,16 @@ const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
 
         // Résolution equipmentId/locationId commune aux nouveaux OT ET aux
         // candidats de complément (même logique, réutilisée telle quelle).
+        const resolveOrderLocation = makeOrderLocationResolver(locationCodeMap);
         const resolveIds = (w: WorkOrder): WorkOrder => {
           let resolved = w;
           if (w.equipmentCode && codeToId.has(w.equipmentCode)) {
             resolved = { ...resolved, equipmentId: codeToId.get(w.equipmentCode) };
           }
-          if (w.entity && locationCodeMap.has(w.entity)) {
-            resolved = { ...resolved, locationId: locationCodeMap.get(w.entity) };
+          // Tolérant : casse, espaces, accents, tiret = tiret bas (BAM-CAS_ST = BAM_CAS_ST).
+          const resolvedLocationId = resolveOrderLocation(w.entity);
+          if (resolvedLocationId) {
+            resolved = { ...resolved, locationId: resolvedLocationId };
           }
           return resolved;
         };
