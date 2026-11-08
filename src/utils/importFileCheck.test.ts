@@ -29,6 +29,8 @@ describe('checkImportFiles', () => {
     const avecNc = checkImportFiles([{ fileName: 'cv_mdiq_juin_2026.xlsx', entities: ['BAM_MDQ_CV'], hasNcRows: true }], locations);
     const sansNc = checkImportFiles([{ fileName: 'cv_mdiq_juin_2026.xlsx', entities: ['BAM_MDQ_CV'], hasNcRows: false }], locations);
     expect(avecNc.map(i => i.kind)).toEqual(['name_not_standard']);
+    expect(avecNc[0].blocking).toBe(true);
+    expect(avecNc[0].message).toContain('Rien n\'est chargé');
     expect(sansNc).toEqual([]);
   });
 
@@ -50,8 +52,9 @@ describe('checkImportFiles', () => {
     expect(checkImportFiles([{ fileName: 'pmp cv mdiq juin 2026.xlsx', entities: ['BAM'], hasNcRows: false }], [])).toEqual([]);
   });
 
-  it('les autres alertes restent non bloquantes', () => {
+  it('l\'alerte de site incohérent reste non bloquante', () => {
     const r = checkImportFiles([{ fileName: 'pmp cv mdiq juin 2026.xlsx', entities: ['BAM-MRN_CV'], hasNcRows: true }], locations);
+    expect(r.map(i => i.kind)).toEqual(['site_mismatch']);
     expect(r.every(i => !i.blocking)).toBe(true);
   });
 

@@ -61,9 +61,9 @@ export function checkImportFiles(files: ImportFileInfo[], locations: SiteLocatio
         issues.push({
           fileName: f.fileName,
           kind: 'name_not_standard',
-          blocking: false,
-          message: `Le nom du fichier « ${f.fileName} » ne suit pas le modèle « <préfixe> <site> <mois> <année> » (avec des espaces). ` +
-            `Ses OT « NC » recevront des codes aléatoires : un réimport les dupliquerait.`,
+          blocking: true,
+          message: `Le nom du fichier « ${f.fileName} » ne suit pas le modèle « <préfixe> <site> <mois> <année> » (avec des espaces, par ex. « PMP CV MARINA juin 2026.xlsx »). ` +
+            `Ses OT « NC » recevraient des codes aléatoires : un réimport les dupliquerait. Renommez le fichier puis rechargez-le. Rien n'est chargé.`,
         });
       }
       continue;
