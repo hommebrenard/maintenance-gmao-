@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePlanningCSV, parseFrenchDate, parseCSVLine, findMatchingGammePlan, findMatchingGammePlanDetailed } from './csvParser';
+import { parsePlanningCSV, parseFrenchDate, parseCSVLine, findMatchingGammePlan, findMatchingGammePlanDetailed, parsePlanningFileName, ncSiteLabel, LEGACY_NC_SITE_LABELS } from './csvParser';
 import { GammePlan } from '../types';
 
 // En-têtes calqués sur le fichier réel "PMP AG Type A KENITRA Avril 2026"
@@ -299,5 +299,60 @@ describe('findMatchingGammePlanDetailed : cache par OT (perf 16/10/2026)', () =>
     const other: any[] = [{ ...plans[1], equipmentCode: 'BAM_KNT_EQ2', equipmentDescription: 'Pompe Kenitra' }];
     const r = findMatchingGammePlanDetailed('BAM_KNT_EQ2', 'PS-2', 'Maintenance pompe', other, 'Kénitra');
     expect(r.status).toBe('exact');
+  });
+});
+
+// Étape 4b (10/11/2026) : le libellé de site du code NC vient de l'emplacement retrouvé par la Zone.
+// Jeux fictifs uniquement (aucune donnée réelle).
+describe('codes NC — libellé de site depuis la Zone (étape 4b)', () => {
+  const LOCS = [
+    { id: 'l1', name: 'AG Type B TEST-SITE-A', code: 'TST_AAA_AG' },
+    { id: 'l2', name: 'Centre régionale de la fiduciaire TEST-SITE-B', code: 'BAM_STT_AG' },
+    { id: 'l3', name: 'Musée TEST-C', code: 'BAM_FEZ_MU' },
+  ] as unknown as Parameters<typeof parsePlanningCSV>[3];
+
+  const oneNc = (zone: string, fileName: string, locs: Parameters<typeof parsePlanningCSV>[3] = LOCS) =>
+    parsePlanningCSV([HEADER, buildRow({ zone, otNum: 'NC', eq: 'TST-EQ-01' })].join('\n'), [], [fileName], locs)[0].code;
+
+  it('fichier mal nommé : le code garde le nom exact de l\'emplacement (B majuscule), pas celui du nom de fichier', () => {
+    expect(oneNc('TST_AAA_AG', 'PMP AG TEST-SITE-A Avril 2026.xlsx')).toBe('NC-AG Type B TEST-SITE-A-AVR2026-001');
+    expect(oneNc('TST_AAA_AG', 'PMP AG Type b TEST-SITE-A Avril 2026.xlsx')).toBe('NC-AG Type B TEST-SITE-A-AVR2026-001');
+  });
+
+  it('Zone écrite avec un tiret (TST-AAA_AG) : même emplacement, même code', () => {
+    expect(oneNc('TST-AAA_AG', 'PMP x y Mai 2026.csv')).toBe('NC-AG Type B TEST-SITE-A-MAI2026-001');
+  });
+
+  it('nom de fichier avec espaces multiples : sans effet sur le code', () => {
+    expect(oneNc('TST_AAA_AG', 'PMP AG  TEST-SITE-A   Juin  2026.xlsx')).toBe('NC-AG Type B TEST-SITE-A-JUIN2026-001');
+  });
+
+  it('les 3 sites à libellé historique gardent le libellé déjà en base (pas de doublon au réimport)', () => {
+    expect(oneNc('BAM_STT_AG', 'PMP CRF TEST-SITE-B Avril 2026.xlsx')).toBe('NC-CRF SETTAT-AVR2026-001');
+    expect(oneNc('BAM-TAZ_AG', 'PMP CRF TEST Avril 2026.xlsx')).toBe('NC-CRF TAZA-AVR2026-001');
+    expect(oneNc('BAM_FEZ_MU', 'PMP Musée TEST-C Mars 2026.xlsx')).toBe('NC-MUSEE FES-MAR2026-001');
+    expect(Object.keys(LEGACY_NC_SITE_LABELS)).toHaveLength(3);
+  });
+
+  it('Zone inconnue ou emplacements non fournis : repli sur le site du nom de fichier (comportement d\'avant)', () => {
+    expect(oneNc('ZONE_INCONNUE', 'PMP AG TEST-SITE-A Avril 2026.xlsx')).toBe('NC-AG TEST-SITE-A-AVR2026-001');
+    const sansEmplacements = parsePlanningCSV([HEADER, buildRow({ zone: 'TST_AAA_AG', otNum: 'NC', eq: 'TST-EQ-01' })].join('\n'), [], ['PMP AG TEST-SITE-A Avril 2026.xlsx'])[0].code;
+    expect(sansEmplacements).toBe('NC-AG TEST-SITE-A-AVR2026-001');
+  });
+
+  it('les codes numérotés et la suite de la séquence ne changent pas', () => {
+    const csv = [HEADER,
+      buildRow({ zone: 'TST_AAA_AG', otNum: 'NC', eq: 'E1' }),
+      buildRow({ zone: 'TST_AAA_AG', otNum: '555', eq: 'E2' }),
+      buildRow({ zone: 'TST_AAA_AG', otNum: 'NC', eq: 'E3' })].join('\n');
+    const f = 'PMP AG TEST-SITE-A Avril 2026.xlsx';
+    const r = parsePlanningCSV(csv, [], [f, f, f], LOCS);
+    expect(r.map(w => w.code)).toEqual(['NC-AG Type B TEST-SITE-A-AVR2026-001', 'OT-555', 'NC-AG Type B TEST-SITE-A-AVR2026-002']);
+  });
+
+  it('parsePlanningFileName et ncSiteLabel', () => {
+    expect(parsePlanningFileName('PMP AG TEST-SITE-A Avril 2026.xlsx')).toEqual({ site: 'AG TEST-SITE-A', monthYear: 'AVR2026' });
+    expect(parsePlanningFileName('export_juin.xlsx')).toBeNull();
+    expect(ncSiteLabel('TST_AAA_AG', 'x', LOCS)).toBe('AG Type B TEST-SITE-A');
   });
 });

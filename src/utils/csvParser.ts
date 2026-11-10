@@ -1,5 +1,5 @@
 import { WorkOrder, GammePlan, GammeTaskItem, GammeItem, WorkOrderPriority, WorkOrderTask } from '../types';
-import { normalizeSiteName, SiteLocationItem } from './siteNormalization';
+import { normalizeSiteName, findMasterLocationName, SiteLocationItem } from './siteNormalization';
 
 // Helper to parse a CSV or TSV line with quotes and variable delimiter
 export function parseCSVLine(line: string, delimiter?: string): string[] {
@@ -550,7 +550,8 @@ const FRENCH_MONTH_ABBREV: Record<string, string> = {
   'décembre': 'DEC'
 };
 
-export function extractSiteMonthYearFromFileName(fileName: string): string | null {
+/** Morceaux du nom d'un fichier de planning « <préfixe> <site> <mois> <année> » : site tel qu'écrit dans le nom, et « MOIS+ANNÉE » (ex. AVR2026). */
+export function parsePlanningFileName(fileName: string): { site: string; monthYear: string } | null {
   const withoutExt = fileName.replace(/\.(csv|xlsx|xls|txt|tsv)$/i, '').trim();
   const tokens = withoutExt.split(/\s+/);
   if (tokens.length < 3) return null;
@@ -563,7 +564,37 @@ export function extractSiteMonthYearFromFileName(fileName: string): string | nul
   const site = tokens.slice(1, tokens.length - 2).join(' ');
   if (!site) return null;
 
-  return `${site}-${monthAbbrev}${year}`;
+  return { site, monthYear: `${monthAbbrev}${year}` };
+}
+
+export function extractSiteMonthYearFromFileName(fileName: string): string | null {
+  const parts = parsePlanningFileName(fileName);
+  return parts ? `${parts.site}-${parts.monthYear}` : null;
+}
+
+/**
+ * Libellés de site DÉJÀ présents dans les codes NC en base (mesure `43h` / `43i` du 07/11/2026) et qui
+ * diffèrent du nom de l'emplacement. Clé = code Zone (tiret = tiret bas). Pour ces sites on garde le
+ * libellé de la base : un autre libellé ferait recréer en double les NC déjà chargés au réimport du même fichier.
+ * Liste fermée : aucun autre site n'a d'alias (une normalisation générale pourrait fusionner des noms distincts).
+ */
+export const LEGACY_NC_SITE_LABELS: Record<string, string> = {
+  BAM_STT_AG: 'CRF SETTAT',
+  BAM_TAZ_AG: 'CRF TAZA',
+  BAM_FEZ_MU: 'MUSEE FES',
+};
+
+/**
+ * Libellé de site d'un code NC (étape 4b, 10/11/2026) : celui de l'emplacement retrouvé par la Zone de la
+ * ligne, et non celui écrit dans le nom du fichier (un fichier mal nommé donnait un code différent de celui
+ * déjà en base). Repli sur le site du nom de fichier si la Zone ne correspond à aucun emplacement connu
+ * (l'import bloque déjà ce cas avant écriture).
+ */
+export function ncSiteLabel(zone: string, siteFromFileName: string, knownLocations?: SiteLocationItem[]): string {
+  const zoneKey = zone.trim().toUpperCase().replace(/-/g, '_');
+  const legacy = LEGACY_NC_SITE_LABELS[zoneKey];
+  if (legacy) return legacy;
+  return findMasterLocationName(zone, knownLocations) ?? siteFromFileName;
 }
 
 /** Bilan du fichier de planning lu (06/11/2026). `ncLiteral` = cellule « NC » / « N/C » / « 0 » ; `ncBlank` = cellule vide : les deux reçoivent un code NC. */
@@ -577,7 +608,7 @@ export interface PlanningFileStats {
   echeancierHeader: string;
   /** Nombre de lignes où la colonne « échéancier » donne un autre jour que la colonne retenue (0 si elles concordent ou s'il n'y a qu'une colonne). */
   dateColumnsDiffer: number;
-  /** Premier code NC fabriqué (reproduit la casse du nom du fichier), vide s'il n'y a pas de NC. */
+  /** Premier code NC fabriqué (libellé du site retrouvé par la Zone, repli sur le nom du fichier), vide s'il n'y a pas de NC. */
   ncSampleCode: string;
 }
 
@@ -696,9 +727,10 @@ export function parsePlanningCSV(
       ncSequence += 1;
       const seqStr = String(ncSequence).padStart(3, '0');
       const originFileName = lineFileNames?.[i - 1];
-      const label = originFileName ? extractSiteMonthYearFromFileName(originFileName) : null;
-      code = label
-        ? `NC-${label}-${seqStr}`
+      const fileParts = originFileName ? parsePlanningFileName(originFileName) : null;
+      const zoneOfRow = (idxEntity >= 0 && cols[idxEntity]) ? cols[idxEntity].trim() : '';
+      code = fileParts
+        ? `NC-${ncSiteLabel(zoneOfRow, fileParts.site, knownLocations)}-${fileParts.monthYear}-${seqStr}`
         : `NC-${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : `${Date.now()}-${i}`}`;
     }
     
