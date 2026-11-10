@@ -1039,7 +1039,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                     </p>
                   )}
                   {fileStats.ncSampleCode && (
-                    <p className="text-[10px] text-gray-500">Code NC fabriqué (exemple) : « {fileStats.ncSampleCode} ». La casse vient du nom du fichier : un réimport doit porter le même nom que le premier import, sinon les NC sont comptés « nouveaux » et dupliqués.</p>
+                    <p className="text-[10px] text-gray-500">Code NC fabriqué (exemple) : « {fileStats.ncSampleCode} ». Le site vient de l'emplacement trouvé par la Zone ; le mois et l'année viennent du nom du fichier : un réimport doit porter le même mois et la même année dans son nom, sinon les NC sont comptés « nouveaux » et dupliqués.</p>
                   )}
                 </div>
               )}
