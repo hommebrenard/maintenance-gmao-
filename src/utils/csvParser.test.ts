@@ -156,10 +156,24 @@ describe('findMatchingGammePlanDetailed — statuts de confiance (Phase 1 aperç
   });
 
   it('statut "exact" pour une correspondance code plan + code équipement', () => {
-    const plans = [buildGammePlan({ equipmentCode: 'CTA-04', planCode: 'GAM-CTA-SEM' })];
-    const res = findMatchingGammePlanDetailed('CTA-04', 'GAM-CTA-SEM', 'Intervention test', plans);
+    const plans = [buildGammePlan({ equipmentCode: 'EQ-A', planCode: 'PLAN-X' })];
+    const res = findMatchingGammePlanDetailed('EQ-A', 'PLAN-X', 'Intervention test', plans);
     expect(res.status).toBe('exact');
-    expect(res.plan?.planCode).toBe('GAM-CTA-SEM');
+    expect(res.plan?.planCode).toBe('PLAN-X');
+  });
+
+  it('signale séparément un code plan exact trouvé sur un autre équipement', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'EQ-B', planCode: 'PLAN-X' })];
+    const res = findMatchingGammePlanDetailed('EQ-A', 'PLAN-X', 'Intervention test', plans);
+    expect(res.status).toBe('plan_autre_equipement');
+    expect(res.plan?.equipmentCode).toBe('EQ-B');
+  });
+
+  it('ne signale pas de gamme trouvée quand aucun plan ne correspond', () => {
+    const plans = [buildGammePlan({ equipmentCode: 'EQ-B', planCode: 'PLAN-X' })];
+    const res = findMatchingGammePlanDetailed('EQ-A', 'PLAN-Y', 'Titre sans rapport', plans);
+    expect(res.status).toBe('non_trouve');
+    expect(res.plan).toBeUndefined();
   });
 
   it('statut "approximatif" pour une correspondance devinée (famille/mot-clé), jamais "exact"', () => {
