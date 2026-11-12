@@ -49,7 +49,8 @@ import { AnnualMatrixView } from './AnnualMatrixView';
 import { gammesForWorkOrder, skipsAutoGamme } from '../../utils/gammeEligibility';
 import { parseGammeCSV, findMatchingGammePlan, findMatchingGammePlanDetailed, formatLocalDate, formatActionCode } from '../../utils/csvParser';
 import { getAvailableSiteNames, matchesSiteFilter, createSiteMatcher, findMasterLocationName } from '../../utils/siteNormalization';
-import { fetchGammePlans, createGammePlansBulk } from '../../lib/queries/gammes';
+import { fetchGammePlans, saveGammePlans } from '../../lib/queries/gammes';
+import type { GammeSaveResult } from '../../utils/gammeImport';
 import { SAMPLE_GAMME_CSV } from '../../data/rawImportModels';
 import { INITIAL_LOCATIONS } from '../../data/mockData';
 import { safeSetItem } from '../../utils/safeStorage';
@@ -843,31 +844,25 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     }
   };
 
-  const handleImportGammes = (importedGammes: GammePlan[]) => {
-    // Affichage optimiste immédiat, dédoublonné par (equipmentCode, planCode)
-    // pour qu'un ré-import répété dans la même session ne fasse pas gonfler
-    // la liste indéfiniment en attendant la confirmation Supabase.
-    setGammesList(prev => {
-      const key = (p: GammePlan) => `${p.equipmentCode}::${p.planCode}`;
-      const importedKeys = new Set(importedGammes.map(key));
-      return [...importedGammes, ...prev.filter(p => !importedKeys.has(key(p)))];
-    });
-
-    // Écriture réelle en base — remplace ensuite les entrées optimistes par
-    // les vraies lignes Supabase (mêmes clés (equipment_code, plan_code) que
-    // celles déjà en base sont mises à jour, pas dupliquées, grâce à la
-    // contrainte unique + upsert).
-    createGammePlansBulk(importedGammes)
-      .then(savedGammes => {
-        setGammesList(prev => {
-          const key = (p: GammePlan) => `${p.equipmentCode}::${p.planCode}`;
-          const savedKeys = new Set(savedGammes.map(key));
-          return [...savedGammes, ...prev.filter(p => !savedKeys.has(key(p)))];
-        });
-      })
-      .catch(err => {
-        console.error('Erreur enregistrement de la gamme dans Supabase (reste disponible localement pour cette session) :', err);
+  // Corrigé le 12/11/2026 : on attend l'écriture en base et on retourne le bilan réel à la fenêtre
+  // d'import (plus d'affichage « optimiste » : une gamme non enregistrée n'apparaît plus comme chargée).
+  // La liste de la session n'est mise à jour qu'avec les lignes réellement écrites.
+  const handleImportGammes = async (
+    importedGammes: GammePlan[],
+    options: { insertOnly: boolean }
+  ): Promise<GammeSaveResult> => {
+    const result = await saveGammePlans(importedGammes, options);
+    if (result.written.length > 0) {
+      setGammesList(prev => {
+        const key = (p: GammePlan) => `${p.equipmentCode}::${p.planCode}`;
+        const savedKeys = new Set(result.written.map(key));
+        return [...result.written, ...prev.filter(p => !savedKeys.has(key(p)))];
       });
+    }
+    if (result.error) {
+      console.error('Erreur enregistrement de la gamme dans Supabase :', result.error);
+    }
+    return result;
   };
 
   const handleClearGammes = () => {
