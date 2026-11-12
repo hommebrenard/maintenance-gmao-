@@ -224,7 +224,7 @@ export function parseGammeCSV(csvContent: string): GammePlan[] {
 // code de plan existe sur au moins MIN_SITES_FOR_STANDARD_PLAN sites avec des actions
 // strictement identiques (libellés normalisés, même ordre). C'est une procédure standard
 // DÉDUITE — jamais présentée comme 'exact' — mais non bloquante, à la différence de 'conflit'.
-export type GammeMatchStatus = 'exact' | 'plan_type' | 'approximatif' | 'non_trouve' | 'conflit';
+export type GammeMatchStatus = 'exact' | 'plan_autre_equipement' | 'plan_type' | 'approximatif' | 'non_trouve' | 'conflit';
 
 // Nombre minimal de sites distincts portant le même code de plan, avec un contenu identique,
 // pour qu'il soit traité comme procédure standard. 2 (et non 1) volontairement : un plan présent
@@ -480,6 +480,14 @@ export function findMatchingGammePlanDetailed(
   // exacte).
   const isExact = !!result && result.method.includes('(exact');
   if (result && isExact) {
+    // Un code de plan exact SANS couple équipement-plan exact garde le même plan retenu,
+    // mais ne doit pas être présenté comme une gamme certaine pour cet équipement
+    // (ajouté le 11/11/2026 : les tâches proviennent d'un autre équipement).
+    const matchedOtherEquipment = result.method.startsWith('code plan (exact') &&
+      result.plan.equipmentCode.trim().toLowerCase() !== cleanEq;
+    if (matchedOtherEquipment) {
+      return finalize({ plan: result.plan, status: 'plan_autre_equipement', method: result.method });
+    }
     return finalize({ plan: result.plan, status: 'exact', method: result.method });
   }
 
