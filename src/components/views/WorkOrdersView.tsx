@@ -3370,6 +3370,13 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               label: 'Gamme certaine',
                               detail: gammeMatch.method
                             };
+                          case 'plan_autre_equipement':
+                            return {
+                              wrapper: 'bg-amber-50 border-amber-200 text-amber-800',
+                              Icon: AlertTriangle,
+                              label: 'Gamme du plan, autre équipement',
+                              detail: `${gammeMatch.method} — les tâches proviennent d’un autre équipement`
+                            };
                           case 'plan_type':
                             return {
                               wrapper: 'bg-blue-50 border-blue-200 text-blue-800',
