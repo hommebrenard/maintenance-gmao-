@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import type { GammePlan } from '../../types';
+import { dedupeGammePlans, type GammeSaveResult } from '../../utils/gammeImport';
 
 // ---------------------------------------------------------------------------
 // Migration du 14/09/2026 : la Gamme (référentiel des plans de maintenance
@@ -70,13 +71,31 @@ export async function fetchGammePlans(): Promise<GammePlan[]> {
   return allRows.map(rowToGammePlan);
 }
 
-// Upsert par lots de 200 (même précaution que fetchExistingWorkOrderCodes) :
-// on ne réécrit jamais un plan qui n'a pas changé, mais on remplace celui
-// dont (equipment_code, plan_code) existe déjà, au lieu de le dupliquer.
-export async function createGammePlansBulk(plans: GammePlan[]): Promise<GammePlan[]> {
-  if (plans.length === 0) return [];
+// Écriture par lots de 200 (même précaution que fetchExistingWorkOrderCodes).
+// Corrigé le 12/11/2026 : l'ancienne version levait l'erreur vers un `.catch` qui ne faisait qu'un
+// console.error, alors que l'écran avait déjà affiché « Importation réussie ». On retourne maintenant
+// le bilan réel (gammes écrites, ignorées, non écrites, erreur de la base).
+//  - insertOnly = true  : `ignoreDuplicates` (ON CONFLICT DO NOTHING) — les couples (equipment_code,
+//    plan_code) déjà en base ne sont PAS modifiés ; seuls les couples absents sont ajoutés.
+//  - insertOnly = false : upsert — les tâches des couples existants sont remplacées.
+// Les couples en double dans le fichier sont retirés avant l'écriture (voir dedupeGammePlans).
+// Une erreur sur un lot arrête les lots suivants ; les lots déjà écrits sont comptés.
+export async function saveGammePlans(
+  plans: GammePlan[],
+  options: { insertOnly: boolean }
+): Promise<GammeSaveResult> {
+  const deduped = dedupeGammePlans(plans);
+  const result: GammeSaveResult = {
+    total: deduped.plans.length,
+    written: [],
+    ignoredExisting: 0,
+    duplicatesInFile: deduped.duplicates,
+    conflictingDuplicates: deduped.conflicting,
+    notWritten: 0
+  };
+  if (deduped.plans.length === 0) return result;
 
-  const rows = plans.map(p => ({
+  const rows = deduped.plans.map(p => ({
     equipment_code: p.equipmentCode,
     plan_code: p.planCode,
     intervention_title: p.interventionTitle,
@@ -84,15 +103,20 @@ export async function createGammePlansBulk(plans: GammePlan[]): Promise<GammePla
     tasks: p.tasks
   }));
 
-  const results: GammePlan[] = [];
   for (let i = 0; i < rows.length; i += 200) {
     const batch = rows.slice(i, i + 200);
     const { data, error } = await supabase
       .from('gamme_plans')
-      .upsert(batch, { onConflict: 'equipment_code,plan_code' })
+      .upsert(batch, { onConflict: 'equipment_code,plan_code', ignoreDuplicates: options.insertOnly })
       .select('*');
-    if (error) throw error;
-    results.push(...(data as GammePlanRow[]).map(rowToGammePlan));
+    if (error) {
+      result.error = error.message || String(error);
+      result.notWritten = rows.length - i;
+      return result;
+    }
+    const saved = ((data as GammePlanRow[]) || []).map(rowToGammePlan);
+    result.written.push(...saved);
+    if (options.insertOnly) result.ignoredExisting += batch.length - saved.length;
   }
-  return results;
+  return result;
 }
