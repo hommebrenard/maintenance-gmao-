@@ -9,6 +9,7 @@ import { SAMPLE_PLANNING_CSV, SAMPLE_GAMME_CSV } from '../../data/rawImportModel
 import { fetchExistingWorkOrdersCore, updateWorkOrder, type ExistingWorkOrderCore } from '../../lib/queries/work_orders';
 import { compareDueDates, dueDateOkSummary, formatIsoDateFr, type DueDateReport } from '../../utils/importDueDateCheck';
 import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
+import { dedupeGammePlans, describeGammeSave, type GammeSaveResult } from '../../utils/gammeImport';
 
 // Import en pause (06/11/2026) : des OT du fichier existent déjà en base avec une autre échéance ; l'utilisateur décide avant la suite.
 interface DueDateReview {
@@ -23,7 +24,7 @@ interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportWorkOrders: (workOrders: WorkOrder[], replaceExisting?: boolean, patchCandidates?: WorkOrderPatchCandidate[], meta?: ImportMeta) => void;
-  onImportGammes: (gammes: GammePlan[]) => void;
+  onImportGammes: (gammes: GammePlan[], options: { insertOnly: boolean }) => Promise<GammeSaveResult>;
   onClearGammes?: () => void;
   existingGammes: GammePlan[];
   existingWorkOrdersCount?: number;
@@ -51,6 +52,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // Filtre de l'aperçu par statut de rattachement Gamme (clic sur un badge du bandeau). null = tout.
   const [previewGammeFilter, setPreviewGammeFilter] = useState<string | null>(null);
   const [parsedPreviewGammes, setParsedPreviewGammes] = useState<GammePlan[]>([]);
+  // Gammes (12/11/2026) : « ajout seul » coché par défaut = les couples (équipement, plan) déjà en base
+  // ne sont pas modifiés ; décoché = leurs tâches sont remplacées par celles du fichier.
+  const [gammeInsertOnly, setGammeInsertOnly] = useState(true);
+  const [isSavingGammes, setIsSavingGammes] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
@@ -316,7 +321,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           setErrorMsg("Aucune gamme opératoire valide n'a pu être extraite. Vérifiez le format.");
         } else {
           const totalTasks = parsed.reduce((sum, p) => sum + p.tasks.length, 0);
-          setSuccessMsg(`${parsed.length} gamme(s) détectée(s) avec un total de ${totalTasks} action(s) / checklist(s).`);
+          const dupInfo = dedupeGammePlans(parsed);
+          setSuccessMsg(`${parsed.length} gamme(s) détectée(s) avec un total de ${totalTasks} action(s) / checklist(s).${dupInfo.duplicates > 0 ? ` ${dupInfo.duplicates} couple(s) (équipement, plan) en double dans le fichier (${dupInfo.conflicting} avec des tâches différentes) : la dernière occurrence sera retenue.` : ''}`);
         }
       }
         } catch (err) {
@@ -343,10 +349,25 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       await runPlanningImport(parsedPreviewWorkOrders);
     } else {
       if (parsedPreviewGammes.length === 0) return;
-      onImportGammes(parsedPreviewGammes);
-      setSuccessMsg(`✅ Importation réussie de ${parsedPreviewGammes.length} gamme(s) opératoire(s) ! Vos checklists et actions ont été mises à jour.`);
-      setParsedPreviewGammes([]);
-      setPastedText('');
+      setErrorMsg('');
+      setSuccessMsg('');
+      setIsSavingGammes(true);
+      try {
+        const result = await onImportGammes(parsedPreviewGammes, { insertOnly: gammeInsertOnly });
+        const bilan = describeGammeSave(result, gammeInsertOnly);
+        if (bilan.ok) {
+          setSuccessMsg(bilan.text);
+          setParsedPreviewGammes([]);
+          setPastedText('');
+        } else {
+          // Écriture interrompue : on garde l'aperçu pour pouvoir relancer en « ajout seul ».
+          setErrorMsg(bilan.text);
+        }
+      } catch (err) {
+        setErrorMsg(`⚠️ Écriture impossible : ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsSavingGammes(false);
+      }
     }
   };
 
@@ -1120,6 +1141,18 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
           {activeTab === 'gamme' && parsedPreviewGammes.length > 0 && (
             <div>
+              <label className="flex items-start gap-2 mb-3 p-2 rounded-lg border border-blue-200 bg-blue-50 text-[11px] text-blue-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={gammeInsertOnly}
+                  onChange={e => setGammeInsertOnly(e.target.checked)}
+                />
+                <span>
+                  <strong>Ajouter seulement les gammes absentes de la base</strong> (recommandé). Les couples
+                  (équipement, plan) déjà enregistrés ne sont pas modifiés. Décochez pour remplacer leurs tâches par celles du fichier.
+                </span>
+              </label>
               <h4 className="text-xs font-bold text-gray-900 mb-2">Aperçu des gammes et leurs actions/checklists ({parsedPreviewGammes.length})</h4>
               <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                 {parsedPreviewGammes.map((g, i) => (
@@ -1197,6 +1230,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               onClick={handleConfirmImport}
               disabled={
                 isCheckingDuplicates ||
+                isSavingGammes ||
                 dueDateReview !== null ||
                 (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
                 (activeTab === 'gamme' && parsedPreviewGammes.length === 0) ||
@@ -1207,7 +1241,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             >
               <Check className="w-4 h-4" />
               <span>
-                {isCheckingDuplicates
+                {isSavingGammes
+                  ? 'Enregistrement en base…'
+                  : isCheckingDuplicates
                   ? 'Vérification des doublons…'
                   : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})`}
               </span>
