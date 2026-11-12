@@ -87,7 +87,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // (viendra dans une étape suivante une fois l'affichage confirmé fiable).
   const gammeMatchSummary = React.useMemo(() => {
     if (activeTab !== 'planning' || parsedPreviewWorkOrders.length === 0) return null;
-    const counts = { exact: 0, plan_type: 0, approximatif: 0, non_trouve: 0, conflit: 0 };
+    const counts = { exact: 0, plan_autre_equipement: 0, plan_type: 0, approximatif: 0, non_trouve: 0, conflit: 0 };
     parsedPreviewWorkOrders.forEach(wo => {
       const status = wo.gammeMatchStatus || 'non_trouve';
       counts[status] = (counts[status] || 0) + 1;
@@ -103,6 +103,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       return (
         <span title={title} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
           <CheckCircle2 size={11} /> Certain
+        </span>
+      );
+    }
+    if (status === 'plan_autre_equipement') {
+      return (
+        <span title={`${title} — les tâches proviennent d’un autre équipement`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
+          <AlertTriangle size={11} /> Plan, autre équipement
         </span>
       );
     }
@@ -1048,6 +1055,16 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   <button type="button" onClick={() => setPreviewGammeFilter(f => f === 'exact' ? null : 'exact')} className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium ${previewGammeFilter === 'exact' ? 'ring-2 ring-green-400' : ''}`}>
                     <CheckCircle2 size={12} /> {gammeMatchSummary.exact} certaine(s)
                   </button>
+                  {gammeMatchSummary.plan_autre_equipement > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewGammeFilter(f => f === 'plan_autre_equipement' ? null : 'plan_autre_equipement')}
+                      title="Le code de plan existe, mais pas pour cet équipement : les tâches proviennent d'un autre équipement. Cliquer pour n'afficher que ces lignes."
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-50 text-amber-800 font-medium ${previewGammeFilter === 'plan_autre_equipement' ? 'ring-2 ring-amber-400' : ''}`}
+                    >
+                      <AlertTriangle size={12} /> {gammeMatchSummary.plan_autre_equipement} plan(s), autre équipement
+                    </button>
+                  )}
                   {gammeMatchSummary.plan_type > 0 && (
                     <button
                       type="button"
