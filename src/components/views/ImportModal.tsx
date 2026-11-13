@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { X, FileSpreadsheet, Upload, Check, AlertCircle, Zap, FileText, ListChecks, Building2, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
-import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate } from '../../types';
+import { WorkOrder, GammePlan, LocationItem, WorkOrderPatchCandidate, Equipment } from '../../types';
 import { parsePlanningCSV, parseGammeCSV, formatActionCode, type PlanningFileStats } from '../../utils/csvParser';
 import { checkImportFiles, findUnknownZones, zoneUnknownMessage } from '../../utils/importFileCheck';
 import type { ImportMeta } from '../../utils/importLog';
@@ -10,6 +10,10 @@ import { fetchExistingWorkOrdersCore, updateWorkOrder, type ExistingWorkOrderCor
 import { compareDueDates, dueDateOkSummary, formatIsoDateFr, type DueDateReport } from '../../utils/importDueDateCheck';
 import { computeIdentityBackfillPatch } from '../../utils/workOrderExtras';
 import { dedupeGammePlans, describeGammeSave, type GammeSaveResult } from '../../utils/gammeImport';
+import { analyzeGammeCodes, splitWritable, excludedToCsv, GAMME_CODE_STATUS_LABEL } from '../../utils/gammeCodeCheck';
+
+// Référence stable (évite de recalculer le contrôle des codes à chaque rendu quand la liste n'est pas fournie).
+const NO_EQUIPMENT: Equipment[] = [];
 
 // Import en pause (06/11/2026) : des OT du fichier existent déjà en base avec une autre échéance ; l'utilisateur décide avant la suite.
 interface DueDateReview {
@@ -33,6 +37,9 @@ interface ImportModalProps {
   // (voir normalizeSiteName dans utils/siteNormalization.ts). Optionnel :
   // sans ce prop, comportement inchangé.
   locations?: LocationItem[];
+  // Ajouté le 13/11/2026 (contrôle des codes équipement des gammes, lot 1) : liste COMPLÈTE des équipements de la base.
+  // Sans elle (liste vide), l'import des gammes est désactivé : on ne peut pas contrôler les codes.
+  equipmentList?: Equipment[];
 }
 
 export const ImportModal: React.FC<ImportModalProps> = ({
@@ -44,7 +51,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   existingGammes,
   existingWorkOrdersCount = 0,
   availableSites = [],
-  locations = []
+  locations = [],
+  equipmentList = NO_EQUIPMENT
 }) => {
   const [activeTab, setActiveTab] = useState<'planning' | 'gamme'>('planning');
   const [pastedText, setPastedText] = useState('');
@@ -56,6 +64,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   // ne sont pas modifiés ; décoché = leurs tâches sont remplacées par celles du fichier.
   const [gammeInsertOnly, setGammeInsertOnly] = useState(true);
   const [isSavingGammes, setIsSavingGammes] = useState(false);
+  // Gammes dont le code n'existe pas ET qu'aucun code de la base ne complète : écrites seulement si l'utilisateur le demande
+  // (équipement pas encore importé). Les codes incomplets (candidats par préfixe) ne sont jamais écrits dans ce lot.
+  const [gammeAllowNoCandidate, setGammeAllowNoCandidate] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
@@ -101,6 +112,29 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   }, [parsedPreviewWorkOrders, activeTab]);
 
   // Petit badge coloré réutilisé dans le bandeau de synthèse et le tableau.
+  // Contrôle des codes équipement du fichier de gammes (13/11/2026, lot 1) : aucune écriture, aucun code modifié.
+  const gammeCodeReport = React.useMemo(
+    () => (parsedPreviewGammes.length > 0 && equipmentList.length > 0
+      ? analyzeGammeCodes(parsedPreviewGammes, equipmentList.map(e => ({ code: e.code, name: e.name })))
+      : null),
+    [parsedPreviewGammes, equipmentList]
+  );
+  const gammeSplit = React.useMemo(
+    () => (gammeCodeReport ? splitWritable(gammeCodeReport, { includeNoCandidate: gammeAllowNoCandidate }) : null),
+    [gammeCodeReport, gammeAllowNoCandidate]
+  );
+
+  const downloadExcludedGammes = () => {
+    if (!gammeSplit || gammeSplit.excluded.length === 0) return;
+    const blob = new Blob(['\ufeff' + excludedToCsv(gammeSplit.excluded)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'gammes-non-ecrites.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const renderGammeBadge = (wo: WorkOrder) => {
     const status = wo.gammeMatchStatus || 'non_trouve';
     const title = wo.gammeMatchMethod || '';
@@ -349,19 +383,32 @@ export const ImportModal: React.FC<ImportModalProps> = ({
       await runPlanningImport(parsedPreviewWorkOrders);
     } else {
       if (parsedPreviewGammes.length === 0) return;
+      // Sans la liste des équipements, on ne peut pas contrôler les codes : rien n'est écrit.
+      if (!gammeSplit) {
+        setErrorMsg('⚠️ Liste des équipements non chargée : impossible de contrôler les codes. Rien n\'a été écrit. Rechargez la page puis réessayez.');
+        return;
+      }
+      if (gammeSplit.writable.length === 0) {
+        setErrorMsg(`⚠️ Aucune gamme à écrire : les ${gammeSplit.excluded.length} gamme(s) du fichier ont un code équipement absent de la base. Rien n'a été écrit. Téléchargez la liste, corrigez le fichier, puis rechargez-le.`);
+        return;
+      }
+      const excludedCount = gammeSplit.excluded.length;
       setErrorMsg('');
       setSuccessMsg('');
       setIsSavingGammes(true);
       try {
-        const result = await onImportGammes(parsedPreviewGammes, { insertOnly: gammeInsertOnly });
+        const result = await onImportGammes(gammeSplit.writable, { insertOnly: gammeInsertOnly });
         const bilan = describeGammeSave(result, gammeInsertOnly);
+        const excludedNote = excludedCount > 0
+          ? ` ⚠️ ${excludedCount} gamme(s) du fichier NON écrites (code équipement absent de la base) : corrigez le fichier avant de les recharger.`
+          : '';
         if (bilan.ok) {
-          setSuccessMsg(bilan.text);
+          setSuccessMsg(bilan.text + excludedNote);
           setParsedPreviewGammes([]);
           setPastedText('');
         } else {
           // Écriture interrompue : on garde l'aperçu pour pouvoir relancer en « ajout seul ».
-          setErrorMsg(bilan.text);
+          setErrorMsg(bilan.text + excludedNote);
         }
       } catch (err) {
         setErrorMsg(`⚠️ Écriture impossible : ${err instanceof Error ? err.message : String(err)}`);
@@ -1141,6 +1188,65 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
           {activeTab === 'gamme' && parsedPreviewGammes.length > 0 && (
             <div>
+              {!gammeCodeReport && (
+                <div className="mb-3 p-2 rounded-lg border border-red-200 bg-red-50 text-[11px] text-red-800 flex items-start gap-2">
+                  <ShieldAlert size={13} className="mt-0.5 shrink-0" />
+                  <span><strong>Liste des équipements non chargée</strong> : les codes du fichier ne peuvent pas être contrôlés, l'import est désactivé. Rechargez la page.</span>
+                </div>
+              )}
+              {gammeCodeReport && (
+                <div className="mb-3 p-2.5 rounded-lg border border-gray-200 bg-white text-[11px] space-y-2" data-testid="gamme-code-check">
+                  <p className="font-bold text-gray-900 text-xs">Contrôle des codes équipement du fichier</p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-700 font-medium"><CheckCircle2 size={12} /> {gammeCodeReport.counts.exact} code(s) existant(s)</span>
+                    {gammeCodeReport.counts.prefixe_unique > 0 && <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-50 text-amber-800 font-medium"><AlertTriangle size={12} /> {gammeCodeReport.counts.prefixe_unique} code(s) incomplet(s), 1 candidat</span>}
+                    {gammeCodeReport.counts.prefixe_multiple > 0 && <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-50 text-orange-700 font-medium"><AlertTriangle size={12} /> {gammeCodeReport.counts.prefixe_multiple} code(s) incomplet(s), plusieurs candidats</span>}
+                    {gammeCodeReport.counts.casse_seule > 0 && <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-50 text-amber-800 font-medium"><AlertTriangle size={12} /> {gammeCodeReport.counts.casse_seule} casse/espaces différents</span>}
+                    {gammeCodeReport.counts.sans_candidat > 0 && <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 text-red-700 font-medium"><XCircle size={12} /> {gammeCodeReport.counts.sans_candidat} code(s) absent(s), aucun candidat</span>}
+                    {gammeCodeReport.counts.sansAction > 0 && <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">{gammeCodeReport.counts.sansAction} titre(s) sans action (à vérifier)</span>}
+                  </div>
+                  {gammeSplit && gammeSplit.excluded.length > 0 && (
+                    <>
+                      <p className="text-red-700 font-semibold">
+                        {gammeSplit.excluded.length} gamme(s) ne seront PAS écrites : leur code équipement n'existe pas dans la base. Aucun code n'est corrigé automatiquement : le nom et le score ne servent qu'à vous aider à corriger le fichier source.
+                      </p>
+                      <div className="max-h-44 overflow-y-auto border border-gray-100 rounded">
+                        <table className="w-full text-[10px]">
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                            <tr><th className="text-left p-1">Code du fichier</th><th className="text-left p-1">Plan</th><th className="text-left p-1">Diagnostic</th><th className="text-left p-1">Meilleurs candidats (score de description)</th></tr>
+                          </thead>
+                          <tbody>
+                            {gammeSplit.excluded.map(r => (
+                              <tr key={r.index} className="border-t border-gray-100 align-top">
+                                <td className="p-1 font-mono">{r.plan.equipmentCode || '(vide)'}</td>
+                                <td className="p-1 font-mono">{r.plan.planCode}</td>
+                                <td className="p-1">{GAMME_CODE_STATUS_LABEL[r.status]}{r.candidateCount > 0 ? ` (${r.candidateCount})` : ''}</td>
+                                <td className="p-1 font-mono">
+                                  {r.candidates.length === 0
+                                    ? <span className="text-gray-400 font-sans italic">aucun candidat par préfixe (ce n'est pas la preuve que l'équipement n'existe pas)</span>
+                                    : r.candidates.slice(0, 3).map(c => `${c.code} (${Math.round(c.score * 100)} %)`).join(' · ')}
+                                  {r.ambiguousTop && <span className="ml-1 text-orange-600 font-sans font-semibold">⚠ libellés identiques ou quasi identiques</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button type="button" onClick={downloadExcludedGammes} className="px-2.5 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">
+                          Télécharger la liste (CSV)
+                        </button>
+                        {gammeCodeReport.counts.sans_candidat > 0 && (
+                          <label className="flex items-start gap-2 text-[11px] text-gray-700 cursor-pointer">
+                            <input type="checkbox" className="mt-0.5" checked={gammeAllowNoCandidate} onChange={e => setGammeAllowNoCandidate(e.target.checked)} />
+                            <span>Écrire aussi les {gammeCodeReport.counts.sans_candidat} gamme(s) sans aucun candidat (équipements pas encore importés). Les codes incomplets ne sont jamais écrits.</span>
+                          </label>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <label className="flex items-start gap-2 mb-3 p-2 rounded-lg border border-blue-200 bg-blue-50 text-[11px] text-blue-900 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1233,7 +1339,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 isSavingGammes ||
                 dueDateReview !== null ||
                 (activeTab === 'planning' && parsedPreviewWorkOrders.length === 0) ||
-                (activeTab === 'gamme' && parsedPreviewGammes.length === 0) ||
+                (activeTab === 'gamme' && (parsedPreviewGammes.length === 0 || !gammeSplit || gammeSplit.writable.length === 0)) ||
                 (activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0)
               }
               title={activeTab === 'planning' && (gammeMatchSummary?.conflit ?? 0) > 0 ? 'Résolvez les conflits de site, ou utilisez l\'import partiel ci-dessus' : undefined}
@@ -1245,7 +1351,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   ? 'Enregistrement en base…'
                   : isCheckingDuplicates
                   ? 'Vérification des doublons…'
-                  : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : parsedPreviewGammes.length})`}
+                  : `Valider et intégrer (${activeTab === 'planning' ? parsedPreviewWorkOrders.length : (gammeSplit ? gammeSplit.writable.length : 0)})`}
               </span>
             </button>
           </div>
